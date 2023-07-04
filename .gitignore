@@ -1,0 +1,9 @@
+.DS_Store
+*.log
+build/
+compile_commands.json
+CMakeLists.txt.user
+.clangd
+.cache
+.dir-locals.el
+.emacs
