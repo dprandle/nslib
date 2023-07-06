@@ -1,1 +1,1 @@
-* Information about this new project!
+* Messing around with Vulkan
