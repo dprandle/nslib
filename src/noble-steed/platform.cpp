@@ -195,7 +195,13 @@ bool platform_window_should_close(void *window_hndl)
 #include "unistd.h"
 void platform_run_frame(platform_ctxt *ctxt)
 {
-    ptimer_update(&ctxt->time_pts);
+    ptimer_split(&ctxt->time_pts);
+    dlog("Frame %d elapsed:%f", ctxt->finished_frames, NSEC_TO_SEC(ctxt->time_pts.dt_ns));
+    int prod{0};
+    for (int i = 0; i < 1000000000; ++i) {
+        prod = i*2 + 5;
+    }
+    dlog("Product: %d", prod);
     platform_window_poll_input(ctxt->win_hndl);
     mem_store_reset(&ctxt->frame_mem);
     ++ctxt->finished_frames;

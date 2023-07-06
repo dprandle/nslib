@@ -3,6 +3,10 @@
 #include <cstdint>
 #include "limits.h"
 
+#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+#define IS_POSIX_SYSTEM
+#endif
+
 namespace noble_steed
 {
 using i8 = int8_t;

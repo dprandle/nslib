@@ -1,5 +1,7 @@
 #pragma once
 
+#include "basic_types.h"
+
 namespace noble_steed
 {
 /* The unknown key */

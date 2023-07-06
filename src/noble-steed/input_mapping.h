@@ -8,20 +8,6 @@ namespace noble_steed
 constexpr const int MAX_INPUT_CONTEXT_STACK_COUNT = 16;
 constexpr const int MAX_INPUT_FRAME_EVENTS = 256;
 
-struct input_keymap_entry
-{
-    u32 key;
-    char name[24];
-};
-
-struct input_keymap
-{
-    char name[24];
-    hashmap hm;
-};
-
-using input_context_stack = input_keymap[MAX_INPUT_CONTEXT_STACK_COUNT];
-
 enum raw_input_event_type
 {
     RAW_INPUT_EVENT_TYPE_KEY_PRESS,
@@ -46,5 +32,20 @@ struct frame_input
     raw_input_event events[MAX_INPUT_FRAME_EVENTS];
     i8 count{0};
 };
+
+struct input_keymap_entry
+{
+    u32 key;
+    char name[24];
+};
+
+struct input_keymap
+{
+    char name[24];
+    hashmap *hm{};
+};
+
+using input_context_stack = input_keymap[MAX_INPUT_CONTEXT_STACK_COUNT];
+
 
 } // namespace noble_steed
