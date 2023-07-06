@@ -3,7 +3,7 @@
 #include "platform.h"
 #include "logging.h"
 
-namespace noble_steed
+namespace nslib
 {
 
 #define platform_ptr(win) (platform_ctxt*)glfwGetWindowUserPointer(win)
@@ -207,4 +207,4 @@ void platform_run_frame(platform_ctxt *ctxt)
     ++ctxt->finished_frames;
 }
 
-} // namespace noble_steed
+} // namespace nslib

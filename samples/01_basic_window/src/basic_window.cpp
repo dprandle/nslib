@@ -1,7 +1,7 @@
 #include "platform.h"
 #include "logging.h"
 
-using namespace noble_steed;
+using namespace nslib;
 
 struct app_data
 {};

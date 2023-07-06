@@ -3,7 +3,7 @@
 #include "vector4.h"
 #include "matrix4.h"
 
-namespace noble_steed
+namespace nslib
 {
 
 namespace math
@@ -210,4 +210,4 @@ matrix4<float> inverse(const matrix4<float> &mat)
 #endif
 
 } // namespace math
-} // namespace noble_steed
+} // namespace nslib

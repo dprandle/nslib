@@ -4,7 +4,7 @@
 #include "nsmemory.h"
 #include "nsdebug.h"
 
-namespace noble_steed
+namespace nslib
 {
 template<class T>
 struct buffer
@@ -488,4 +488,4 @@ sizet index_from_ptr(T *bufobj, typename T::value_type *item)
     return npos;
 }
 
-} // namespace noble_steed
+} // namespace nslib

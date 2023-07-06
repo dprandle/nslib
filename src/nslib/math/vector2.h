@@ -2,7 +2,7 @@
 
 #include "algorithm.h"
 
-namespace noble_steed
+namespace nslib
 {
 
 template<class T>
@@ -101,4 +101,4 @@ using u64vec2 = vector2<u64>;
 using vec2 = vector2<float>;
 using dvec2 = vector2<double>;
 using ldvec2 = vector2<ldouble>;
-} // namespace noble_steed
+} // namespace nslib

@@ -3,7 +3,7 @@
 #include "quaternion.h"
 #include "matrix2.h"
 
-namespace noble_steed
+namespace nslib
 {
 template<class T>
 struct matrix3
@@ -570,4 +570,4 @@ using u64mat3 = matrix3<u64>;
 using mat3 = matrix3<float>;
 using dmat3 = matrix3<double>;
 using ldmat3 = matrix3<ldouble>;
-} // namespace noble_steed
+} // namespace nslib

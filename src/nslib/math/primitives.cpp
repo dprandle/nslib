@@ -1,7 +1,7 @@
 #include "primitives.h"
 #include "vector3.h"
 
-namespace noble_steed
+namespace nslib
 {
 
 template<class T>

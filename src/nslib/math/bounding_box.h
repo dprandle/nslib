@@ -2,7 +2,7 @@
 #include "vector3.h"
 #include "matrix4.h"
 
-namespace noble_steed
+namespace nslib
 {
 
 template<class T>
@@ -135,4 +135,4 @@ using bbox = bounding_box<float>;
 using dbbox = bounding_box<double>;
 using ldbbox = bounding_box<ldouble>;
 
-} // namespace noble_steed
+} // namespace nslib

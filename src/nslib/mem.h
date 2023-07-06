@@ -5,7 +5,7 @@
 #include "basic_types.h"
 #include "linked_list.h"
 
-namespace noble_steed
+namespace nslib
 {
 
 enum mem_alloc_type
@@ -128,4 +128,4 @@ void mem_store_terminate(mem_store *mem);
 mem_store * global_allocator();
 void set_global_allocator(mem_store * alloc);
 
-} // namespace noble_steed
+} // namespace nslib

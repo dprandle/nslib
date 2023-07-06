@@ -3,7 +3,7 @@
 #include "hashmap.h"
 #include "input_kmcodes.h"
 
-namespace noble_steed
+namespace nslib
 {
 constexpr const int MAX_INPUT_CONTEXT_STACK_COUNT = 16;
 constexpr const int MAX_INPUT_FRAME_EVENTS = 256;
@@ -48,4 +48,4 @@ struct input_keymap
 using input_context_stack = input_keymap[MAX_INPUT_CONTEXT_STACK_COUNT];
 
 
-} // namespace noble_steed
+} // namespace nslib

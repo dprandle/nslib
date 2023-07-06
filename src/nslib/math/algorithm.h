@@ -31,7 +31,7 @@
 
 #if NOBLE_STEED_SIMD
 #include <immintrin.h>
-namespace noble_steed
+namespace nslib
 {
 template<typename T, i8 SZ>
 struct simd_traits
@@ -64,12 +64,12 @@ inline __m128 _sse_dp(const __m128 &left, const __m128 &right)
     return add0;
 #endif
 }
-} // namespace noble_steed
+} // namespace nslib
 #endif
 
 #define STR_ALIGN std::right << std::setprecision(ROUND_TO_DEC) << std::fixed
 
-namespace noble_steed
+namespace nslib
 {
 
 template<class T>
@@ -949,4 +949,4 @@ std::ostream &operator<<(std::ostream &os, const T &mat)
         return begin() + size_;                                                                                                                      \
     }
 
-} // namespace noble_steed
+} // namespace nslib

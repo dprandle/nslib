@@ -2,7 +2,7 @@
 
 #include "matrix3.h"
 
-namespace noble_steed
+namespace nslib
 {
 
 template<class T>
@@ -655,4 +655,4 @@ using mat4 = matrix4<float>;
 using dmat4 = matrix4<double>;
 using ldmat4 = matrix4<ldouble>;
 
-} // namespace noble_steed
+} // namespace nslib

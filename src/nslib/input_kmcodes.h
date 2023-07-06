@@ -2,7 +2,7 @@
 
 #include "basic_types.h"
 
-namespace noble_steed
+namespace nslib
 {
 /* The unknown key */
 extern const i16 KEY_UNKNOWN;
@@ -157,4 +157,4 @@ extern const i16 MOUSE_BTN_MIDDLE;
 extern const i16 MOUSE_SCROLL;
 extern const i16 MOUSE_MOVEMENT;
 
-} // namespace noble_steed
+} // namespace nslib

@@ -2,7 +2,7 @@
 
 #include "vector3.h"
 
-namespace noble_steed
+namespace nslib
 {
 template<class T>
 struct vector4
@@ -189,4 +189,4 @@ using u64vec4 = vector4<u64>;
 using vec4 = vector4<float>;
 using dvec4 = vector4<double>;
 using ldvec4 = vector4<ldouble>;
-} // namespace noble_steed
+} // namespace nslib

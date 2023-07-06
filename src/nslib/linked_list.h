@@ -1,6 +1,6 @@
 #pragma once
 
-namespace noble_steed
+namespace nslib
 {
 
 template<class T>
@@ -88,4 +88,4 @@ ll_node<T> *ll_pop(singly_linked_list<T> *ll)
     return top;
 }
 
-} // namespace noble_steed
+} // namespace nslib

@@ -2,7 +2,7 @@
 
 #include "vector2.h"
 
-namespace noble_steed
+namespace nslib
 {
 
 template<class T>
@@ -300,4 +300,4 @@ using u64mat2 = matrix2<u64>;
 using mat2 = matrix2<float>;
 using dmat2 = matrix2<double>;
 using ldmat2 = matrix2<ldouble>;
-} // namespace noble_steed
+} // namespace nslib

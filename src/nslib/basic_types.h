@@ -7,7 +7,7 @@
 #define IS_POSIX_SYSTEM
 #endif
 
-namespace noble_steed
+namespace nslib
 {
 using i8 = int8_t;
 using u8 = uint8_t;
@@ -47,4 +47,4 @@ inline constexpr const sizet npos = LONG_MAX;
 
 #define intern static
 
-} // namespace noble_steed
+} // namespace nslib

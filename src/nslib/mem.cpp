@@ -6,7 +6,7 @@
 #include "mem.h"
 #include "math/algorithm.h"
 
-namespace noble_steed
+namespace nslib
 {
 
 static mem_store *g_mem_store{};
@@ -359,4 +359,4 @@ void set_global_allocator(mem_store *alloc)
     g_mem_store = alloc;
 }
 
-} // namespace noble_steed
+} // namespace nslib

@@ -1,7 +1,7 @@
 #include <cmath>
 #include "algorithm.h"
 
-namespace noble_steed::math
+namespace nslib::math
 {
 
 bool fequals(float left, float right, float eps)
@@ -30,4 +30,4 @@ i8 count_digits(i32 number)
     return i8(log10(number) + 1);
 }
 
-} // namespace noble_steed
+} // namespace nslib

@@ -9,6 +9,6 @@ add_executable(${TARGET_NAME} ${src_files})
 
 set_target_properties(${TARGET_NAME} ${TARGET_NAME} PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/${TARGET_NAME}
-  INCLUDE_DIRECTORIES ${NOBLE_STEED_INCLUDE})
+  INCLUDE_DIRECTORIES ${NSLIB_INCLUDE})
 
-target_link_libraries(${TARGET_NAME} noble-steed)
+target_link_libraries(${TARGET_NAME} nslib)

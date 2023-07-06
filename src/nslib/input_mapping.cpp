@@ -1,7 +1,7 @@
 #include "GLFW/glfw3.h"
 #include "input_mapping.h"
 
-namespace noble_steed
+namespace nslib
 {
 
 /* The unknown key */

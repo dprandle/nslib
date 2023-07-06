@@ -2,7 +2,7 @@
 
 #include "algorithm.h"
 
-namespace noble_steed
+namespace nslib
 {
 
 template<class T>

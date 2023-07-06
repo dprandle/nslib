@@ -13,7 +13,7 @@
 #define MSEC_TO_NSEC(msec) u64(usec * 1000000)
 #define USEC_TO_NSEC(usec) u64(usec * 1000)
 
-namespace noble_steed
+namespace nslib
 {
 
 enum ptimer_type
@@ -61,4 +61,4 @@ u64 ptimer_split_dt(const profile_timepoints *ptimer);
 
 // Return elapsed nanoseconds between now and last restart
 u64 ptimer_elapsed_dt(const profile_timepoints *ptimer);
-} // namespace noble_steed
+} // namespace nslib

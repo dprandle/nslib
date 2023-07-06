@@ -2,7 +2,7 @@
 
 #include "vector4.h"
 
-namespace noble_steed
+namespace nslib
 {
 
 template<floating_pt T>
@@ -354,4 +354,4 @@ quaternion<T> operator/(const quaternion<T> &lhs, const quaternion<T> &rhs)
 using quat = quaternion<float>;
 using dquat = quaternion<double>;
 using ldquat = quaternion<ldouble>;
-} // namespace noble_steed
+} // namespace nslib

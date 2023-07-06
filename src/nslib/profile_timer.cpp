@@ -1,6 +1,6 @@
 #include "profile_timer.h"
 
-namespace noble_steed
+namespace nslib
 {
 ptimespec ptimer_cur(int ptype)
 {
@@ -72,4 +72,4 @@ u64 ptimer_elapsed_dt(const profile_timepoints *ptimer)
     return ptimer_nsec(&split_dt);
 }
 
-} // namespace noble_steed
+} // namespace nslib
