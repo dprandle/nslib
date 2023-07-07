@@ -6,7 +6,7 @@
 namespace nslib
 {
 constexpr const int MAX_INPUT_CONTEXT_STACK_COUNT = 16;
-constexpr const int MAX_INPUT_FRAME_EVENTS = 256;
+constexpr const u8 MAX_INPUT_FRAME_EVENTS = 255;
 
 enum raw_input_event_type
 {
@@ -18,11 +18,11 @@ enum raw_input_event_type
 
 struct raw_input_event
 {
-    int type;
-    i32 key;
-    i32 scancode;
-    i32 action;
-    i32 mods;
+    int type{-1};
+    i32 key_or_button{};
+    i32 scancode{};
+    i32 action{};
+    i32 mods{};
     double offset[2];
     double pos[2];
 };
@@ -30,7 +30,7 @@ struct raw_input_event
 struct frame_input
 {
     raw_input_event events[MAX_INPUT_FRAME_EVENTS];
-    i8 count{0};
+    u8 count{0};
 };
 
 struct input_keymap_entry
