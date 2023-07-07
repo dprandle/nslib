@@ -69,14 +69,14 @@ bool platform_window_should_close(void *window_hndl);
 
 #define DEFINE_APPLICATION_MAIN(client_app_data_type)                                                                                      \
     client_app_data_type client_app_data{};                                                                                                \
-    nslib::platform_ctxt ctxt{};                                                                                                     \
-    int load_platform_settings(nslib::platform_init_info *settings, client_app_data_type *client_app_data);                          \
-    int app_init(nslib::platform_ctxt *ctxt, client_app_data_type *client_app_data);                                                 \
-    int app_terminate(nslib::platform_ctxt *ctxt, client_app_data_type *client_app_data);                                            \
-    int app_run_frame(nslib::platform_ctxt *ctxt, client_app_data_type *client_app_data);                                            \
+    nslib::platform_ctxt ctxt{};                                                                                                           \
+    int load_platform_settings(nslib::platform_init_info *settings, client_app_data_type *client_app_data);                                \
+    int app_init(nslib::platform_ctxt *ctxt, client_app_data_type *client_app_data);                                                       \
+    int app_terminate(nslib::platform_ctxt *ctxt, client_app_data_type *client_app_data);                                                  \
+    int app_run_frame(nslib::platform_ctxt *ctxt, client_app_data_type *client_app_data);                                                  \
     int main(int argc, char **argv)                                                                                                        \
     {                                                                                                                                      \
-        using namespace nslib;                                                                                                       \
+        using namespace nslib;                                                                                                             \
         bool run_loop{true};                                                                                                               \
         platform_init_info settings{};                                                                                                     \
         if (load_platform_settings(&settings, &client_app_data) != err_code::PLATFORM_NO_ERROR) {                                          \
