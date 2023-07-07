@@ -1,5 +1,6 @@
 #pragma once
 #include "mem.h"
+#include "input_mapping.h"
 #include "profile_timer.h"
 #include "math/vector2.h"
 
@@ -47,8 +48,9 @@ struct platform_init_info
 
 struct platform_ctxt
 {
-    void *win_hndl;
-    profile_timepoints time_pts;
+    void *win_hndl{};
+    profile_timepoints time_pts{};
+    frame_input finp{};
     mem_store mem{};
     mem_store frame_mem{};
     int finished_frames{0};
@@ -62,7 +64,7 @@ void platform_free(void *block);
 void platform_run_frame(platform_ctxt *ctxt);
 
 void *platform_create_window(const platform_window_init_info *settings);
-void platform_window_poll_input(void *window_hndl);
+void platform_window_process_input(void *window_hndl);
 bool platform_window_should_close(void *window_hndl);
 
 } // namespace nslib

@@ -15,30 +15,68 @@ intern void glfw_error_callback(i32 error, const char *description)
 intern void glfw_key_press_callback(GLFWwindow *window, i32 key, i32 scancode, i32 action, i32 mods)
 {
     platform_ctxt *pf = platform_ptr(window);
-    dlog("Key pressed fc:%d key:%d scancode:%d action:%d mods:%d", pf->finished_frames, key, scancode, action, mods);
+    assert(pf->finp.count < MAX_INPUT_FRAME_EVENTS);
+    pf->finp.events[pf->finp.count] = {
+        RAW_INPUT_EVENT_TYPE_KEY_PRESS,
+        key,
+        scancode,
+        action,
+        mods,
+        {},
+        {}
+    };
+    ++pf->finp.count;
 }
 
 intern void glfw_mouse_button_callback(GLFWwindow *window, i32 button, i32 action, i32 mods)
 {
     platform_ctxt *pf = platform_ptr(window);
-    dlog("Mouse button pressed fc:%d button:%d action:%d mods:%d", pf->finished_frames, button, action, mods);
+    assert(pf->finp.count < MAX_INPUT_FRAME_EVENTS);
+    pf->finp.events[pf->finp.count] = {
+        RAW_INPUT_EVENT_TYPE_MOUSE_BTN,
+        button,
+        {},
+        action,
+        mods,
+        {},
+        {}
+    };
+    ++pf->finp.count;
 }
 
 intern void glfw_scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
 {
     platform_ctxt *pf = platform_ptr(window);
-    dlog("Scroll fc:%d with x_offset:%f and y_offset:%f", pf->finished_frames, x_offset, y_offset);
+    pf->finp.events[pf->finp.count] = {
+        RAW_INPUT_EVENT_TYPE_SCROLL,
+        {},
+        {},
+        {},
+        {},
+        {x_offset, y_offset},
+        {}
+    };
+    ++pf->finp.count;
 }
 
 intern void glfw_cursor_pos_callback(GLFWwindow *window, double x_pos, double y_pos)
 {
     platform_ctxt *pf = platform_ptr(window);
-    dlog("Cursor fc:%d moved to %f %f", pf->finished_frames, x_pos, y_pos);
+    pf->finp.events[pf->finp.count] = {
+        RAW_INPUT_EVENT_TYPE_CURSOR_POS,
+        {},
+        {},
+        {},
+        {},
+        {},
+        {x_pos, y_pos}
+    };
+    ++pf->finp.count;
 }
 
 intern void glfw_resize_window_callback(GLFWwindow *window, i32 width, i32 height)
 {
-    dlog("Resizing bgfx with framebuffer size {%d %d}", width, height);
+    dlog("Resizing with size {%d %d}", width, height);
 }
 
 intern void glfw_focus_change_callback(GLFWwindow *window, i32 focused)
@@ -181,9 +219,10 @@ void *platform_create_window(const platform_window_init_info *settings)
     return glfwCreateWindow(sz.x, sz.y, settings->title, monitor, nullptr);
 }
 
-void platform_window_poll_input(void *window_hndl)
+void platform_window_process_input(void *window_hndl)
 {
     glfwPollEvents();
+    
 }
 
 bool platform_window_should_close(void *window_hndl)
@@ -202,7 +241,7 @@ void platform_run_frame(platform_ctxt *ctxt)
         prod = i*2 + 5;
     }
     dlog("Product: %d", prod);
-    platform_window_poll_input(ctxt->win_hndl);
+    platform_window_process_input(ctxt->win_hndl);
     mem_store_reset(&ctxt->frame_mem);
     ++ctxt->finished_frames;
 }
