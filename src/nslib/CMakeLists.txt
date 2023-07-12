@@ -1,6 +1,8 @@
 # Set the src files for the project
 file(GLOB src_files
-  ${CMAKE_CURRENT_SOURCE_DIR}/*.c*)
+  ${CMAKE_CURRENT_SOURCE_DIR}/*.c*
+  ${CMAKE_CURRENT_SOURCE_DIR}/containers/*.c*  
+  )
 
 # Create lib
 add_library(${CMAKE_PROJECT_NAME} SHARED ${src_files})

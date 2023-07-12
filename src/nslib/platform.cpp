@@ -1,46 +1,64 @@
 #include "GLFW/glfw3.h"
 #include "assert.h"
+#include "input_kmcodes.h"
 #include "platform.h"
 #include "logging.h"
 
 namespace nslib
 {
 
-#define platform_ptr(win) (platform_ctxt*)glfwGetWindowUserPointer(win)
+#define platform_ptr(win) (platform_ctxt *)glfwGetWindowUserPointer(win)
 intern void glfw_error_callback(i32 error, const char *description)
 {
     elog("Error %d: %s", error, description);
 }
 
+intern i32 get_cursor_scroll_mod_mask(GLFWwindow *window)
+{
+    i32 ret{0};
+    if (glfwGetKey(window, KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, KEY_RIGHT_SHIFT) == GLFW_PRESS) {
+        ret |= KEY_MOD_SHIFT;
+    }
+    if (glfwGetKey(window, KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(window, KEY_RIGHT_CONTROL) == GLFW_PRESS) {
+        ret |= KEY_MOD_CONTROL;
+    }
+    if (glfwGetKey(window, KEY_LEFT_ALT) == GLFW_PRESS || glfwGetKey(window, KEY_RIGHT_ALT) == GLFW_PRESS) {
+        ret |= KEY_MOD_ALT;
+    }
+    if (glfwGetKey(window, KEY_LEFT_SUPER) == GLFW_PRESS || glfwGetKey(window, KEY_RIGHT_SUPER) == GLFW_PRESS) {
+        ret |= KEY_MOD_SUPER;
+    }
+    if (glfwGetKey(window, KEY_CAPS_LOCK) == GLFW_PRESS) {
+        ret |= KEY_MOD_CAPS_LOCK;
+    }
+    if (glfwGetKey(window, KEY_NUM_LOCK) == GLFW_PRESS) {
+        ret |= KEY_MOD_NUM_LOCK;
+    }
+    if (glfwGetMouseButton(window, MOUSE_BTN_LEFT)) {
+        ret |= CURSOR_SCROLL_MOD_MOUSE_LEFT;
+    }
+    if (glfwGetMouseButton(window, MOUSE_BTN_RIGHT)) {
+        ret |= CURSOR_SCROLL_MOD_MOUSE_RIGHT;
+    }
+    if (glfwGetMouseButton(window, MOUSE_BTN_MIDDLE)) {
+        ret |= CURSOR_SCROLL_MOD_MOUSE_MIDDLE;
+    }
+    return ret;
+}
+
 intern void glfw_key_press_callback(GLFWwindow *window, i32 key, i32 scancode, i32 action, i32 mods)
 {
     platform_ctxt *pf = platform_ptr(window);
-    assert(pf->finp.count < MAX_INPUT_FRAME_EVENTS);
-    pf->finp.events[pf->finp.count] = {
-        RAW_INPUT_EVENT_TYPE_KEY_PRESS,
-        key,
-        scancode,
-        action,
-        mods,
-        {},
-        {}
-    };
+    assert(pf->finp.count < MAX_PLATFORM_INPUT_FRAME_EVENTS);
+    pf->finp.events[pf->finp.count] = {PLATFORM_INPUT_EVENT_TYPE_KEY_PRESS, key, scancode, action, mods, {}, {}, window};
     ++pf->finp.count;
 }
 
 intern void glfw_mouse_button_callback(GLFWwindow *window, i32 button, i32 action, i32 mods)
 {
     platform_ctxt *pf = platform_ptr(window);
-    assert(pf->finp.count < MAX_INPUT_FRAME_EVENTS);
-    pf->finp.events[pf->finp.count] = {
-        RAW_INPUT_EVENT_TYPE_MOUSE_BTN,
-        button,
-        {},
-        action,
-        mods,
-        {},
-        {}
-    };
+    assert(pf->finp.count < MAX_PLATFORM_INPUT_FRAME_EVENTS);
+    pf->finp.events[pf->finp.count] = {PLATFORM_INPUT_EVENT_TYPE_MOUSE_BTN, button, {}, action, mods, {}, {}, window};
     ++pf->finp.count;
 }
 
@@ -48,14 +66,7 @@ intern void glfw_scroll_callback(GLFWwindow *window, double x_offset, double y_o
 {
     platform_ctxt *pf = platform_ptr(window);
     pf->finp.events[pf->finp.count] = {
-        RAW_INPUT_EVENT_TYPE_SCROLL,
-        {},
-        {},
-        {},
-        {},
-        {x_offset, y_offset},
-        {}
-    };
+        PLATFORM_INPUT_EVENT_TYPE_SCROLL, SCROLL_CHANGE, {}, {}, get_cursor_scroll_mod_mask(window), {x_offset, y_offset}, {}, window};
     ++pf->finp.count;
 }
 
@@ -63,14 +74,7 @@ intern void glfw_cursor_pos_callback(GLFWwindow *window, double x_pos, double y_
 {
     platform_ctxt *pf = platform_ptr(window);
     pf->finp.events[pf->finp.count] = {
-        RAW_INPUT_EVENT_TYPE_CURSOR_POS,
-        {},
-        {},
-        {},
-        {},
-        {},
-        {x_pos, y_pos}
-    };
+        PLATFORM_INPUT_EVENT_TYPE_CURSOR_POS, CURSOR_POS_CHANGE, {}, {}, get_cursor_scroll_mod_mask(window), {}, {x_pos, y_pos}, window};
     ++pf->finp.count;
 }
 
@@ -101,7 +105,6 @@ intern void glfw_maximize_window_callback(GLFWwindow *window, i32 maximized)
 
 intern void glfw_window_position_callback(GLFWwindow *window, i32 x_pos, i32 y_pos)
 {
-    dlog("Window position moved to {%d %d}", x_pos, y_pos);
 }
 
 intern void glfw_framebuffer_resized_callback(GLFWwindow *window, i32 width, i32 height)
@@ -126,7 +129,7 @@ intern void set_glfw_callbacks(platform_ctxt *ctxt)
     glfwSetScrollCallback(glfw_win, glfw_scroll_callback);
     glfwSetCursorPosCallback(glfw_win, glfw_cursor_pos_callback);
 
-    glfwSetInputMode(glfw_win, GLFW_LOCK_KEY_MODS, GLFW_TRUE);
+    glfwSetInputMode(glfw_win, GLFW_LOCK_KEY_MODS, GLFW_FALSE);
 }
 
 void *platform_alloc(sizet byte_size)
@@ -137,6 +140,11 @@ void *platform_alloc(sizet byte_size)
 void platform_free(void *block)
 {
     free(block);
+}
+
+void *platform_realloc(void *ptr, sizet byte_size)
+{
+    return realloc(ptr, byte_size);
 }
 
 int platform_init(const platform_init_info *settings, platform_ctxt *ctxt)
@@ -156,6 +164,9 @@ int platform_init(const platform_init_info *settings, platform_ctxt *ctxt)
     }
 
     set_glfw_callbacks(ctxt);
+
+    // Seed random number generator
+    srand(time(NULL));
 
     auto mon = glfwGetPrimaryMonitor();
     vec2 scale;
@@ -219,10 +230,10 @@ void *platform_create_window(const platform_window_init_info *settings)
     return glfwCreateWindow(sz.x, sz.y, settings->title, monitor, nullptr);
 }
 
-void platform_window_process_input(void *window_hndl)
+void platform_window_process_input(platform_ctxt *pf)
 {
+    pf->finp.count = 0;
     glfwPollEvents();
-    
 }
 
 bool platform_window_should_close(void *window_hndl)
@@ -230,18 +241,27 @@ bool platform_window_should_close(void *window_hndl)
     return glfwWindowShouldClose((GLFWwindow *)window_hndl);
 }
 
+dvec2 platform_window_size(void *window_hndl)
+{
+    GLFWwindow *glfw_win = (GLFWwindow *)(window_hndl);
+    ivec2 ret;
+    glfwGetWindowSize(glfw_win, &ret.x, &ret.y);
+    return ret;
+}
 
-#include "unistd.h"
+dvec2 platform_cursor_pos(void *window_hndl)
+{
+    GLFWwindow *glfw_win = (GLFWwindow *)(window_hndl);
+    dvec2 ret;
+    glfwGetCursorPos(glfw_win, &ret.x, &ret.y);
+    return ret;
+}
+
+//#include "unistd.h"
 void platform_run_frame(platform_ctxt *ctxt)
 {
     ptimer_split(&ctxt->time_pts);
-    dlog("Frame %d elapsed:%f", ctxt->finished_frames, NSEC_TO_SEC(ctxt->time_pts.dt_ns));
-    int prod{0};
-    for (int i = 0; i < 1000000000; ++i) {
-        prod = i*2 + 5;
-    }
-    dlog("Product: %d", prod);
-    platform_window_process_input(ctxt->win_hndl);
+    platform_window_process_input(ctxt);
     mem_store_reset(&ctxt->frame_mem);
     ++ctxt->finished_frames;
 }

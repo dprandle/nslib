@@ -1,1 +1,2 @@
 add_subdirectory(01_basic_window)
+add_subdirectory(02_input_keymaps)

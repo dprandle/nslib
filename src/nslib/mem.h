@@ -3,7 +3,7 @@
 #include <utility>
 
 #include "basic_types.h"
-#include "linked_list.h"
+#include "containers/linked_list.h"
 
 namespace nslib
 {
@@ -62,7 +62,7 @@ struct mem_linear
     sizet offset;
 };
 
-struct mem_store
+struct mem_arena
 {
     /// Input parameter for alloc functions
     sizet total_size;
@@ -73,7 +73,7 @@ struct mem_store
     /// If null, the allocator memory pool will be allocated with platform_alloc, otherwise the
     /// upstream_allocator's alloc will be used with ns_alloc (same is true for free). Once an allocator gets its memory,
     /// don't change this to something different as it will likely crash (cant free from an allocator different than allocated from)
-    mem_store * upstream_allocator {nullptr};
+    mem_arena * upstream_allocator {nullptr};
 
     sizet used{0};
     sizet peak{0};
@@ -87,16 +87,22 @@ struct mem_store
     };
 };
 
-void *ns_alloc(sizet bytes, mem_store *mem, sizet alignment=8);
+void *ns_alloc(sizet bytes, mem_arena *mem, sizet alignment=8);
+
+void *ns_alloc(sizet bytes);
+
+void *ns_realloc(void *ptr, sizet size, mem_arena *mem, sizet alignment = 8);
+
+void *ns_realloc(void *ptr, sizet size);
 
 template<class T>
-T * ns_alloc(mem_store *mem, sizet alignment=8)
+T * ns_alloc(mem_arena *mem, sizet alignment=8)
 {
     return (T*)ns_alloc(sizeof(T), mem, alignment);
 }
 
 template<class T, class... Args>
-T * ns_new(mem_store *mem, sizet alignment, Args&&... args)
+T * ns_new(mem_arena *mem, sizet alignment, Args&&... args)
 {
     T * item = ns_alloc<T>(mem, alignment);
     new (item) T(std::forward<Args>(args)...);
@@ -104,28 +110,30 @@ T * ns_new(mem_store *mem, sizet alignment, Args&&... args)
 }
 
 template<class T, class... Args>
-T * ns_new(mem_store *mem, Args&&... args)
+T * ns_new(mem_arena *mem, Args&&... args)
 {
     T * item = ns_alloc<T>(mem);
     new (item) T(std::forward<Args>(args)...);
     return item;
 }
 
-void ns_free(void *item, mem_store *mem);
+void ns_free(void *item);
+
+void ns_free(void *item, mem_arena *mem);
 
 template<class T>
-void ns_delete(T *item, mem_store *mem)
+void ns_delete(T *item, mem_arena *mem)
 {
     item->~T();
     ns_free(mem, item);
 }
 
 // Reset the store without actually freeing the memory so it can be reused
-void mem_store_reset(mem_store *mem);
-void mem_store_init(sizet total_size, mem_alloc_type mtype, mem_store *mem);
-void mem_store_terminate(mem_store *mem);
+void mem_store_reset(mem_arena *mem);
+void mem_store_init(sizet total_size, mem_alloc_type mtype, mem_arena *mem);
+void mem_store_terminate(mem_arena *mem);
 
-mem_store * global_allocator();
-void set_global_allocator(mem_store * alloc);
+mem_arena * global_allocator();
+void set_global_allocator(mem_arena * alloc);
 
 } // namespace nslib

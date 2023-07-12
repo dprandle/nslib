@@ -1,3 +1,4 @@
+#include "input_mapping.h"
 #include "platform.h"
 #include "logging.h"
 
@@ -9,13 +10,13 @@ struct app_data
 int load_platform_settings(platform_init_info *settings, app_data *app)
 {
     settings->wind.resolution = {800,600};
-    settings->wind.title = "Vulkan Test";
+    settings->wind.title = "01 Basic Window";
     return err_code::PLATFORM_NO_ERROR;
 }
 
 int app_init(platform_ctxt *ctxt, app_data *app)
 {
-    ilog("App init");
+    ilog("App init");    
     return err_code::PLATFORM_NO_ERROR;
 }
 

@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <cstring>
 #include <numeric>
 #include <assert.h>
 
@@ -9,7 +10,7 @@
 namespace nslib
 {
 
-static mem_store *g_mem_store{};
+static mem_arena *g_mem_store{};
 
 intern sizet calc_padding(sizet base_addr, sizet alignment)
 {
@@ -102,7 +103,7 @@ intern void coalescence(mem_free_list *mfl, mem_node *prev_node, mem_node *free_
     }
 }
 
-intern void *mem_free_list_alloc(mem_store *mem, sizet size, sizet alignment)
+intern void *mem_free_list_alloc(mem_arena *mem, sizet size, sizet alignment)
 {
     sizet alloc_header_size = sizeof(alloc_header);
     assert(size >= sizeof(mem_node));
@@ -137,7 +138,16 @@ intern void *mem_free_list_alloc(mem_store *mem, sizet size, sizet alignment)
     return (void *)data_addr;
 }
 
-intern void mem_free_list_free(mem_store *mem, void *ptr)
+intern sizet mem_free_list_block_size(void *ptr)
+{
+    // Insert it in a sorted position by the address number
+    sizet current_addr = (sizet)ptr;
+    sizet header_addr = current_addr - sizeof(alloc_header);
+    const alloc_header *aheader{(alloc_header *)header_addr};
+    return aheader->block_size + aheader->padding;
+}
+
+intern void mem_free_list_free(mem_arena *mem, void *ptr)
 {
     // Insert it in a sorted position by the address number
     sizet current_addr = (sizet)ptr;
@@ -165,7 +175,7 @@ intern void mem_free_list_free(mem_store *mem, void *ptr)
     coalescence(&mem->mfl, it_prev, free_node);
 }
 
-intern void *mem_pool_alloc(mem_store *mem)
+intern void *mem_pool_alloc(mem_arena *mem)
 {
     mem_node *free_pos = ll_pop(&mem->mpool.free_list);
     assert(free_pos);
@@ -174,13 +184,18 @@ intern void *mem_pool_alloc(mem_store *mem)
     return (void *)free_pos;
 }
 
-intern void mem_pool_free(mem_store *mem, void *ptr)
+intern sizet mem_pool_block_size(mem_arena *mem, void *ptr)
+{
+    return mem->mpool.chunk_size;
+}
+
+intern void mem_pool_free(mem_arena *mem, void *ptr)
 {
     mem->used -= mem->mpool.chunk_size;
     ll_push(&mem->mpool.free_list, (mem_node *)ptr);
 }
 
-intern void *mem_stack_alloc(mem_store *mem, sizet size, sizet alignment)
+intern void *mem_stack_alloc(mem_arena *mem, sizet size, sizet alignment)
 {
     sizet current_addr = (sizet)mem->start + mem->mstack.offset;
 
@@ -203,7 +218,7 @@ intern void *mem_stack_alloc(mem_store *mem, sizet size, sizet alignment)
     return (void *)next_addr;
 }
 
-intern void mem_stack_free(mem_store *mem, void *ptr)
+intern void mem_stack_free(mem_arena *mem, void *ptr)
 {
     // Move offset back to clear address
     sizet current_addr = (sizet)ptr;
@@ -214,7 +229,7 @@ intern void mem_stack_free(mem_store *mem, void *ptr)
     mem->used = mem->mstack.offset;
 }
 
-intern void *mem_linear_alloc(mem_store *mem, sizet size, sizet alignment)
+intern void *mem_linear_alloc(mem_arena *mem, sizet size, sizet alignment)
 {
     sizet padding = 0;
     sizet current_addr = (sizet)mem->start + mem->mlin.offset;
@@ -234,12 +249,17 @@ intern void *mem_linear_alloc(mem_store *mem, sizet size, sizet alignment)
     return (void *)next_addr;
 }
 
-intern void mem_linear_free(mem_store *mem, void *ptr)
+intern void mem_linear_free(mem_arena *mem, void *ptr)
 {
     // NO OP
 }
 
-void *ns_alloc(sizet size, mem_store *mem, sizet alignment)
+void *ns_alloc(sizet bytes)
+{
+    return ns_alloc(bytes, nullptr, 8);
+}
+
+void *ns_alloc(sizet bytes, mem_arena *mem, sizet alignment)
 {
     if (!mem) {
         mem = global_allocator();
@@ -247,23 +267,63 @@ void *ns_alloc(sizet size, mem_store *mem, sizet alignment)
     if (mem) {
         switch (mem->alloc_type) {
         case (MEM_ALLOC_FREE_LIST):
-            return mem_free_list_alloc(mem, size, alignment);
+            return mem_free_list_alloc(mem, bytes, alignment);
         case (MEM_ALLOC_POOL):
-            assert(size == mem->mpool.chunk_size);
+            assert(bytes == mem->mpool.chunk_size);
             return mem_pool_alloc(mem);
         case (MEM_ALLOC_STACK):
-            return mem_stack_alloc(mem, size, alignment);
+            return mem_stack_alloc(mem, bytes, alignment);
         case (MEM_ALLOC_LINEAR):
-            return mem_linear_alloc(mem, size, alignment);
+            return mem_linear_alloc(mem, bytes, alignment);
         }
     }
     else {
-        return platform_alloc(size);
+        return platform_alloc(bytes);
     }
     return nullptr;
 }
 
-void ns_free(mem_store *mem, void *ptr)
+void *ns_realloc(void *ptr, sizet new_size, mem_arena *mem, sizet alignment)
+{
+    if (!ptr) {
+        return nullptr;
+    }    
+    if (!mem) {
+        mem = global_allocator();
+    }
+    sizet block_size = 0;
+    if (mem) {
+        if (mem->alloc_type == MEM_ALLOC_FREE_LIST) {
+            block_size = mem_free_list_block_size(ptr);
+        }
+        else if (mem->alloc_type == MEM_ALLOC_POOL) {
+            block_size = mem_pool_block_size(mem, ptr);
+        }
+        
+        // Create a new block and copy the mem to it from the old block (we use the lesser of the block sizes)
+        auto new_block = ns_alloc(new_size, mem, alignment);
+        if (new_size < block_size) {
+            block_size = new_size;
+        }
+        memcpy(new_block, ptr, block_size);
+        return new_block;
+    }
+    else {
+        return platform_realloc(ptr, new_size);
+    }
+}
+
+void *ns_realloc(void *ptr, sizet size)
+{
+    return ns_realloc(ptr, size, nullptr);
+}
+
+void ns_free(void *item)
+{
+    ns_free(item, nullptr);
+}
+
+void ns_free(void *ptr, mem_arena *mem)
 {
     if (!ptr)
         return;
@@ -271,6 +331,7 @@ void ns_free(mem_store *mem, void *ptr)
     if (!mem) {
         mem = global_allocator();
     }
+
     if (mem) {
         switch (mem->alloc_type) {
         case (MEM_ALLOC_FREE_LIST):
@@ -292,11 +353,11 @@ void ns_free(mem_store *mem, void *ptr)
     }
 }
 
-void mem_store_reset(mem_store *mem)
+void mem_store_reset(mem_arena *mem)
 {
     mem->used = 0;
     mem->peak = 0;
-    
+
     switch (mem->alloc_type) {
     case (MEM_ALLOC_POOL): {
         // Create a linked-list with all free positions
@@ -324,11 +385,11 @@ void mem_store_reset(mem_store *mem)
     }
 }
 
-void mem_store_init(sizet total_size, mem_alloc_type mtype, mem_store *mem)
+void mem_store_init(sizet total_size, mem_alloc_type mtype, mem_arena *mem)
 {
     mem->total_size = total_size;
     mem->alloc_type = mtype;
-    
+
     // Make sure user filled out a size before passsing in
     assert(mem->total_size != 0);
 
@@ -343,18 +404,17 @@ void mem_store_init(sizet total_size, mem_alloc_type mtype, mem_store *mem)
     mem_store_reset(mem);
 }
 
-
-void mem_store_terminate(mem_store *mem)
+void mem_store_terminate(mem_arena *mem)
 {
     platform_free(mem->start);
 }
 
-mem_store *global_allocator()
+mem_arena *global_allocator()
 {
     return g_mem_store;
 }
 
-void set_global_allocator(mem_store *alloc)
+void set_global_allocator(mem_arena *alloc)
 {
     g_mem_store = alloc;
 }

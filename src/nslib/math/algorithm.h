@@ -2,11 +2,9 @@
 
 #include "../basic_types.h"
 #include <math.h>
-#include <iomanip>
+//#include <iomanip>
 #include <type_traits>
 #include <algorithm>
-
-#include <iostream>
 
 #define NOBLE_STEED_SSE_BIT (0x00000001)
 #define NOBLE_STEED_SSE2_BIT (0x00000002)
@@ -66,8 +64,6 @@ inline __m128 _sse_dp(const __m128 &left, const __m128 &right)
 }
 } // namespace nslib
 #endif
-
-#define STR_ALIGN std::right << std::setprecision(ROUND_TO_DEC) << std::fixed
 
 namespace nslib
 {
@@ -851,36 +847,6 @@ U operator/(T lhs_, U rhs_)
     for (auto &&element : rhs_)
         element = lhs_ / element;
     return rhs_;
-}
-
-template<vec_or_quat_type T>
-std::ostream &operator<<(std::ostream &os, const T &vec)
-{
-    using namespace math;
-    os << STR_ALIGN << PRINT_START_VEC;
-    for (u8 i{0}; i < T::size_; ++i)
-    {
-        os << vec[i];
-        if (i < (T::size_ - 1))
-            os << PRINT_VEC_DELIMITER;
-    }
-    os << PRINT_END_VEC;
-    return os;
-}
-
-template<mat_type T>
-std::ostream &operator<<(std::ostream &os, const T &mat)
-{
-    using namespace math;
-    os << PRINT_MAT_START;
-    for (u8 i{0}; i < T::size_; ++i)
-    {
-        os << mat[i];
-        if (i < (T::size_ - 1))
-            os << PRINT_MAT_DELIMITER;
-    }
-    os << PRINT_MAT_END;
-    return os;
 }
 
 #define COMMON_OPERATORS(type, element_count, ind_ret_type)                                                                                          \

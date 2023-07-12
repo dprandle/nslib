@@ -137,9 +137,10 @@ extern const i16 KEY_MOD_ALT;
 extern const i16 KEY_MOD_SUPER;
 extern const i16 KEY_MOD_CAPS_LOCK;
 extern const i16 KEY_MOD_NUM_LOCK;
-extern const i16 MOUSE_MOD_LEFT;
-extern const i16 MOUSE_MOD_RIGHT;
-extern const i16 MOUSE_MOD_MIDDLE;
+extern const i16 CURSOR_SCROLL_MOD_MOUSE_LEFT;
+extern const i16 CURSOR_SCROLL_MOD_MOUSE_RIGHT;
+extern const i16 CURSOR_SCROLL_MOD_MOUSE_MIDDLE;
+extern const i16 MOD_ANY;
 extern const i16 MOD_NONE;
 
 extern const i16 MOUSE_BTN_1;
@@ -154,7 +155,11 @@ extern const i16 MOUSE_BTN_LAST;
 extern const i16 MOUSE_BTN_LEFT;
 extern const i16 MOUSE_BTN_RIGHT;
 extern const i16 MOUSE_BTN_MIDDLE;
-extern const i16 MOUSE_SCROLL;
-extern const i16 MOUSE_MOVEMENT;
+extern const i16 SCROLL_CHANGE;
+extern const i16 CURSOR_POS_CHANGE;
+
+extern const i8 INPUT_ACTION_PRESS;
+extern const i8 INPUT_ACTION_RELEASE;
+extern const i8 INPUT_ACTION_REPEAT;
 
 } // namespace nslib

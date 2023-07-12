@@ -2,29 +2,36 @@
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
 
-#ifndef HASHMAP_H
-#define HASHMAP_H
+#pragma once
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
+namespace nslib
+{
 struct hashmap;
 
-struct hashmap *hashmap_new(size_t elsize, size_t cap, uint64_t seed0, 
-    uint64_t seed1, 
-    uint64_t (*hash)(const void *item, uint64_t seed0, uint64_t seed1),
-    int (*compare)(const void *a, const void *b, void *udata),
-    void (*elfree)(void *item),
-    void *udata);
+struct hashmap *hashmap_new(size_t elsize,
+                            size_t cap,
+                            uint64_t seed0,
+                            uint64_t seed1,
+                            uint64_t (*hash)(const void *item, uint64_t seed0, uint64_t seed1),
+                            int (*compare)(const void *a, const void *b, void *udata),
+                            void (*elfree)(void *item),
+                            void *udata);
 
-struct hashmap *hashmap_new_with_allocator(void *(*malloc)(size_t), 
-    void *(*realloc)(void *, size_t), void (*free)(void*), size_t elsize, 
-    size_t cap, uint64_t seed0, uint64_t seed1,
-    uint64_t (*hash)(const void *item, uint64_t seed0, uint64_t seed1),
-    int (*compare)(const void *a, const void *b, void *udata),
-    void (*elfree)(void *item),
-    void *udata);
+struct hashmap *hashmap_new_with_allocator(void *(*malloc)(size_t),
+                                           void *(*realloc)(void *, size_t),
+                                           void (*free)(void *),
+                                           size_t elsize,
+                                           size_t cap,
+                                           uint64_t seed0,
+                                           uint64_t seed1,
+                                           uint64_t (*hash)(const void *item, uint64_t seed0, uint64_t seed1),
+                                           int (*compare)(const void *a, const void *b, void *udata),
+                                           void (*elfree)(void *item),
+                                           void *udata);
 
 void hashmap_free(struct hashmap *map);
 void hashmap_clear(struct hashmap *map, bool update_cap);
@@ -46,8 +53,6 @@ const void *hashmap_delete_with_hash(struct hashmap *map, const void *key, uint6
 const void *hashmap_set_with_hash(struct hashmap *map, const void *item, uint64_t hash);
 void hashmap_set_grow_by_power(struct hashmap *map, size_t power);
 
-
 // DEPRECATED: use `hashmap_new_with_allocator`
-void hashmap_set_allocator(void *(*malloc)(size_t), void (*free)(void*));
-
-#endif
+void hashmap_set_allocator(void *(*malloc)(size_t), void (*free)(void *));
+} // namespace nslib
