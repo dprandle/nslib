@@ -108,17 +108,11 @@ const input_keymap_entry *input_set_keymap_entry(const input_keymap_entry *entry
     return (const input_keymap_entry *)hashmap_set(km->hm, entry);
 }
 
-const input_keymap_entry *input_get_keymap_entry(const input_keymap_entry *entry, const input_keymap *km)
-{
-    assert(entry);
-    assert(km);
-    return (const input_keymap_entry *)hashmap_get(km->hm, entry);
-}
-
 const input_keymap_entry *input_get_keymap_entry(u32 key, const input_keymap *km)
 {
+    assert(km);
     input_keymap_entry ie{{}, key};
-    return input_get_keymap_entry(&ie, km);
+    return (const input_keymap_entry *)hashmap_get(km->hm, &ie);
 }
 
 const input_keymap_entry *input_get_keymap_entry(const char *name, const input_keymap *km)
