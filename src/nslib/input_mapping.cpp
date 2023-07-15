@@ -16,7 +16,7 @@ intern void fill_event_from_platform_event(const platform_input_event *raw, inpu
     if (raw->type == PLATFORM_INPUT_EVENT_TYPE_CURSOR_POS) {
         ev->type = IEVENT_TYPE_CURSOR;
         ev->cursor_data.pos = raw->pos;
-        ev->cursor_data.norm_pos = raw->pos / platform_cursor_pos(raw->win_hndl);
+        ev->cursor_data.norm_pos = raw->pos / platform_window_size(raw->win_hndl);
     }
     else if (raw->type == PLATFORM_INPUT_EVENT_TYPE_SCROLL) {
         ev->type = IEVENT_TYPE_SCROLL;

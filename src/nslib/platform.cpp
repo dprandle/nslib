@@ -257,7 +257,6 @@ dvec2 platform_cursor_pos(void *window_hndl)
     return ret;
 }
 
-//#include "unistd.h"
 void platform_run_frame(platform_ctxt *ctxt)
 {
     ptimer_split(&ctxt->time_pts);
