@@ -908,7 +908,7 @@ static size_t deepcount(struct hashmap *map)
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <assert.h>
+#include <cassert>
 #include <stdio.h>
 #include "hashmap.h"
 

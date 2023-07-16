@@ -40,9 +40,19 @@ struct platform_window_init_info
     const char *title;
 };
 
+struct platform_memory_init_info
+{
+    sizet free_list_size{500*MB_SIZE};
+    sizet frame_stack_size{100*MB_SIZE};
+    sizet frame_linear_size{100*MB_SIZE};
+};
+
 struct platform_init_info
 {
+    int argc;
+    char **argv{};
     platform_window_init_info wind;
+    platform_memory_init_info mem;
 };
 
 enum platform_input_event_type
@@ -71,14 +81,22 @@ struct platform_frame_input
     u8 count{0};
 };
 
+struct platform_memory
+{
+    mem_arena free_list{};
+    mem_arena frame_stack{};
+    mem_arena frame_linear{};
+};
+
 struct platform_ctxt
 {
     void *win_hndl{};
     profile_timepoints time_pts{};
     platform_frame_input finp{};
-    mem_arena mem{};
-    mem_arena frame_mem{};
+    platform_memory arenas{};
     int finished_frames{0};
+    char **argv{};
+    int argc;
 };
 
 int platform_init(const platform_init_info *settings, platform_ctxt *ctxt);
@@ -110,10 +128,12 @@ bool platform_window_should_close(void *window_hndl);
     {                                                                                                                                      \
         using namespace nslib;                                                                                                             \
         bool run_loop{true};                                                                                                               \
-        platform_init_info settings{};                                                                                                     \
+        platform_init_info settings{argc, argv};                                                                                           \
         if (load_platform_settings(&settings, &client_app_data) != err_code::PLATFORM_NO_ERROR) {                                          \
             return err_code::PLATFORM_INIT;                                                                                                \
         }                                                                                                                                  \
+        ctxt.argc = settings.argc;                                                                                                         \
+        ctxt.argv = settings.argv;                                                                                                         \
         if (platform_init(&settings, &ctxt) != err_code::PLATFORM_NO_ERROR) {                                                              \
             return err_code::PLATFORM_INIT;                                                                                                \
         }                                                                                                                                  \

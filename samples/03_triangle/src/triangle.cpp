@@ -1,27 +1,33 @@
 #include "platform.h"
+#include "vkrenderer.h"
 #include "logging.h"
 
 using namespace nslib;
 
 struct app_data
-{};
+{
+    vkr_context vk;
+};
 
 int load_platform_settings(platform_init_info *settings, app_data *app)
 {
-    settings->wind.resolution = {800,600};
-    settings->wind.title = "01 Basic Window";
+    settings->wind.resolution = {1920,1080};
+    settings->wind.title = "03 Triangle";
     return err_code::PLATFORM_NO_ERROR;
 }
 
 int app_init(platform_ctxt *ctxt, app_data *app)
 {
-    ilog("App init");    
+    ilog("App init");
+    version_info v{1,0,0};
+    vkr_init("03 Triangle", &v, nullptr, &app->vk);
     return err_code::PLATFORM_NO_ERROR;
 }
 
 int app_terminate(platform_ctxt *ctxt, app_data *app)
 {
     ilog("App terminate");
+    vkr_terminate(&app->vk);
     return err_code::PLATFORM_NO_ERROR;
 }
 

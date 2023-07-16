@@ -1,6 +1,5 @@
 #include <cstring>
 #include <stdlib.h>
-#include <assert.h>
 
 #include "GLFW/glfw3.h"
 #include "input_mapping.h"

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <cassert>
+
 #include "limits.h"
 
 #if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))

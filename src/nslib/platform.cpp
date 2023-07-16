@@ -1,5 +1,4 @@
 #include "GLFW/glfw3.h"
-#include "assert.h"
 #include "input_kmcodes.h"
 #include "platform.h"
 #include "logging.h"
@@ -104,8 +103,7 @@ intern void glfw_maximize_window_callback(GLFWwindow *window, i32 maximized)
 }
 
 intern void glfw_window_position_callback(GLFWwindow *window, i32 x_pos, i32 y_pos)
-{
-}
+{}
 
 intern void glfw_framebuffer_resized_callback(GLFWwindow *window, i32 width, i32 height)
 {
@@ -130,6 +128,20 @@ intern void set_glfw_callbacks(platform_ctxt *ctxt)
     glfwSetCursorPosCallback(glfw_win, glfw_cursor_pos_callback);
 
     glfwSetInputMode(glfw_win, GLFW_LOCK_KEY_MODS, GLFW_FALSE);
+}
+
+intern void init_mem_arenas(const platform_memory_init_info * info, platform_memory *mem)
+{
+    mem_arena_init(info->free_list_size, MEM_ALLOC_FREE_LIST, &mem->free_list);
+    mem_arena_init(info->frame_stack_size, MEM_ALLOC_STACK, &mem->frame_stack);
+    mem_arena_init(info->frame_linear_size, MEM_ALLOC_LINEAR, &mem->frame_linear);
+}
+
+intern void terminate_mem_arenas(platform_memory *mem)
+{
+    mem_arena_terminate(&mem->frame_stack);
+    mem_arena_terminate(&mem->frame_linear);
+    mem_arena_terminate(&mem->free_list);
 }
 
 void *platform_alloc(sizet byte_size)
@@ -174,22 +186,17 @@ int platform_init(const platform_init_info *settings, platform_ctxt *ctxt)
     ilog("Monitor scale is {%f %f}", scale.x, scale.y);
 
     log_set_level(LOG_TRACE);
-
-    mem_store_init(500 * MB_SIZE, MEM_ALLOC_FREE_LIST, &ctxt->mem);
-    mem_store_init(20 * MB_SIZE, MEM_ALLOC_STACK, &ctxt->frame_mem);
-    set_global_allocator(&ctxt->mem);
-
+    init_mem_arenas(&settings->mem, &ctxt->arenas);
+    set_global_arena(&ctxt->arenas.free_list);
+    set_global_frame_stack_arena(&ctxt->arenas.frame_stack);
+    set_global_frame_linear_arena(&ctxt->arenas.frame_linear);
     return err_code::PLATFORM_NO_ERROR;
 }
 
 int platform_terminate(platform_ctxt *ctxt)
 {
-    set_global_allocator(nullptr);
-
-    ilog("Releasing %d bytes of %d total allocated in frame mem store", ctxt->frame_mem.used, ctxt->frame_mem.total_size);
-    mem_store_terminate(&ctxt->frame_mem);
-    ilog("Releasing %d bytes of %d total allocated in free list mem store", ctxt->mem.used, ctxt->mem.total_size);
-    mem_store_terminate(&ctxt->mem);
+    set_global_arena(nullptr);
+    terminate_mem_arenas(&ctxt->arenas);
 
     ilog("Platform terminate");
     return err_code::PLATFORM_NO_ERROR;
@@ -261,7 +268,14 @@ void platform_run_frame(platform_ctxt *ctxt)
 {
     ptimer_split(&ctxt->time_pts);
     platform_window_process_input(ctxt);
-    mem_store_reset(&ctxt->frame_mem);
+    if (ctxt->arenas.frame_stack.used > 0) {
+        dlog("Clearing %d used bytes from frame stack arena", ctxt->arenas.frame_stack.used);
+    }
+    mem_arena_reset(&ctxt->arenas.frame_stack);
+    if (ctxt->arenas.frame_linear.used > 0) {
+        dlog("Clearing %d used bytes from frame linear arena", ctxt->arenas.frame_linear.used);
+    }
+    mem_arena_reset(&ctxt->arenas.frame_linear);
     ++ctxt->finished_frames;
 }
 
