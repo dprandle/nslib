@@ -16,7 +16,7 @@ struct mem_arena;
 struct vk_arenas
 {
     // Should persist through the lifetime of the program - only use free list arena
-    mem_arena *persitant_arena{};
+    mem_arena *persistent_arena{};
     // Should persist for the lifetime of a vulkan command
     mem_arena *command_arena{};
 };

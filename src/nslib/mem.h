@@ -40,6 +40,7 @@ enum placement_policy
 
 using mem_node = ll_node<free_header>;
 
+
 struct mem_free_list
 {
     placement_policy p_policy;
@@ -87,60 +88,62 @@ struct mem_arena
     };
 };
 
-void *ns_alloc(sizet bytes, mem_arena *arena, sizet alignment=8);
+void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment=8);
 
-void *ns_alloc(sizet bytes);
+void *mem_alloc(sizet bytes);
 
-void *ns_realloc(void *ptr, sizet size, mem_arena *arena, sizet alignment = 8);
+void *mem_realloc(void *ptr, sizet size, mem_arena *arena, sizet alignment = 8);
 
-void *ns_realloc(void *ptr, sizet size);
+void *mem_realloc(void *ptr, sizet size);
 
 template<class T>
-T * ns_alloc(mem_arena *arena, sizet alignment=8)
+T * mem_alloc(mem_arena *arena, sizet alignment=8)
 {
-    return (T*)ns_alloc(sizeof(T), arena, alignment);
+    return (T*)mem_alloc(sizeof(T), arena, alignment);
 }
 
 template<class T, class... Args>
-T * ns_new(mem_arena *arena, sizet alignment, Args&&... args)
+T * mem_new(mem_arena *arena, sizet alignment, Args&&... args)
 {
-    T * item = ns_alloc<T>(arena, alignment);
+    T * item = mem_alloc<T>(arena, alignment);
     new (item) T(std::forward<Args>(args)...);
     return item;
 }
 
 template<class T, class... Args>
-T * ns_new(mem_arena *arena, Args&&... args)
+T * mem_new(mem_arena *arena, Args&&... args)
 {
-    T * item = ns_alloc<T>(arena);
+    T * item = mem_alloc<T>(arena);
     new (item) T(std::forward<Args>(args)...);
     return item;
 }
 
-void ns_free(void *item);
+void mem_free(void *item);
 
-void ns_free(void *item, mem_arena *arena);
+void mem_free(void *item, mem_arena *arena);
 
 template<class T>
-void ns_delete(T *item, mem_arena *arena)
+void mem_delete(T *item, mem_arena *arena)
 {
     item->~T();
-    ns_free(arena, item);
+    mem_free(arena, item);
 }
 
 // Reset the store without actually freeing the memory so it can be reused
-void mem_arena_reset(mem_arena *arena);
-void mem_arena_init(sizet total_size, mem_alloc_type atype, mem_arena *arena);
-void mem_arena_terminate(mem_arena *arena);
+void mem_reset_arena(mem_arena *arena);
+void mem_init_arena(sizet total_size, mem_alloc_type atype, mem_arena *arena);
+void mem_terminate_arena(mem_arena *arena);
 const char *mem_arena_type_str(mem_alloc_type atype);
 
-mem_arena *get_global_arena();
-void set_global_arena(mem_arena * arena);
+mem_arena *mem_global_arena();
 
-mem_arena *get_global_frame_stack_arena();
-void set_global_frame_stack_arena(mem_arena * arena);
+// This must be a free list arena
+void mem_set_global_arena(mem_arena *arena);
 
-mem_arena *get_global_frame_linear_arena();
-void set_global_frame_linear_arena(mem_arena * arena);
+mem_arena *mem_global_stack_arena();
+void mem_set_global_stack_arena(mem_arena *arena);
+
+mem_arena *mem_global_frame_lin_arena();
+void mem_set_global_frame_lin_arena(mem_arena *arena);
 
 } // namespace nslib

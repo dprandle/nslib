@@ -43,7 +43,7 @@ struct platform_window_init_info
 struct platform_memory_init_info
 {
     sizet free_list_size{500*MB_SIZE};
-    sizet frame_stack_size{100*MB_SIZE};
+    sizet stack_size{100*MB_SIZE};
     sizet frame_linear_size{100*MB_SIZE};
 };
 
@@ -84,7 +84,7 @@ struct platform_frame_input
 struct platform_memory
 {
     mem_arena free_list{};
-    mem_arena frame_stack{};
+    mem_arena stack{};
     mem_arena frame_linear{};
 };
 

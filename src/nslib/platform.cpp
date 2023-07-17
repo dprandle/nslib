@@ -132,16 +132,22 @@ intern void set_glfw_callbacks(platform_ctxt *ctxt)
 
 intern void init_mem_arenas(const platform_memory_init_info * info, platform_memory *mem)
 {
-    mem_arena_init(info->free_list_size, MEM_ALLOC_FREE_LIST, &mem->free_list);
-    mem_arena_init(info->frame_stack_size, MEM_ALLOC_STACK, &mem->frame_stack);
-    mem_arena_init(info->frame_linear_size, MEM_ALLOC_LINEAR, &mem->frame_linear);
+    mem_init_arena(info->free_list_size, MEM_ALLOC_FREE_LIST, &mem->free_list);
+    mem_init_arena(info->stack_size, MEM_ALLOC_STACK, &mem->stack);
+    mem_init_arena(info->frame_linear_size, MEM_ALLOC_LINEAR, &mem->frame_linear);
+    mem_set_global_arena(&mem->free_list);
+    mem_set_global_stack_arena(&mem->stack);
+    mem_set_global_frame_lin_arena(&mem->frame_linear);
 }
 
 intern void terminate_mem_arenas(platform_memory *mem)
 {
-    mem_arena_terminate(&mem->frame_stack);
-    mem_arena_terminate(&mem->frame_linear);
-    mem_arena_terminate(&mem->free_list);
+    mem_terminate_arena(&mem->stack);
+    mem_terminate_arena(&mem->frame_linear);
+    mem_terminate_arena(&mem->free_list);
+    mem_set_global_arena(nullptr);
+    mem_set_global_stack_arena(nullptr);
+    mem_set_global_frame_lin_arena(nullptr);
 }
 
 void *platform_alloc(sizet byte_size)
@@ -187,18 +193,13 @@ int platform_init(const platform_init_info *settings, platform_ctxt *ctxt)
 
     log_set_level(LOG_TRACE);
     init_mem_arenas(&settings->mem, &ctxt->arenas);
-    set_global_arena(&ctxt->arenas.free_list);
-    set_global_frame_stack_arena(&ctxt->arenas.frame_stack);
-    set_global_frame_linear_arena(&ctxt->arenas.frame_linear);
     return err_code::PLATFORM_NO_ERROR;
 }
 
 int platform_terminate(platform_ctxt *ctxt)
 {
-    set_global_arena(nullptr);
-    terminate_mem_arenas(&ctxt->arenas);
-
     ilog("Platform terminate");
+    terminate_mem_arenas(&ctxt->arenas);
     return err_code::PLATFORM_NO_ERROR;
 }
 
@@ -268,14 +269,10 @@ void platform_run_frame(platform_ctxt *ctxt)
 {
     ptimer_split(&ctxt->time_pts);
     platform_window_process_input(ctxt);
-    if (ctxt->arenas.frame_stack.used > 0) {
-        dlog("Clearing %d used bytes from frame stack arena", ctxt->arenas.frame_stack.used);
-    }
-    mem_arena_reset(&ctxt->arenas.frame_stack);
     if (ctxt->arenas.frame_linear.used > 0) {
         dlog("Clearing %d used bytes from frame linear arena", ctxt->arenas.frame_linear.used);
     }
-    mem_arena_reset(&ctxt->arenas.frame_linear);
+    mem_reset_arena(&ctxt->arenas.frame_linear);
     ++ctxt->finished_frames;
 }
 

@@ -14,9 +14,9 @@
 namespace nslib
 {
 
-static mem_arena *g_fl_arena{};
-static mem_arena *g_frame_stack_arena{};
-static mem_arena *g_frame_linear_arena{};
+intern mem_arena *g_fl_arena{};
+intern mem_arena *g_stack_arena{};
+intern mem_arena *g_frame_linear_arena{};
 
 intern sizet calc_padding(sizet base_addr, sizet alignment)
 {
@@ -221,19 +221,15 @@ intern void mem_pool_free(mem_arena *mem, void *ptr)
 intern void *mem_stack_alloc(mem_arena *arena, sizet size, sizet alignment)
 {
     sizet current_addr = (sizet)arena->start + arena->mstack.offset;
-
     char padding = calc_padding_with_header(current_addr, alignment, sizeof(stack_alloc_header));
 
-    if (arena->mstack.offset + padding + size > arena->total_size)
+    if ((arena->mstack.offset + padding + size) > arena->total_size)
         return nullptr;
 
-    arena->mstack.offset += padding;
-
+    arena->mstack.offset += padding + size;
     sizet next_addr = current_addr + padding;
     sizet header_addr = next_addr - sizeof(stack_alloc_header);
-    stack_alloc_header alloc_header{padding};
-    stack_alloc_header *header_ptr = (stack_alloc_header *)header_addr;
-    header_ptr = &alloc_header;
+    ((stack_alloc_header *)header_addr)->padding = padding;
 
     arena->mstack.offset += size;
     arena->used = arena->mstack.offset;
@@ -277,15 +273,16 @@ intern void mem_linear_free(mem_arena *, void *)
     // NO OP
 }
 
-void *ns_alloc(sizet bytes)
+void *mem_alloc(sizet bytes)
 {
-    return ns_alloc(bytes, nullptr, 8);
+    return mem_alloc(bytes, nullptr, 8);
 }
 
-void *ns_alloc(sizet bytes, mem_arena *arena, sizet alignment)
+void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment)
 {
+    assert(arena);
     if (!arena) {
-        arena = get_global_arena();
+        arena = g_fl_arena;
     }
     if (arena) {
         switch (arena->alloc_type) {
@@ -306,13 +303,13 @@ void *ns_alloc(sizet bytes, mem_arena *arena, sizet alignment)
     return nullptr;
 }
 
-void *ns_realloc(void *ptr, sizet new_size, mem_arena *mem, sizet alignment)
+void *mem_realloc(void *ptr, sizet new_size, mem_arena *mem, sizet alignment)
 {
     if (!ptr) {
         return nullptr;
     }
     if (!mem) {
-        mem = get_global_arena();
+        mem = g_fl_arena;
     }
     sizet block_size = 0;
     if (mem) {
@@ -324,7 +321,7 @@ void *ns_realloc(void *ptr, sizet new_size, mem_arena *mem, sizet alignment)
         }
 
         // Create a new block and copy the mem to it from the old block (we use the lesser of the block sizes)
-        auto new_block = ns_alloc(new_size, mem, alignment);
+        auto new_block = mem_alloc(new_size, mem, alignment);
         if (new_size < block_size) {
             block_size = new_size;
         }
@@ -336,23 +333,23 @@ void *ns_realloc(void *ptr, sizet new_size, mem_arena *mem, sizet alignment)
     }
 }
 
-void *ns_realloc(void *ptr, sizet size)
+void *mem_realloc(void *ptr, sizet size)
 {
-    return ns_realloc(ptr, size, nullptr);
+    return mem_realloc(ptr, size, nullptr);
 }
 
-void ns_free(void *item)
+void mem_free(void *item)
 {
-    ns_free(item, nullptr);
+    mem_free(item, nullptr);
 }
 
-void ns_free(void *ptr, mem_arena *arena)
+void mem_free(void *ptr, mem_arena *arena)
 {
     if (!ptr)
         return;
 
     if (!arena) {
-        arena = get_global_arena();
+        arena = g_fl_arena;
     }
 
     if (arena) {
@@ -376,7 +373,7 @@ void ns_free(void *ptr, mem_arena *arena)
     }
 }
 
-void mem_arena_reset(mem_arena *arena)
+void mem_reset_arena(mem_arena *arena)
 {
     arena->used = 0;
     arena->peak = 0;
@@ -408,7 +405,7 @@ void mem_arena_reset(mem_arena *arena)
     }
 }
 
-void mem_arena_init(sizet total_size, mem_alloc_type mtype, mem_arena *arena)
+void mem_init_arena(sizet total_size, mem_alloc_type mtype, mem_arena *arena)
 {
     arena->total_size = total_size;
     arena->alloc_type = mtype;
@@ -423,15 +420,15 @@ void mem_arena_init(sizet total_size, mem_alloc_type mtype, mem_arena *arena)
     if (!arena->upstream_allocator)
         arena->start = platform_alloc(arena->total_size);
     else
-        arena->start = ns_alloc(arena->total_size, arena->upstream_allocator);
+        arena->start = mem_alloc(arena->total_size, arena->upstream_allocator);
 
-    mem_arena_reset(arena);
+    mem_reset_arena(arena);
 }
 
-void mem_arena_terminate(mem_arena *arena)
+void mem_terminate_arena(mem_arena *arena)
 {
     ilog("Terminating %s arena with %d used bytes of %d allocated", mem_arena_type_str(arena->alloc_type), arena->used, arena->total_size);
-    mem_arena_reset(arena);
+    mem_reset_arena(arena);
     platform_free(arena->start);
     arena->start = nullptr;
 }
@@ -452,12 +449,12 @@ const char *mem_arena_type_str(mem_alloc_type atype)
     }
 }
 
-mem_arena *get_global_arena()
+mem_arena *mem_global_arena()
 {
     return g_fl_arena;
 }
 
-void set_global_arena(mem_arena *arena)
+void mem_set_global_arena(mem_arena *arena)
 {
     if (arena) {
         assert(arena->alloc_type == MEM_ALLOC_FREE_LIST);
@@ -465,30 +462,30 @@ void set_global_arena(mem_arena *arena)
     g_fl_arena = arena;
 }
 
-mem_arena *get_global_frame_stack_arena()
+mem_arena *mem_global_stack_arena()
 {
-    return g_frame_stack_arena;
+    return g_stack_arena;
 }
 
-void set_global_frame_stack_arena(mem_arena *arena)
+void mem_set_global_stack_arena(mem_arena *arena)
 {
     if (arena) {
         assert(arena->alloc_type == MEM_ALLOC_STACK);
     }
-    g_frame_stack_arena = arena;
+    g_stack_arena = arena;
 }
 
-mem_arena *get_global_frame_linear_arena()
+mem_arena *mem_global_frame_lin_arena()
 {
-    return g_frame_stack_arena;
+    return g_frame_linear_arena;
 }
 
-void set_global_frame_linear_arena(mem_arena *arena)
+void mem_set_global_frame_lin_arena(mem_arena *arena)
 {
     if (arena) {
         assert(arena->alloc_type == MEM_ALLOC_LINEAR);
     }
-    g_frame_stack_arena = arena;
+    g_frame_linear_arena = arena;
 }
 
 } // namespace nslib

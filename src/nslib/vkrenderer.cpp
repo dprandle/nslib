@@ -1,15 +1,25 @@
 #include <GLFW/glfw3.h>
+#include <cstring>
 
 #include "vkrenderer.h"
 #include "logging.h"
 #include "mem.h"
 
-#define DO_DEBUG_PRINT false
+#define PRINT_MEM_DEBUG false
+#define PRINT_MEM_INSTANCE_ONLY true
 
 namespace nslib
 {
 
 intern const i32 VK_INTERNAL_MEM_HEADER_SIZE = 8;
+
+#if defined(NDEBUG)
+intern const u32 VALIDATION_LAYER_COUNT = 0;
+intern const char **VALIDATION_LAYERS = nullptr;
+#else
+intern const u32 VALIDATION_LAYER_COUNT = 1;
+intern const char *VALIDATION_LAYERS[VALIDATION_LAYER_COUNT] = {"VK_LAYER_KHRONOS_validation"};
+#endif
 
 intern const char *alloc_scope_str(VkSystemAllocationScope scope)
 {
@@ -33,17 +43,20 @@ intern void *vk_alloc(void *user, sizet size, sizet alignment, VkSystemAllocatio
 {
     assert(user);
     auto arenas = (vk_arenas *)user;
-    auto arena = arenas->persitant_arena;
+    auto arena = arenas->persistent_arena;
     if (scope == VK_SYSTEM_ALLOCATION_SCOPE_COMMAND) {
         arena = arenas->command_arena;
     }
     sizet used_before = arena->used;
     size += VK_INTERNAL_MEM_HEADER_SIZE;
-    auto scope_store = (i8 *)ns_alloc(size, arena, alignment);
+    auto scope_store = (i8 *)mem_alloc(size, arena, alignment);
     *scope_store = scope;
     void *ret = scope_store + VK_INTERNAL_MEM_HEADER_SIZE;
-#if DO_DEBUG_PRINT
-    if (scope != VK_SYSTEM_ALLOCATION_SCOPE_COMMAND) {
+
+#if PRINT_MEM_DEBUG
+#if PRINT_MEM_INSTANCE_ONLY
+    if (scope == VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE) {
+#endif
         dlog("header_addr:%p ptr:%p size:%d alignment:%d scope:%s used_before:%d alloc:%d used_after:%d",
              (void *)scope_store,
              ret,
@@ -54,7 +67,9 @@ intern void *vk_alloc(void *user, sizet size, sizet alignment, VkSystemAllocatio
              arena->used - used_before,
              arena->used,
              (arena->used - used_before) - size);
+#if PRINT_MEM_INSTANCE_ONLY
     }
+#endif
 #endif
     return ret;
 }
@@ -66,15 +81,18 @@ intern void vk_free(void *user, void *ptr)
         return;
     }
     auto arenas = (vk_arenas *)user;
-    auto arena = arenas->persitant_arena;
+    auto arena = arenas->persistent_arena;
     auto scope_store = (i8 *)ptr - VK_INTERNAL_MEM_HEADER_SIZE;
     if (*scope_store == VK_SYSTEM_ALLOCATION_SCOPE_COMMAND) {
         arena = arenas->command_arena;
     }
     sizet used_before = arena->used;
-    ns_free((void *)scope_store, arena);
-#if DO_DEBUG_PRINT
-    if (*scope_store != VK_SYSTEM_ALLOCATION_SCOPE_COMMAND) {
+    mem_free((void *)scope_store, arena);
+
+#if PRINT_MEM_DEBUG
+#if PRINT_MEM_INSTANCE_ONLY
+    if (*scope_store == VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE) {
+#endif
         dlog("header_addr:%p ptr:%p scope:%s used_before:%d dealloc:%d used_after:%d",
              (void *)scope_store,
              ptr,
@@ -82,7 +100,9 @@ intern void vk_free(void *user, void *ptr)
              used_before,
              used_before - arena->used,
              arena->used);
+#if PRINT_MEM_INSTANCE_ONLY
     }
+#endif
 #endif
 }
 
@@ -93,44 +113,63 @@ intern void *vk_realloc(void *user, void *ptr, sizet size, sizet alignment, VkSy
         return nullptr;
     }
     auto arenas = (vk_arenas *)user;
-    auto arena = arenas->persitant_arena;
+    auto arena = arenas->persistent_arena;
     auto scope_store = (i8 *)ptr - VK_INTERNAL_MEM_HEADER_SIZE;
     assert(*scope_store == scope);
     if (scope == VK_SYSTEM_ALLOCATION_SCOPE_COMMAND) {
         arena = arenas->command_arena;
     }
 
-    scope_store = (i8 *)ns_realloc(scope_store, size + VK_INTERNAL_MEM_HEADER_SIZE, arena, alignment);
+    scope_store = (i8 *)mem_realloc(scope_store, size + VK_INTERNAL_MEM_HEADER_SIZE, arena, alignment);
     *scope_store = scope;
     void *ret = scope_store + VK_INTERNAL_MEM_HEADER_SIZE;
     return ret;
 }
 
-int vkr_init(const vkr_init_info *init_info, vkr_context *vk)
+intern void enumerate_extensions(const char *const *glfw_extensions, u32 glfw_ext_count)
 {
-    ilog("Initializing vulkan");
-    assert(init_info);
-    if (init_info->arenas.command_arena) {
-        vk->arenas.command_arena = init_info->arenas.command_arena;
+    u32 extension_count{0};
+    ilog("Enumerating vulkan extensions...");
+    vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, nullptr);
+    VkExtensionProperties *ext_array =
+        (VkExtensionProperties *)mem_alloc(extension_count * sizeof(VkExtensionProperties), mem_global_frame_lin_arena());
+    vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, ext_array);
+    for (int i = 0; i < extension_count; ++i) {
+        bool glfw_ext{false};
+        for (int j = 0; j < glfw_ext_count; ++j) {
+            if (strcmp(glfw_extensions[j], ext_array[i].extensionName) == 0) {
+                glfw_ext = true;
+            }
+        }
+        ilog("Extension:%s  SpecVersion:%d  Enabled:%s", ext_array[i].extensionName, ext_array[i].specVersion, glfw_ext ? "true" : "false");
     }
-    else {
-        vk->arenas.command_arena = get_global_frame_linear_arena();
-    }
-    if (init_info->arenas.persitant_arena) {
-        vk->arenas.persitant_arena = init_info->arenas.persitant_arena;
-    }
-    else {
-        vk->arenas.persitant_arena = get_global_arena();
-    }
+}
 
-    assert(vk->arenas.persitant_arena);
-    assert(vk->arenas.command_arena);
+intern void enumerate_validation_layers()
+{
+    u32 layer_count{0};
+    ilog("Enumerating vulkan validation layers...");
+    vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
+    VkLayerProperties *layer_array = (VkLayerProperties *)mem_alloc(layer_count * sizeof(VkLayerProperties), mem_global_frame_lin_arena());
+    vkEnumerateInstanceLayerProperties(&layer_count, layer_array);
+    for (int i = 0; i < layer_count; ++i) {
+        bool enabled{false};
+        for (int j = 0; j < VALIDATION_LAYER_COUNT; ++j) {
+            if (strcmp(VALIDATION_LAYERS[j], layer_array[i].layerName) == 0) {
+                enabled = true;
+            }
+        }
+        ilog("Layer:%s  Desc:\"%s\"  ImplVersion:%d  SpecVersion:%d  Enabled:%s",
+             layer_array[i].layerName,
+             layer_array[i].description,
+             layer_array[i].implementationVersion,
+             layer_array[i].specVersion,
+             enabled ? "true" : "false");
+    }
+}
 
-    vk->alloc.pUserData = &vk->arenas;
-    vk->alloc.pfnAllocation = vk_alloc;
-    vk->alloc.pfnFree = vk_free;
-    vk->alloc.pfnReallocation = vk_realloc;
-
+intern int create_instance(const vkr_init_info *init_info, vkr_context *vk)
+{
     VkApplicationInfo app_info{};
     app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     app_info.pApplicationName = init_info->app_name;
@@ -139,20 +178,19 @@ int vkr_init(const vkr_init_info *init_info, vkr_context *vk)
     app_info.pEngineName = "Noble Steed";
     app_info.apiVersion = VK_API_VERSION_1_3;
 
-    u32 extension_count{0};
-    ilog("Enumerating vulkan extensions...");
-    vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, nullptr);
-    VkExtensionProperties *ext_array =
-        (VkExtensionProperties *)ns_alloc(extension_count * sizeof(VkExtensionProperties), get_global_frame_stack_arena());
-    vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, ext_array);
-    for (int i = 0; i < extension_count; ++i) {
-        ilog("Extension:%s Version:%d", ext_array[i].extensionName, ext_array[i].specVersion);
-    }
-
     VkInstanceCreateInfo create_inf{};
     create_inf.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     create_inf.pApplicationInfo = &app_info;
-    create_inf.ppEnabledExtensionNames = glfwGetRequiredInstanceExtensions(&create_inf.enabledExtensionCount);
+
+    // This is for clarity.. we could just directly pass the enabled extension count
+    u32 ext_count{0};
+    create_inf.ppEnabledExtensionNames = glfwGetRequiredInstanceExtensions(&ext_count);
+    create_inf.enabledExtensionCount = ext_count;
+    create_inf.ppEnabledLayerNames = VALIDATION_LAYERS;
+    create_inf.enabledLayerCount = VALIDATION_LAYER_COUNT;
+    enumerate_extensions(create_inf.ppEnabledExtensionNames, ext_count);
+    enumerate_validation_layers();
+
     int err = vkCreateInstance(&create_inf, &vk->alloc, &vk->inst);
     if (err != VK_SUCCESS) {
         elog("Failed to create vulkan instance with vulkan err code: %d", err);
@@ -160,6 +198,29 @@ int vkr_init(const vkr_init_info *init_info, vkr_context *vk)
     }
     ilog("Successfully created vulkan instance");
     return err_code::VKR_NO_ERROR;
+}
+
+int vkr_init(const vkr_init_info *init_info, vkr_context *vk)
+{
+    ilog("Initializing vulkan");
+    assert(init_info);
+    vk->arenas = init_info->arenas;
+    if (!init_info->arenas.command_arena) {
+        vk->arenas.command_arena = mem_global_frame_lin_arena();
+        ilog("Using global frame linear arena %p", vk->arenas.command_arena);
+    }
+
+    if (!init_info->arenas.persistent_arena) {
+        vk->arenas.persistent_arena = mem_global_arena();
+        ilog("Using global persistent arena %p", vk->arenas.persistent_arena);
+    }
+
+    vk->alloc.pUserData = &vk->arenas;
+    vk->alloc.pfnAllocation = vk_alloc;
+    vk->alloc.pfnFree = vk_free;
+    vk->alloc.pfnReallocation = vk_realloc;
+
+    return create_instance(init_info, vk);
 }
 void vkr_terminate(vkr_context *vk)
 {
