@@ -4,6 +4,8 @@
 #include "logging.h"
 #include "mem.h"
 
+#define DO_DEBUG_PRINT false
+
 namespace nslib
 {
 
@@ -40,6 +42,7 @@ intern void *vk_alloc(void *user, sizet size, sizet alignment, VkSystemAllocatio
     auto scope_store = (i8 *)ns_alloc(size, arena, alignment);
     *scope_store = scope;
     void *ret = scope_store + VK_INTERNAL_MEM_HEADER_SIZE;
+#if DO_DEBUG_PRINT
     if (scope != VK_SYSTEM_ALLOCATION_SCOPE_COMMAND) {
         dlog("header_addr:%p ptr:%p size:%d alignment:%d scope:%s used_before:%d alloc:%d used_after:%d",
              (void *)scope_store,
@@ -52,6 +55,7 @@ intern void *vk_alloc(void *user, sizet size, sizet alignment, VkSystemAllocatio
              arena->used,
              (arena->used - used_before) - size);
     }
+#endif
     return ret;
 }
 
@@ -69,6 +73,7 @@ intern void vk_free(void *user, void *ptr)
     }
     sizet used_before = arena->used;
     ns_free((void *)scope_store, arena);
+#if DO_DEBUG_PRINT
     if (*scope_store != VK_SYSTEM_ALLOCATION_SCOPE_COMMAND) {
         dlog("header_addr:%p ptr:%p scope:%s used_before:%d dealloc:%d used_after:%d",
              (void *)scope_store,
@@ -78,6 +83,7 @@ intern void vk_free(void *user, void *ptr)
              used_before - arena->used,
              arena->used);
     }
+#endif
 }
 
 intern void *vk_realloc(void *user, void *ptr, sizet size, sizet alignment, VkSystemAllocationScope scope)
@@ -100,16 +106,23 @@ intern void *vk_realloc(void *user, void *ptr, sizet size, sizet alignment, VkSy
     return ret;
 }
 
-int vkr_init(const char *app_name, const version_info *app_version, const vk_arenas *arenas, vkr_context *vk)
+int vkr_init(const vkr_init_info *init_info, vkr_context *vk)
 {
     ilog("Initializing vulkan");
-    if (arenas) {
-        vk->arenas = *arenas;
+    assert(init_info);
+    if (init_info->arenas.command_arena) {
+        vk->arenas.command_arena = init_info->arenas.command_arena;
+    }
+    else {
+        vk->arenas.command_arena = get_global_frame_linear_arena();
+    }
+    if (init_info->arenas.persitant_arena) {
+        vk->arenas.persitant_arena = init_info->arenas.persitant_arena;
     }
     else {
         vk->arenas.persitant_arena = get_global_arena();
-        vk->arenas.command_arena = get_global_frame_linear_arena();
     }
+
     assert(vk->arenas.persitant_arena);
     assert(vk->arenas.command_arena);
 
@@ -120,11 +133,21 @@ int vkr_init(const char *app_name, const version_info *app_version, const vk_are
 
     VkApplicationInfo app_info{};
     app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    app_info.pApplicationName = app_name;
-    app_info.applicationVersion = VK_MAKE_VERSION(app_version->major, app_version->minor, app_version->patch);
+    app_info.pApplicationName = init_info->app_name;
+    app_info.applicationVersion = VK_MAKE_VERSION(init_info->vi.major, init_info->vi.minor, init_info->vi.patch);
     app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
     app_info.pEngineName = "Noble Steed";
     app_info.apiVersion = VK_API_VERSION_1_3;
+
+    u32 extension_count{0};
+    ilog("Enumerating vulkan extensions...");
+    vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, nullptr);
+    VkExtensionProperties *ext_array =
+        (VkExtensionProperties *)ns_alloc(extension_count * sizeof(VkExtensionProperties), get_global_frame_stack_arena());
+    vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, ext_array);
+    for (int i = 0; i < extension_count; ++i) {
+        ilog("Extension:%s Version:%d", ext_array[i].extensionName, ext_array[i].specVersion);
+    }
 
     VkInstanceCreateInfo create_inf{};
     create_inf.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;

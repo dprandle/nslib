@@ -20,7 +20,8 @@ int app_init(platform_ctxt *ctxt, app_data *app)
 {
     ilog("App init");
     version_info v{1,0,0};
-    vkr_init("03 Triangle", &v, nullptr, &app->vk);
+    vkr_init_info vkii{"03 Triangle", {1,0,0}, {}};
+    vkr_init(&vkii, &app->vk);
     return err_code::PLATFORM_NO_ERROR;
 }
 

@@ -13,7 +13,8 @@ enum vkr
 }
 
 struct mem_arena;
-struct vk_arenas {
+struct vk_arenas
+{
     // Should persist through the lifetime of the program - only use free list arena
     mem_arena *persitant_arena{};
     // Should persist for the lifetime of a vulkan command
@@ -27,13 +28,22 @@ struct vkr_context
     vk_arenas arenas{};
 };
 
-struct version_info {
+struct version_info
+{
     int major{};
     int minor{};
     int patch{};
 };
 
-int vkr_init(const char *app_name, const version_info *app_version, const vk_arenas *arenas, vkr_context *vk);
+struct vkr_init_info
+{
+    const char *app_name{};
+    version_info vi{};
+    vk_arenas arenas{};
+    
+};
+
+int vkr_init(const vkr_init_info *init_info, vkr_context *vk);
 void vkr_terminate(vkr_context *vk);
 
 } // namespace nslib
