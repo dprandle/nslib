@@ -21,6 +21,10 @@ intern const u32 VALIDATION_LAYER_COUNT = 1;
 intern const char *VALIDATION_LAYERS[VALIDATION_LAYER_COUNT] = {"VK_LAYER_KHRONOS_validation"};
 #endif
 
+intern const u32 ADDITIONAL_EXTENSION_COUNT = 1;
+intern const char *ADDITIONAL_EXTENSIONS[ADDITIONAL_EXTENSION_COUNT] = {"VK_EXT_debug_utils"};
+intern const u32 MAX_EXTENSION_STR_LEN = 128;
+
 intern const char *alloc_scope_str(VkSystemAllocationScope scope)
 {
     switch (scope) {
@@ -126,7 +130,7 @@ intern void *vk_realloc(void *user, void *ptr, sizet size, sizet alignment, VkSy
     return ret;
 }
 
-intern void enumerate_extensions(const char *const *glfw_extensions, u32 glfw_ext_count)
+intern void enumerate_extensions(const char *const *enabled_extensions, u32 enabled_extension_count)
 {
     u32 extension_count{0};
     ilog("Enumerating vulkan extensions...");
@@ -135,13 +139,13 @@ intern void enumerate_extensions(const char *const *glfw_extensions, u32 glfw_ex
         (VkExtensionProperties *)mem_alloc(extension_count * sizeof(VkExtensionProperties), mem_global_frame_lin_arena());
     vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, ext_array);
     for (int i = 0; i < extension_count; ++i) {
-        bool glfw_ext{false};
-        for (int j = 0; j < glfw_ext_count; ++j) {
-            if (strcmp(glfw_extensions[j], ext_array[i].extensionName) == 0) {
-                glfw_ext = true;
+        bool ext_enabled{false};
+        for (int j = 0; j < enabled_extension_count; ++j) {
+            if (strncmp(enabled_extensions[j], ext_array[i].extensionName, MAX_EXTENSION_STR_LEN) == 0) {
+                ext_enabled = true;
             }
         }
-        ilog("Extension:%s  SpecVersion:%d  Enabled:%s", ext_array[i].extensionName, ext_array[i].specVersion, glfw_ext ? "true" : "false");
+        ilog("Extension:%s  SpecVersion:%d  Enabled:%s", ext_array[i].extensionName, ext_array[i].specVersion, ext_enabled ? "true" : "false");
     }
 }
 
@@ -184,11 +188,25 @@ intern int create_instance(const vkr_init_info *init_info, vkr_context *vk)
 
     // This is for clarity.. we could just directly pass the enabled extension count
     u32 ext_count{0};
-    create_inf.ppEnabledExtensionNames = glfwGetRequiredInstanceExtensions(&ext_count);
-    create_inf.enabledExtensionCount = ext_count;
+    const char *const *glfw_ext = glfwGetRequiredInstanceExtensions(&ext_count);
+    char(*ext)[MAX_EXTENSION_STR_LEN] =
+        (char(*)[MAX_EXTENSION_STR_LEN])mem_alloc((ext_count + ADDITIONAL_EXTENSION_COUNT) * sizeof(char *), mem_global_frame_lin_arena());
+
+    u32 copy_ind = 0;
+    for (u32 i = 0; i < ext_count; ++i) {
+        strncpy(ext[copy_ind], glfw_ext[i], MAX_EXTENSION_STR_LEN);
+        ++copy_ind;
+    }
+    for (u32 i = 0; i < ADDITIONAL_EXTENSION_COUNT; ++i) {
+        strncpy(ext[copy_ind], ADDITIONAL_EXTENSIONS[i], MAX_EXTENSION_STR_LEN);
+        ++copy_ind;
+    }
+
+    create_inf.ppEnabledExtensionNames = (const char * const*)ext[0];
+    create_inf.enabledExtensionCount = ext_count + ADDITIONAL_EXTENSION_COUNT;
     create_inf.ppEnabledLayerNames = VALIDATION_LAYERS;
     create_inf.enabledLayerCount = VALIDATION_LAYER_COUNT;
-    enumerate_extensions(create_inf.ppEnabledExtensionNames, ext_count);
+    enumerate_extensions(create_inf.ppEnabledExtensionNames, create_inf.enabledExtensionCount);
     enumerate_validation_layers();
 
     int err = vkCreateInstance(&create_inf, &vk->alloc, &vk->inst);
