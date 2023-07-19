@@ -130,7 +130,7 @@ intern void *vk_realloc(void *user, void *ptr, sizet size, sizet alignment, VkSy
     return ret;
 }
 
-intern void enumerate_extensions(const char *const *enabled_extensions, u32 enabled_extension_count)
+intern void enumerate_extensions(char *const *enabled_extensions, u32 enabled_extension_count)
 {
     u32 extension_count{0};
     ilog("Enumerating vulkan extensions...");
@@ -172,6 +172,46 @@ intern void enumerate_validation_layers()
     }
 }
 
+intern VkBool32 VKAPI_PTR debug_message_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+                                          VkDebugUtilsMessageTypeFlagsEXT types,
+                                          const VkDebugUtilsMessengerCallbackDataEXT *data,
+                                          void *user)
+{
+    if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+        elog("Vk: %s", data->pMessage);
+    }
+    else if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+        wlog("Vk: %s", data->pMessage);
+    }
+    else if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
+        tlog("Vk: %s", data->pMessage);
+    }
+    else if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
+        dlog("Vk: %s", data->pMessage);
+    }
+    return VK_FALSE;
+}
+
+intern void get_extension_funcs(extension_funcs *funcs, VkInstance inst)
+{
+    funcs->create_debug_utils_messenger = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(inst, "vkCreateDebugUtilsMessengerEXT");
+    funcs->destroy_debug_utils_messenger =
+        (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(inst, "vkDestroyDebugUtilsMessengerEXT");
+    assert(funcs->create_debug_utils_messenger);
+    assert(funcs->destroy_debug_utils_messenger);
+}
+
+intern void fill_debug_ext_create_info(VkDebugUtilsMessengerCreateInfoEXT *create_info)
+{
+    create_info->sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    create_info->messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                                   VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    create_info->messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                               VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    create_info->pfnUserCallback = debug_message_callback;
+    create_info->pUserData = nullptr;
+}
+
 intern int create_instance(const vkr_init_info *init_info, vkr_context *vk)
 {
     VkApplicationInfo app_info{};
@@ -189,24 +229,29 @@ intern int create_instance(const vkr_init_info *init_info, vkr_context *vk)
     // This is for clarity.. we could just directly pass the enabled extension count
     u32 ext_count{0};
     const char *const *glfw_ext = glfwGetRequiredInstanceExtensions(&ext_count);
-    char(*ext)[MAX_EXTENSION_STR_LEN] =
-        (char(*)[MAX_EXTENSION_STR_LEN])mem_alloc((ext_count + ADDITIONAL_EXTENSION_COUNT) * sizeof(char *), mem_global_frame_lin_arena());
+    char **ext = (char **)mem_alloc((ext_count + ADDITIONAL_EXTENSION_COUNT) * sizeof(char *), mem_global_frame_lin_arena());
 
     u32 copy_ind = 0;
     for (u32 i = 0; i < ext_count; ++i) {
-        strncpy(ext[copy_ind], glfw_ext[i], MAX_EXTENSION_STR_LEN);
+        ext[copy_ind] = (char *)mem_alloc(strlen(glfw_ext[i]), mem_global_frame_lin_arena());
+        strcpy(ext[copy_ind], glfw_ext[i]);
         ++copy_ind;
     }
     for (u32 i = 0; i < ADDITIONAL_EXTENSION_COUNT; ++i) {
-        strncpy(ext[copy_ind], ADDITIONAL_EXTENSIONS[i], MAX_EXTENSION_STR_LEN);
+        ext[copy_ind] = (char *)mem_alloc(strlen(ADDITIONAL_EXTENSIONS[i]), mem_global_frame_lin_arena());
+        strcpy(ext[copy_ind], ADDITIONAL_EXTENSIONS[i]);
         ++copy_ind;
     }
 
-    create_inf.ppEnabledExtensionNames = (const char * const*)ext[0];
+    VkDebugUtilsMessengerCreateInfoEXT dbg_ci{};
+    fill_debug_ext_create_info(&dbg_ci);
+
+    create_inf.pNext = &dbg_ci;
+    create_inf.ppEnabledExtensionNames = ext;
     create_inf.enabledExtensionCount = ext_count + ADDITIONAL_EXTENSION_COUNT;
     create_inf.ppEnabledLayerNames = VALIDATION_LAYERS;
     create_inf.enabledLayerCount = VALIDATION_LAYER_COUNT;
-    enumerate_extensions(create_inf.ppEnabledExtensionNames, create_inf.enabledExtensionCount);
+    enumerate_extensions(ext, create_inf.enabledExtensionCount);
     enumerate_validation_layers();
 
     int err = vkCreateInstance(&create_inf, &vk->alloc, &vk->inst);
@@ -215,6 +260,9 @@ intern int create_instance(const vkr_init_info *init_info, vkr_context *vk)
         return err_code::VKR_CREATE_INSTANCE_FAIL;
     }
     ilog("Successfully created vulkan instance");
+    get_extension_funcs(&vk->ext_funcs, vk->inst);
+    vk->ext_funcs.create_debug_utils_messenger(vk->inst, &dbg_ci, &vk->alloc, &vk->dbg_messenger);
+
     return err_code::VKR_NO_ERROR;
 }
 
@@ -244,6 +292,7 @@ void vkr_terminate(vkr_context *vk)
 {
     ilog("Terminating vulkan");
     VkAllocationCallbacks c;
+    vk->ext_funcs.destroy_debug_utils_messenger(vk->inst, vk->dbg_messenger, &vk->alloc);
     vkDestroyInstance(vk->inst, &vk->alloc);
 }
 

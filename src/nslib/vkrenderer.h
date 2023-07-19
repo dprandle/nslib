@@ -21,11 +21,19 @@ struct vk_arenas
     mem_arena *command_arena{};
 };
 
+struct extension_funcs
+{
+    PFN_vkCreateDebugUtilsMessengerEXT create_debug_utils_messenger{};
+    PFN_vkDestroyDebugUtilsMessengerEXT destroy_debug_utils_messenger{};
+};
+
 struct vkr_context
 {
     VkInstance inst{};
+    VkDebugUtilsMessengerEXT dbg_messenger{};
     VkAllocationCallbacks alloc{};
     vk_arenas arenas{};
+    extension_funcs ext_funcs;
 };
 
 struct version_info
