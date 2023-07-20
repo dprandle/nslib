@@ -5,7 +5,7 @@
 #include "logging.h"
 #include "mem.h"
 
-#define PRINT_MEM_DEBUG false
+#define PRINT_MEM_DEBUG true
 #define PRINT_MEM_INSTANCE_ONLY true
 
 namespace nslib
@@ -237,8 +237,8 @@ int vkr_init_instance(const vkr_init_info *init_info, vkr_context *vk)
 
     // This is for clarity.. we could just directly pass the enabled extension count
     u32 ext_count{0};
-    const char *const *glfw_ext = glfwGetRequiredInstanceExtensions(&ext_count);
-    char **ext = (char **)mem_alloc((ext_count + ADDITIONAL_EXTENSION_COUNT) * sizeof(char *), mem_global_frame_lin_arena());
+    const char **glfw_ext = glfwGetRequiredInstanceExtensions(&ext_count);
+    auto ext = (char **)mem_alloc((ext_count + ADDITIONAL_EXTENSION_COUNT) * sizeof(char *), mem_global_frame_lin_arena());
 
     u32 copy_ind = 0;
     for (u32 i = 0; i < ext_count; ++i) {
@@ -289,7 +289,59 @@ const char *vkr_physical_device_type_str(VkPhysicalDeviceType type)
     }
 }
 
-int vkr_enumerate_and_select_best_physical_device(VkInstance inst, VkPhysicalDevice *device)
+vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice)
+{
+    u32 count{};
+    vkr_queue_families ret{};
+    vkGetPhysicalDeviceQueueFamilyProperties(pdevice, &count, nullptr);
+    auto qfams = (VkQueueFamilyProperties*)mem_alloc(sizeof(VkQueueFamilyProperties) * count, mem_global_frame_lin_arena());
+    vkGetPhysicalDeviceQueueFamilyProperties(pdevice, &count, qfams);
+    ilog("%d queue families available for selected device", count);
+    for (u32 i = 0; i < count; ++i) {
+        if (check_flags(qfams[i].queueFlags, VK_QUEUE_GRAPHICS_BIT) && ret.gfx.available_count == 0) {
+            ret.gfx.index = i;
+            ret.gfx.available_count = qfams[i].queueCount;
+            ilog("Selected queue family at index %d for graphics", i);
+        }
+        ilog("Queue family ind %d has %d available queues with %#010x capabilities", i, qfams[i].queueCount, qfams[i].queueFlags);
+    }
+    return ret;
+}
+
+
+int vkr_create_device(VkPhysicalDevice pdevice, VkAllocationCallbacks * alloc_cbs, const char* const* layers, u32 layer_count, VkDevice *dev)
+{
+    vkr_queue_families qfams = vkr_get_queue_families(pdevice);
+    if (qfams.gfx.available_count == 0) {
+        return err_code::VKR_NO_QUEUE_FAMILIES;
+    }
+    
+    VkDeviceQueueCreateInfo qinfo{};
+    float priority{1.0f};
+    qinfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    qinfo.queueCount = 1;
+    qinfo.queueFamilyIndex = qfams.gfx.index;
+    qinfo.pQueuePriorities = &priority;
+
+    VkPhysicalDeviceFeatures features{};
+
+    VkDeviceCreateInfo create_inf{};
+    create_inf.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    create_inf.queueCreateInfoCount = 1;
+    create_inf.pQueueCreateInfos = &qinfo;
+    create_inf.enabledLayerCount = layer_count;
+    create_inf.ppEnabledLayerNames = layers;
+    create_inf.pEnabledFeatures = &features;
+    create_inf.enabledExtensionCount = 0;
+    int result = vkCreateDevice(pdevice,&create_inf, alloc_cbs, dev);
+    if (result != VK_SUCCESS) {
+        elog("Device creation failed - vk err:%d", result);
+        return err_code::VKR_DEVICE_CREATION_FAILED;
+    }
+    return err_code::VKR_NO_ERROR;
+}
+
+int vkr_select_best_graphics_physical_device(VkInstance inst, VkPhysicalDevice *device)
 {
     u32 count{};
     int ret = vkEnumeratePhysicalDevices(inst, &count, nullptr);
@@ -304,7 +356,7 @@ int vkr_enumerate_and_select_best_physical_device(VkInstance inst, VkPhysicalDev
     VkPhysicalDeviceProperties sel_dev{};
 
     ilog("Found %d physical devices", count);
-    VkPhysicalDevice *pdevices = (VkPhysicalDevice *)mem_alloc(sizeof(VkPhysicalDevice) * count, mem_global_frame_lin_arena());
+    auto pdevices = (VkPhysicalDevice *)mem_alloc(sizeof(VkPhysicalDevice) * count, mem_global_frame_lin_arena());
     ret = vkEnumeratePhysicalDevices(inst, &count, pdevices);
     assert(ret == VK_SUCCESS);
     for (int i = 0; i < count; ++i) {
@@ -387,7 +439,18 @@ int vkr_init(const vkr_init_info *init_info, vkr_context *vk)
         return err_code::VKR_CREATE_INSTANCE_FAIL;
     }
     ilog("Successfully created vulkan instance");
-    int code = vkr_enumerate_and_select_best_physical_device(vk->inst, &vk->physical_device);
+    
+    int code = vkr_select_best_graphics_physical_device(vk->inst, &vk->pdevice);
+    if (code != err_code::VKR_NO_ERROR) {
+        vkr_terminate_instance(vk);
+        return code;
+    }
+
+    code = vkr_create_device(vk->pdevice, &vk->alloc_cbs, VALIDATION_LAYERS, VALIDATION_LAYER_COUNT, &vk->device);
+    // if (code != err_code::VKR_NO_ERROR) {
+    //     vkr_terminate_instance(vk);
+    //     return code;
+    // }
     return code;
 }
 
@@ -400,6 +463,7 @@ void vkr_terminate_instance(vkr_context *vk)
 void vkr_terminate(vkr_context *vk)
 {
     ilog("Terminating vulkan");
+    vkDestroyDevice(vk->device, &vk->alloc_cbs);
     vkr_terminate_instance(vk);
 }
 
