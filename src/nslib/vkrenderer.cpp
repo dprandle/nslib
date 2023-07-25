@@ -1,11 +1,13 @@
+#define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
 #include <cstring>
 
 #include "vkrenderer.h"
 #include "logging.h"
 #include "mem.h"
 
-#define PRINT_MEM_DEBUG true
+#define PRINT_MEM_DEBUG false
 #define PRINT_MEM_INSTANCE_ONLY true
 
 namespace nslib
@@ -289,55 +291,117 @@ const char *vkr_physical_device_type_str(VkPhysicalDeviceType type)
     }
 }
 
-vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice)
+struct queue_create_info
+{
+    u32 qoffset;
+    u32 create_ind;
+}; 
+
+// Check if any other queue families have the same index other than the family passed in at fam_ind. Fam ind is the
+// index into our fam->qinfo array, and index is the actual vulkan queue family index
+intern void fill_queue_offsets_and_create_inds(vkr_queue_families *qfams, u32 fam_ind) {
+    bool found_match = false;
+    u32 highest_ind = 0;
+    for (int i = 0; i < fam_ind; ++i) {
+        if (qfams->qinfo[i].index == qfams->qinfo[fam_ind].index) {
+            found_match = true;
+            qfams->qinfo[fam_ind].qoffset += qfams->qinfo[i].requested_count;
+            qfams->qinfo[fam_ind].create_ind = qfams->qinfo[i].create_ind;
+        }
+        if (!found_match && qfams->qinfo[i].create_ind >= highest_ind) {
+            highest_ind = qfams->qinfo[i].create_ind + 1;
+        }
+    }
+    if (!found_match) {
+        qfams->qinfo[fam_ind].create_ind = highest_ind;
+    }
+}
+
+vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice, VkSurfaceKHR surface)
 {
     u32 count{};
     vkr_queue_families ret{};
     vkGetPhysicalDeviceQueueFamilyProperties(pdevice, &count, nullptr);
-    auto qfams = (VkQueueFamilyProperties*)mem_alloc(sizeof(VkQueueFamilyProperties) * count, mem_global_frame_lin_arena());
+    auto qfams = (VkQueueFamilyProperties *)mem_alloc(sizeof(VkQueueFamilyProperties) * count, mem_global_frame_lin_arena());
     vkGetPhysicalDeviceQueueFamilyProperties(pdevice, &count, qfams);
     ilog("%d queue families available for selected device", count);
+
+    // Crash if we ever get a higher count than our max queue fam allotment
+    assert(count <= MAX_QUEUE_REQUEST_COUNT);
     for (u32 i = 0; i < count; ++i) {
-        if (check_flags(qfams[i].queueFlags, VK_QUEUE_GRAPHICS_BIT) && ret.gfx.available_count == 0) {
-            ret.gfx.index = i;
-            ret.gfx.available_count = qfams[i].queueCount;
+        if (check_flags(qfams[i].queueFlags, VK_QUEUE_GRAPHICS_BIT) && ret.qinfo[VKR_QUEUE_FAM_TYPE_GFX].available_count == 0) {
+            ret.qinfo[VKR_QUEUE_FAM_TYPE_GFX].index = i;
+            ret.qinfo[VKR_QUEUE_FAM_TYPE_GFX].available_count = qfams[i].queueCount;
             ilog("Selected queue family at index %d for graphics", i);
         }
+        
+        VkBool32 supported{false};
+        vkGetPhysicalDeviceSurfaceSupportKHR(pdevice, i, surface, &supported);
+        if (supported && ret.qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].available_count == 0) {
+            ret.qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].index = i;
+            ret.qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].available_count = qfams[i].queueCount;
+            ilog("Selected queue family at index %d for presentation", i);
+        }
+        
         ilog("Queue family ind %d has %d available queues with %#010x capabilities", i, qfams[i].queueCount, qfams[i].queueFlags);
     }
     return ret;
 }
 
 
-int vkr_create_device(VkPhysicalDevice pdevice, VkAllocationCallbacks * alloc_cbs, const char* const* layers, u32 layer_count, VkDevice *dev)
+int vkr_create_device_and_queues(VkPhysicalDevice pdevice, VkAllocationCallbacks *alloc_cbs, const char *const *layers, u32 layer_count, VkDevice *dev, vkr_queue_families * qfams)
 {
-    vkr_queue_families qfams = vkr_get_queue_families(pdevice);
-    if (qfams.gfx.available_count == 0) {
-        return err_code::VKR_NO_QUEUE_FAMILIES;
+    // Fill in the queue index offsets based on the fam index from vulkan - if our queue fams have the same index then
+    // the queues coming from the later fams need to have an offset index set
+    u32 highest_ind = 0;
+    for (u32 i = 0; i < VKR_QUEUE_FAM_TYPE_COUNT; ++i) {
+        fill_queue_offsets_and_create_inds(qfams, i);
+        if (qfams->qinfo[i].create_ind > highest_ind) {
+            highest_ind = qfams->qinfo[i].create_ind;
+        }
     }
+    u32 create_size = highest_ind + 1;
     
-    VkDeviceQueueCreateInfo qinfo{};
-    float priority{1.0f};
-    qinfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    qinfo.queueCount = 1;
-    qinfo.queueFamilyIndex = qfams.gfx.index;
-    qinfo.pQueuePriorities = &priority;
+    // NOTE: Make sure you init all vulkan structs to zero - undefined behavior including crashes result otherwise
+    VkDeviceQueueCreateInfo qinfo[VKR_QUEUE_FAM_TYPE_COUNT] {};
+    float qinfo_f[VKR_QUEUE_FAM_TYPE_COUNT][MAX_QUEUE_REQUEST_COUNT] {};
 
+    for (int i = 0; i < VKR_QUEUE_FAM_TYPE_COUNT; ++i) {
+        u32 ind = qfams->qinfo[i].create_ind;
+        qinfo[ind].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        assert(qfams->qinfo[i].requested_count > 0);
+        qinfo[ind].queueCount += qfams->qinfo[i].requested_count;
+        
+        assert(qinfo[ind].queueCount <= qfams->qinfo[i].available_count);
+        qinfo[ind].queueFamilyIndex = qfams->qinfo[i].create_ind;
+        qinfo[ind].pQueuePriorities = qinfo_f[qfams->qinfo[i].create_ind];
+    }
+
+    // For now we will leave this blank - but probably enable geometry shaders later
     VkPhysicalDeviceFeatures features{};
 
     VkDeviceCreateInfo create_inf{};
     create_inf.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    create_inf.queueCreateInfoCount = 1;
-    create_inf.pQueueCreateInfos = &qinfo;
+    create_inf.queueCreateInfoCount = create_size;
+    create_inf.pQueueCreateInfos = qinfo;
     create_inf.enabledLayerCount = layer_count;
     create_inf.ppEnabledLayerNames = layers;
     create_inf.pEnabledFeatures = &features;
     create_inf.enabledExtensionCount = 0;
-    int result = vkCreateDevice(pdevice,&create_inf, alloc_cbs, dev);
+    int result = vkCreateDevice(pdevice, &create_inf, alloc_cbs, dev);
     if (result != VK_SUCCESS) {
         elog("Device creation failed - vk err:%d", result);
-        return err_code::VKR_DEVICE_CREATION_FAILED;
+        return err_code::VKR_CREATE_DEVICE_FAIL;
     }
+
+    for (int i = 0; i < VKR_QUEUE_FAM_TYPE_COUNT; ++i) {
+        for (u32 qind = 0; qind < qfams->qinfo[i].requested_count; ++qind) {
+            u32 adjusted_ind = qind + qfams->qinfo[i].qoffset;
+            ilog("Getting queue %d from queue family %d", adjusted_ind, qfams->qinfo[i].index);
+            vkGetDeviceQueue(*dev, qfams->qinfo[i].index, adjusted_ind, &(qfams->qinfo[i].qs[qind]));
+        }
+    }
+    
     return err_code::VKR_NO_ERROR;
 }
 
@@ -439,18 +503,42 @@ int vkr_init(const vkr_init_info *init_info, vkr_context *vk)
         return err_code::VKR_CREATE_INSTANCE_FAIL;
     }
     ilog("Successfully created vulkan instance");
-    
+
+    // Create surface
+    if (init_info->window) {
+        int ret = glfwCreateWindowSurface(vk->inst, (GLFWwindow *)init_info->window, &vk->alloc_cbs, &vk->surface);
+        if (ret != VK_SUCCESS) {
+            elog("Failed to create surface with err code %d", ret);
+            vkr_terminate_instance(vk);
+            return err_code::VKR_CREATE_SURFACE_FAIL;
+        }
+        ilog("Successfully created window surface");
+    } else {
+        wlog("No window provided - rendering to window surface disabled");
+    }
+
     int code = vkr_select_best_graphics_physical_device(vk->inst, &vk->pdevice);
     if (code != err_code::VKR_NO_ERROR) {
+        elog("Failed to select graphics device - no device found");
         vkr_terminate_instance(vk);
         return code;
     }
 
-    code = vkr_create_device(vk->pdevice, &vk->alloc_cbs, VALIDATION_LAYERS, VALIDATION_LAYER_COUNT, &vk->device);
-    // if (code != err_code::VKR_NO_ERROR) {
-    //     vkr_terminate_instance(vk);
-    //     return code;
-    // }
+    vkr_queue_families qfams = vkr_get_queue_families(vk->pdevice, vk->surface);
+    for (int i = 0; i < VKR_QUEUE_FAM_TYPE_COUNT; ++i) {
+        if (qfams.qinfo[i].available_count== 0) {
+            elog("Could not find any graphics queue families");
+            vkr_terminate_instance(vk);
+            return err_code::VKR_NO_QUEUE_FAMILIES;
+        }
+    }
+
+    code = vkr_create_device_and_queues(vk->pdevice, &vk->alloc_cbs, VALIDATION_LAYERS, VALIDATION_LAYER_COUNT, &vk->device, &qfams);
+    if (code != err_code::VKR_NO_ERROR) {
+        elog("Device creation failed");
+        vkr_terminate_instance(vk);
+        return code;
+    }
     return code;
 }
 
@@ -463,6 +551,7 @@ void vkr_terminate_instance(vkr_context *vk)
 void vkr_terminate(vkr_context *vk)
 {
     ilog("Terminating vulkan");
+    vkDestroySurfaceKHR(vk->inst, vk->surface, &vk->alloc_cbs);
     vkDestroyDevice(vk->device, &vk->alloc_cbs);
     vkr_terminate_instance(vk);
 }

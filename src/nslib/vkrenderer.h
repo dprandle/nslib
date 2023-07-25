@@ -10,11 +10,21 @@ enum vkr
 {
     VKR_NO_ERROR,
     VKR_CREATE_INSTANCE_FAIL,
+    VKR_CREATE_SURFACE_FAIL,
     VKR_NO_PHYSICAL_DEVICES,
     VKR_NO_QUEUE_FAMILIES,
-    VKR_DEVICE_CREATION_FAILED
+    VKR_CREATE_DEVICE_FAIL
 };
 }
+
+enum vkr_queue_fam_type
+{
+    VKR_QUEUE_FAM_TYPE_GFX,
+    VKR_QUEUE_FAM_TYPE_PRESENT,
+    VKR_QUEUE_FAM_TYPE_COUNT
+};
+
+inline constexpr const u32 MAX_QUEUE_REQUEST_COUNT=32;
 
 const u32 VKR_INVALID = (u32)-1;
 
@@ -33,6 +43,23 @@ struct extension_funcs
     PFN_vkDestroyDebugUtilsMessengerEXT destroy_debug_utils_messenger{};
 };
 
+struct vkr_queue_family_info
+{
+    u32 index{VKR_INVALID};
+    u32 available_count{0};
+    u32 requested_count{1};
+    float priorities[MAX_QUEUE_REQUEST_COUNT] = {1.0f};
+    VkQueue qs[MAX_QUEUE_REQUEST_COUNT] {};
+    
+    u32 qoffset{0};
+    u32 create_ind{0};
+};
+
+struct vkr_queue_families
+{
+    vkr_queue_family_info qinfo[VKR_QUEUE_FAM_TYPE_COUNT];
+};
+
 struct vkr_context
 {
     VkInstance inst{};
@@ -40,7 +67,12 @@ struct vkr_context
     VkAllocationCallbacks alloc_cbs{};
     VkPhysicalDevice pdevice{};
     VkDevice device{};
-    
+    VkSurfaceKHR surface{};
+
+    vkr_queue_families qfams{};
+    VkQueue gfx_q{};
+    VkQueue present_q{};
+
     vk_arenas arenas{};
     extension_funcs ext_funcs;
     int log_verbosity{};
@@ -59,32 +91,22 @@ struct vkr_init_info
     version_info vi{};
     vk_arenas arenas{};
     int log_verbosity{};
+    void *window{};
 };
 
-struct vkr_queue_family_info
-{
-    u32 index{VKR_INVALID};
-    u32 available_count{0};
-}; 
-
-struct vkr_queue_families
-{
-    vkr_queue_family_info gfx;
-}; 
-
 const char *vkr_physical_device_type_str(VkPhysicalDeviceType type);
-vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice);
+vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice, VkSurfaceKHR surface);
 
 // Log out the physical devices and set device to the best one based on very simple scoring (dedicated takes the cake)
 int vkr_select_best_graphics_physical_device(VkInstance inst, VkPhysicalDevice *device);
 
 // Enumerate (log) the available extensions - if an extension is included in the passed in array then it will be
 // indicated as such
-void vkr_enumerate_extensions(const char *const *enabled_extensions=nullptr, u32 enabled_extension_count=0);
+void vkr_enumerate_extensions(const char *const *enabled_extensions = nullptr, u32 enabled_extension_count = 0);
 
 // Enumerate (log) the available layers - if an extension is included in the passed in array then it will be
 // indicated as such
-void vkr_enumerate_validation_layers(const char *const *enabled_layers=nullptr, u32 enabled_layer_count=0);
+void vkr_enumerate_validation_layers(const char *const *enabled_layers = nullptr, u32 enabled_layer_count = 0);
 
 int vkr_init_instance(const vkr_init_info *init_info, vkr_context *vk);
 void vkr_terminate_instance(vkr_context *vk);
