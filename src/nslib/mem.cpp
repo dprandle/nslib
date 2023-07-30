@@ -303,29 +303,40 @@ void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment)
     return nullptr;
 }
 
-void *mem_realloc(void *ptr, sizet new_size, mem_arena *mem, sizet alignment)
+sizet mem_block_size(void *ptr, mem_arena *arena)
+{
+    if (arena->alloc_type == MEM_ALLOC_FREE_LIST) {
+        return mem_free_list_block_size(ptr);
+    }
+    else if (arena->alloc_type == MEM_ALLOC_POOL) {
+        return mem_pool_block_size(arena, ptr);
+    }
+    return 0;
+}
+
+void *mem_realloc(void *ptr, sizet new_size, mem_arena *arena, sizet alignment)
 {
     if (!ptr) {
         return nullptr;
     }
-    if (!mem) {
-        mem = g_fl_arena;
+    if (!arena) {
+        arena = g_fl_arena;
     }
     sizet block_size = 0;
-    if (mem) {
-        if (mem->alloc_type == MEM_ALLOC_FREE_LIST) {
-            block_size = mem_free_list_block_size(ptr);
-        }
-        else if (mem->alloc_type == MEM_ALLOC_POOL) {
-            block_size = mem_pool_block_size(mem, ptr);
-        }
-
+    if (arena) {
+        block_size = mem_block_size(ptr, arena);
+        assert(block_size > 0);
+        
         // Create a new block and copy the mem to it from the old block (we use the lesser of the block sizes)
-        auto new_block = mem_alloc(new_size, mem, alignment);
+        auto new_block = mem_alloc(new_size, arena, alignment);
         if (new_size < block_size) {
             block_size = new_size;
         }
         memcpy(new_block, ptr, block_size);
+
+        // Free the old block
+        mem_free(ptr, arena);
+        
         return new_block;
     }
     else {

@@ -96,6 +96,9 @@ void *mem_realloc(void *ptr, sizet size, mem_arena *arena, sizet alignment = 8);
 
 void *mem_realloc(void *ptr, sizet size);
 
+sizet mem_block_size(void *ptr, mem_arena *arena);
+
+
 template<class T>
 T * mem_alloc(mem_arena *arena, sizet alignment=8)
 {

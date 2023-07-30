@@ -5,13 +5,17 @@
 #include "logging.h"
 #include "mem.h"
 
-#define PRINT_MEM_DEBUG true
+#define PRINT_MEM_DEBUG false
 #define PRINT_MEM_INSTANCE_ONLY true
 
 namespace nslib
 {
 
-intern const i32 VK_INTERNAL_MEM_HEADER_SIZE = 8;
+struct internal_alloc_header
+{
+    u32 scope{};
+    sizet req_size{};
+};
 
 #if defined(NDEBUG)
 intern const u32 VALIDATION_LAYER_COUNT = 0;
@@ -25,7 +29,7 @@ intern const u32 ADDITIONAL_EXTENSION_COUNT = 1;
 intern const char *ADDITIONAL_EXTENSIONS[ADDITIONAL_EXTENSION_COUNT] = {"VK_EXT_debug_utils"};
 intern const u32 MAX_EXTENSION_STR_LEN = 128;
 
-intern const char *alloc_scope_str(VkSystemAllocationScope scope)
+intern const char *alloc_scope_str(int scope)
 {
     switch (scope) {
     case (VK_SYSTEM_ALLOCATION_SCOPE_COMMAND):
@@ -47,30 +51,37 @@ intern void *vk_alloc(void *user, sizet size, sizet alignment, VkSystemAllocatio
 {
     assert(user);
     auto arenas = (vk_arenas *)user;
+    ++arenas->stats[scope].alloc_count;
+    arenas->stats[scope].req_alloc += size;
+
     auto arena = arenas->persistent_arena;
     if (scope == VK_SYSTEM_ALLOCATION_SCOPE_COMMAND) {
         arena = arenas->command_arena;
     }
     sizet used_before = arena->used;
-    size += VK_INTERNAL_MEM_HEADER_SIZE;
-    auto scope_store = (i8 *)mem_alloc(size, arena, alignment);
-    *scope_store = scope;
-    void *ret = scope_store + VK_INTERNAL_MEM_HEADER_SIZE;
+    sizet header_size = sizeof(internal_alloc_header);
 
+    auto header = (internal_alloc_header *)mem_alloc(size + header_size, arena, alignment);
+    header->scope = scope;
+    header->req_size = size;
+
+    void *ret = (void *)((sizet)header + header_size);
+    sizet used_actual = arena->used - used_before;
+
+    arenas->stats[scope].actual_alloc += used_actual;
 #if PRINT_MEM_DEBUG
 #if PRINT_MEM_INSTANCE_ONLY
     if (scope == VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE) {
 #endif
-        dlog("header_addr:%p ptr:%p size:%d alignment:%d scope:%s used_before:%d alloc:%d used_after:%d",
-             (void *)scope_store,
+        dlog("header_addr:%p ptr:%p requested_size:%d alignment:%d scope:%s used_before:%d alloc:%d used_after:%d",
+             (void *)header,
              ret,
              size,
              alignment,
              alloc_scope_str(scope),
              used_before,
-             arena->used - used_before,
-             arena->used,
-             (arena->used - used_before) - size);
+             used_actual,
+             arena->used);
 #if PRINT_MEM_INSTANCE_ONLY
     }
 #endif
@@ -86,23 +97,35 @@ intern void vk_free(void *user, void *ptr)
     }
     auto arenas = (vk_arenas *)user;
     auto arena = arenas->persistent_arena;
-    auto scope_store = (i8 *)ptr - VK_INTERNAL_MEM_HEADER_SIZE;
-    if (*scope_store == VK_SYSTEM_ALLOCATION_SCOPE_COMMAND) {
+
+    sizet header_size = sizeof(internal_alloc_header);
+    auto header = (internal_alloc_header *)((sizet)ptr - header_size);
+    u32 scope = header->scope;
+    sizet req_size = header->req_size;
+
+    ++arenas->stats[scope].free_count;
+
+    if (scope == VK_SYSTEM_ALLOCATION_SCOPE_COMMAND) {
         arena = arenas->command_arena;
     }
     sizet used_before = arena->used;
-    mem_free((void *)scope_store, arena);
+    arenas->stats[scope].req_free += req_size;
+
+    mem_free(header, arena);
+    sizet actual_freed = used_before - arena->used;
+    arenas->stats[scope].actual_free += actual_freed;
 
 #if PRINT_MEM_DEBUG
 #if PRINT_MEM_INSTANCE_ONLY
-    if (*scope_store == VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE) {
+    if (scope == VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE) {
 #endif
-        dlog("header_addr:%p ptr:%p scope:%s used_before:%d dealloc:%d used_after:%d",
-             (void *)scope_store,
+        dlog("header_addr:%p ptr:%p requested_size:%d scope:%s used_before:%d dealloc:%d used_after:%d",
+             header,
              ptr,
-             alloc_scope_str((VkSystemAllocationScope)*scope_store),
+             req_size,
+             alloc_scope_str(scope),
              used_before,
-             used_before - arena->used,
+             actual_freed,
              arena->used);
 #if PRINT_MEM_INSTANCE_ONLY
     }
@@ -117,16 +140,56 @@ intern void *vk_realloc(void *user, void *ptr, sizet size, sizet alignment, VkSy
         return nullptr;
     }
     auto arenas = (vk_arenas *)user;
+    ++arenas->stats[scope].realloc_count;
+    arenas->stats[scope].req_alloc += size;
+
     auto arena = arenas->persistent_arena;
-    auto scope_store = (i8 *)ptr - VK_INTERNAL_MEM_HEADER_SIZE;
-    assert(*scope_store == scope);
+
+    sizet header_size = sizeof(internal_alloc_header);
+    auto old_header = (internal_alloc_header *)((sizet)ptr - header_size);
+    assert(old_header->scope == scope);
     if (scope == VK_SYSTEM_ALLOCATION_SCOPE_COMMAND) {
         arena = arenas->command_arena;
     }
 
-    scope_store = (i8 *)mem_realloc(scope_store, size + VK_INTERNAL_MEM_HEADER_SIZE, arena, alignment);
-    *scope_store = scope;
-    void *ret = scope_store + VK_INTERNAL_MEM_HEADER_SIZE;
+    sizet old_block_size = mem_block_size(old_header, arena);
+    sizet old_req_size = old_header->req_size;
+    arenas->stats[scope].actual_free += old_block_size;
+    arenas->stats[scope].req_free += old_req_size;
+    sizet used_before = arena->used;
+
+    auto new_header = (internal_alloc_header *)mem_realloc(old_header, size + header_size, arena, alignment);
+    sizet new_block_size = mem_block_size(new_header, arena);
+
+    new_header->scope = scope;
+    new_header->req_size = size;
+    void *ret = (void *)((sizet)new_header + header_size);
+    arenas->stats[scope].actual_alloc += new_block_size;
+    sizet diff = arena->used - used_before;
+    assert(diff == (new_block_size - old_block_size));
+
+#if PRINT_MEM_DEBUG
+#if PRINT_MEM_INSTANCE_ONLY
+    if (scope == VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE) {
+#endif
+        dlog("orig_header_addr:%p new_header_addr:%p orig_ptr:%p new_ptr:%p orig_req_size:%d new_req_size:%d scope:%s used_before:%d "
+             "dealloc:%d alloc:%d used_after:%d diff:%d",
+             old_header,
+             new_header,
+             ptr,
+             ret,
+             old_req_size,
+             size,
+             alloc_scope_str(scope),
+             used_before,
+             old_block_size,
+             new_block_size,
+             arena->used,
+             diff);
+#if PRINT_MEM_INSTANCE_ONLY
+    }
+#endif
+#endif
     return ret;
 }
 
@@ -294,7 +357,7 @@ vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice)
     u32 count{};
     vkr_queue_families ret{};
     vkGetPhysicalDeviceQueueFamilyProperties(pdevice, &count, nullptr);
-    auto qfams = (VkQueueFamilyProperties*)mem_alloc(sizeof(VkQueueFamilyProperties) * count, mem_global_frame_lin_arena());
+    auto qfams = (VkQueueFamilyProperties *)mem_alloc(sizeof(VkQueueFamilyProperties) * count, mem_global_frame_lin_arena());
     vkGetPhysicalDeviceQueueFamilyProperties(pdevice, &count, qfams);
     ilog("%d queue families available for selected device", count);
     for (u32 i = 0; i < count; ++i) {
@@ -308,14 +371,13 @@ vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice)
     return ret;
 }
 
-
-int vkr_create_device(VkPhysicalDevice pdevice, VkAllocationCallbacks * alloc_cbs, const char* const* layers, u32 layer_count, VkDevice *dev)
+int vkr_create_device(VkPhysicalDevice pdevice, VkAllocationCallbacks *alloc_cbs, const char *const *layers, u32 layer_count, VkDevice *dev)
 {
     vkr_queue_families qfams = vkr_get_queue_families(pdevice);
     if (qfams.gfx.available_count == 0) {
         return err_code::VKR_NO_QUEUE_FAMILIES;
     }
-    
+
     VkDeviceQueueCreateInfo qinfo{};
     float priority{1.0f};
     qinfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -333,7 +395,7 @@ int vkr_create_device(VkPhysicalDevice pdevice, VkAllocationCallbacks * alloc_cb
     create_inf.ppEnabledLayerNames = layers;
     create_inf.pEnabledFeatures = &features;
     create_inf.enabledExtensionCount = 0;
-    int result = vkCreateDevice(pdevice,&create_inf, alloc_cbs, dev);
+    int result = vkCreateDevice(pdevice, &create_inf, alloc_cbs, dev);
     if (result != VK_SUCCESS) {
         elog("Device creation failed - vk err:%d", result);
         return err_code::VKR_DEVICE_CREATION_FAILED;
@@ -439,7 +501,7 @@ int vkr_init(const vkr_init_info *init_info, vkr_context *vk)
         return err_code::VKR_CREATE_INSTANCE_FAIL;
     }
     ilog("Successfully created vulkan instance");
-    
+
     int code = vkr_select_best_graphics_physical_device(vk->inst, &vk->pdevice);
     if (code != err_code::VKR_NO_ERROR) {
         vkr_terminate_instance(vk);
@@ -460,11 +522,27 @@ void vkr_terminate_instance(vkr_context *vk)
     vkDestroyInstance(vk->inst, &vk->alloc_cbs);
 }
 
+intern void log_mem_stats(const char *type, const vk_mem_alloc_stats *stats)
+{
+    ilog("%s stats:\n alloc_count:%d free_count:%d realloc_count:%d req_alloc:%d req_free:%d actual_alloc:%d actual_free:%d",
+         type,
+         stats->alloc_count,
+         stats->free_count,
+         stats->realloc_count,
+         stats->req_alloc,
+         stats->req_free,
+         stats->actual_alloc,
+         stats->actual_free);
+}
+
 void vkr_terminate(vkr_context *vk)
 {
     ilog("Terminating vulkan");
     vkDestroyDevice(vk->device, &vk->alloc_cbs);
     vkr_terminate_instance(vk);
+    for (int i = 0; i < MEM_ALLOC_TYPE_COUNT; ++i) {
+        log_mem_stats(alloc_scope_str(i), &vk->arenas.stats[i]);
+    }
 }
 
 } // namespace nslib
