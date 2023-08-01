@@ -40,7 +40,6 @@ enum placement_policy
 
 using mem_node = ll_node<free_header>;
 
-
 struct mem_free_list
 {
     placement_policy p_policy;

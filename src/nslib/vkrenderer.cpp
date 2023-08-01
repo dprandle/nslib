@@ -23,8 +23,11 @@ intern const u32 VALIDATION_LAYER_COUNT = 1;
 intern const char *VALIDATION_LAYERS[VALIDATION_LAYER_COUNT] = {"VK_LAYER_KHRONOS_validation"};
 #endif
 
-intern const u32 ADDITIONAL_EXTENSION_COUNT = 1;
-intern const char *ADDITIONAL_EXTENSIONS[ADDITIONAL_EXTENSION_COUNT] = {"VK_EXT_debug_utils"};
+intern const u32 ADDITIONAL_INST_EXTENSION_COUNT = 1;
+intern const char *ADDITIONAL_INST_EXTENSIONS[ADDITIONAL_INST_EXTENSION_COUNT] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME};
+
+intern const u32 DEVICE_EXTENSION_COUNT = 1;
+intern const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 intern const u32 MAX_EXTENSION_STR_LEN = 128;
 
 intern const char *alloc_scope_str(VkSystemAllocationScope scope)
@@ -132,10 +135,31 @@ intern void *vk_realloc(void *user, void *ptr, sizet size, sizet alignment, VkSy
     return ret;
 }
 
-void vkr_enumerate_extensions(const char *const *enabled_extensions, u32 enabled_extension_count)
+void vkr_enumerate_device_extensions(VkPhysicalDevice pdevice, const char *const *enabled_extensions, u32 enabled_extension_count)
 {
     u32 extension_count{0};
-    ilog("Enumerating vulkan extensions...");
+    ilog("Enumerating device extensions...");
+    int res = vkEnumerateDeviceExtensionProperties(pdevice, nullptr, &extension_count, nullptr);
+    assert(res == VK_SUCCESS);
+    VkExtensionProperties *ext_array =
+        (VkExtensionProperties *)mem_alloc(extension_count * sizeof(VkExtensionProperties), mem_global_frame_lin_arena());
+    res = vkEnumerateDeviceExtensionProperties(pdevice, nullptr, &extension_count, ext_array);
+    assert(res == VK_SUCCESS);
+    for (int i = 0; i < extension_count; ++i) {
+        bool ext_enabled{false};
+        for (int j = 0; j < enabled_extension_count; ++j) {
+            if (strncmp(enabled_extensions[j], ext_array[i].extensionName, MAX_EXTENSION_STR_LEN) == 0) {
+                ext_enabled = true;
+            }
+        }
+        ilog("Device Ext:%s  SpecVersion:%d  Enabled:%s", ext_array[i].extensionName, ext_array[i].specVersion, ext_enabled ? "true" : "false");
+    }
+}
+
+void vkr_enumerate_instance_extensions(const char *const *enabled_extensions, u32 enabled_extension_count)
+{
+    u32 extension_count{0};
+    ilog("Enumerating instance extensions...");
     int res = vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, nullptr);
     assert(res == VK_SUCCESS);
     VkExtensionProperties *ext_array =
@@ -149,7 +173,7 @@ void vkr_enumerate_extensions(const char *const *enabled_extensions, u32 enabled
                 ext_enabled = true;
             }
         }
-        ilog("Extension:%s  SpecVersion:%d  Enabled:%s", ext_array[i].extensionName, ext_array[i].specVersion, ext_enabled ? "true" : "false");
+        ilog("Inst Ext:%s  SpecVersion:%d  Enabled:%s", ext_array[i].extensionName, ext_array[i].specVersion, ext_enabled ? "true" : "false");
     }
 }
 
@@ -240,17 +264,18 @@ int vkr_init_instance(const vkr_init_info *init_info, vkr_context *vk)
     // This is for clarity.. we could just directly pass the enabled extension count
     u32 ext_count{0};
     const char **glfw_ext = glfwGetRequiredInstanceExtensions(&ext_count);
-    auto ext = (char **)mem_alloc((ext_count + ADDITIONAL_EXTENSION_COUNT) * sizeof(char *), mem_global_frame_lin_arena());
+    auto ext = (char **)mem_alloc((ext_count + ADDITIONAL_INST_EXTENSION_COUNT) * sizeof(char *), mem_global_frame_lin_arena());
 
     u32 copy_ind = 0;
     for (u32 i = 0; i < ext_count; ++i) {
-        ext[copy_ind] = (char *)mem_alloc(strlen(glfw_ext[i]), mem_global_frame_lin_arena());
+        ext[copy_ind] = (char *)mem_alloc(strlen(glfw_ext[i]) + 1, mem_global_frame_lin_arena());
         strcpy(ext[copy_ind], glfw_ext[i]);
         ++copy_ind;
     }
-    for (u32 i = 0; i < ADDITIONAL_EXTENSION_COUNT; ++i) {
-        ext[copy_ind] = (char *)mem_alloc(strlen(ADDITIONAL_EXTENSIONS[i]), mem_global_frame_lin_arena());
-        strcpy(ext[copy_ind], ADDITIONAL_EXTENSIONS[i]);
+    for (u32 i = 0; i < ADDITIONAL_INST_EXTENSION_COUNT; ++i) {
+        ext[copy_ind] = (char *)mem_alloc(strlen(ADDITIONAL_INST_EXTENSIONS[i]) + 1, mem_global_frame_lin_arena());
+        strcpy(ext[copy_ind], ADDITIONAL_INST_EXTENSIONS[i]);
+        ilog("Got extension %s", ext[copy_ind]);
         ++copy_ind;
     }
 
@@ -259,10 +284,10 @@ int vkr_init_instance(const vkr_init_info *init_info, vkr_context *vk)
 
     create_inf.pNext = &dbg_ci;
     create_inf.ppEnabledExtensionNames = ext;
-    create_inf.enabledExtensionCount = ext_count + ADDITIONAL_EXTENSION_COUNT;
+    create_inf.enabledExtensionCount = ext_count + ADDITIONAL_INST_EXTENSION_COUNT;
     create_inf.ppEnabledLayerNames = VALIDATION_LAYERS;
     create_inf.enabledLayerCount = VALIDATION_LAYER_COUNT;
-    vkr_enumerate_extensions(ext, create_inf.enabledExtensionCount);
+    vkr_enumerate_instance_extensions(ext, create_inf.enabledExtensionCount);
     vkr_enumerate_validation_layers(VALIDATION_LAYERS, VALIDATION_LAYER_COUNT);
 
     int err = vkCreateInstance(&create_inf, &vk->alloc_cbs, &vk->inst);
@@ -295,11 +320,12 @@ struct queue_create_info
 {
     u32 qoffset;
     u32 create_ind;
-}; 
+};
 
 // Check if any other queue families have the same index other than the family passed in at fam_ind. Fam ind is the
 // index into our fam->qinfo array, and index is the actual vulkan queue family index
-intern void fill_queue_offsets_and_create_inds(vkr_queue_families *qfams, u32 fam_ind) {
+intern void fill_queue_offsets_and_create_inds(vkr_queue_families *qfams, u32 fam_ind)
+{
     bool found_match = false;
     u32 highest_ind = 0;
     for (int i = 0; i < fam_ind; ++i) {
@@ -334,7 +360,7 @@ vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice, VkSurfaceKHR
             ret.qinfo[VKR_QUEUE_FAM_TYPE_GFX].available_count = qfams[i].queueCount;
             ilog("Selected queue family at index %d for graphics", i);
         }
-        
+
         VkBool32 supported{false};
         vkGetPhysicalDeviceSurfaceSupportKHR(pdevice, i, surface, &supported);
         if (supported && ret.qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].available_count == 0) {
@@ -342,14 +368,18 @@ vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice, VkSurfaceKHR
             ret.qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].available_count = qfams[i].queueCount;
             ilog("Selected queue family at index %d for presentation", i);
         }
-        
+
         ilog("Queue family ind %d has %d available queues with %#010x capabilities", i, qfams[i].queueCount, qfams[i].queueFlags);
     }
     return ret;
 }
 
-
-int vkr_create_device_and_queues(VkPhysicalDevice pdevice, VkAllocationCallbacks *alloc_cbs, const char *const *layers, u32 layer_count, VkDevice *dev, vkr_queue_families * qfams)
+int vkr_create_device_and_queues(VkPhysicalDevice pdevice,
+                                 VkAllocationCallbacks *alloc_cbs,
+                                 const char *const *layers,
+                                 u32 layer_count,
+                                 VkDevice *dev,
+                                 vkr_queue_families *qfams)
 {
     // Fill in the queue index offsets based on the fam index from vulkan - if our queue fams have the same index then
     // the queues coming from the later fams need to have an offset index set
@@ -361,17 +391,17 @@ int vkr_create_device_and_queues(VkPhysicalDevice pdevice, VkAllocationCallbacks
         }
     }
     u32 create_size = highest_ind + 1;
-    
+
     // NOTE: Make sure you init all vulkan structs to zero - undefined behavior including crashes result otherwise
-    VkDeviceQueueCreateInfo qinfo[VKR_QUEUE_FAM_TYPE_COUNT] {};
-    float qinfo_f[VKR_QUEUE_FAM_TYPE_COUNT][MAX_QUEUE_REQUEST_COUNT] {};
+    VkDeviceQueueCreateInfo qinfo[VKR_QUEUE_FAM_TYPE_COUNT]{};
+    float qinfo_f[VKR_QUEUE_FAM_TYPE_COUNT][MAX_QUEUE_REQUEST_COUNT]{};
 
     for (int i = 0; i < VKR_QUEUE_FAM_TYPE_COUNT; ++i) {
         u32 ind = qfams->qinfo[i].create_ind;
         qinfo[ind].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
         assert(qfams->qinfo[i].requested_count > 0);
         qinfo[ind].queueCount += qfams->qinfo[i].requested_count;
-        
+
         assert(qinfo[ind].queueCount <= qfams->qinfo[i].available_count);
         qinfo[ind].queueFamilyIndex = qfams->qinfo[i].create_ind;
         qinfo[ind].pQueuePriorities = qinfo_f[qfams->qinfo[i].create_ind];
@@ -387,7 +417,8 @@ int vkr_create_device_and_queues(VkPhysicalDevice pdevice, VkAllocationCallbacks
     create_inf.enabledLayerCount = layer_count;
     create_inf.ppEnabledLayerNames = layers;
     create_inf.pEnabledFeatures = &features;
-    create_inf.enabledExtensionCount = 0;
+    create_inf.enabledExtensionCount = DEVICE_EXTENSION_COUNT;
+    create_inf.ppEnabledExtensionNames = DEVICE_EXTENSIONS;
     int result = vkCreateDevice(pdevice, &create_inf, alloc_cbs, dev);
     if (result != VK_SUCCESS) {
         elog("Device creation failed - vk err:%d", result);
@@ -401,7 +432,7 @@ int vkr_create_device_and_queues(VkPhysicalDevice pdevice, VkAllocationCallbacks
             vkGetDeviceQueue(*dev, qfams->qinfo[i].index, adjusted_ind, &(qfams->qinfo[i].qs[qind]));
         }
     }
-    
+
     return err_code::VKR_NO_ERROR;
 }
 
@@ -513,7 +544,8 @@ int vkr_init(const vkr_init_info *init_info, vkr_context *vk)
             return err_code::VKR_CREATE_SURFACE_FAIL;
         }
         ilog("Successfully created window surface");
-    } else {
+    }
+    else {
         wlog("No window provided - rendering to window surface disabled");
     }
 
@@ -526,12 +558,14 @@ int vkr_init(const vkr_init_info *init_info, vkr_context *vk)
 
     vkr_queue_families qfams = vkr_get_queue_families(vk->pdevice, vk->surface);
     for (int i = 0; i < VKR_QUEUE_FAM_TYPE_COUNT; ++i) {
-        if (qfams.qinfo[i].available_count== 0) {
+        if (qfams.qinfo[i].available_count == 0) {
             elog("Could not find any graphics queue families");
             vkr_terminate_instance(vk);
             return err_code::VKR_NO_QUEUE_FAMILIES;
         }
     }
+
+    vkr_enumerate_device_extensions(vk->pdevice, DEVICE_EXTENSIONS, DEVICE_EXTENSION_COUNT);
 
     code = vkr_create_device_and_queues(vk->pdevice, &vk->alloc_cbs, VALIDATION_LAYERS, VALIDATION_LAYER_COUNT, &vk->device, &qfams);
     if (code != err_code::VKR_NO_ERROR) {

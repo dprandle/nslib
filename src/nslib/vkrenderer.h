@@ -94,6 +94,18 @@ struct vkr_init_info
     void *window{};
 };
 
+
+
+struct vkr_swap_chain_info {
+    VkSurfaceCapabilitiesKHR capabilities;
+    VkSurfaceFormatKHR* formats{nullptr};
+    u32 format_size{0};
+    VkPresentModeKHR* present_modes{nullptr};
+    u32 present_mode_size{0};
+    mem_arena *alloc_arena;
+    std::vector<VkPresentModeKHR> presentModes;
+};
+
 const char *vkr_physical_device_type_str(VkPhysicalDeviceType type);
 vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice, VkSurfaceKHR surface);
 
@@ -102,7 +114,7 @@ int vkr_select_best_graphics_physical_device(VkInstance inst, VkPhysicalDevice *
 
 // Enumerate (log) the available extensions - if an extension is included in the passed in array then it will be
 // indicated as such
-void vkr_enumerate_extensions(const char *const *enabled_extensions = nullptr, u32 enabled_extension_count = 0);
+void vkr_enumerate_instance_extensions(const char *const *enabled_extensions = nullptr, u32 enabled_extension_count = 0);
 
 // Enumerate (log) the available layers - if an extension is included in the passed in array then it will be
 // indicated as such
