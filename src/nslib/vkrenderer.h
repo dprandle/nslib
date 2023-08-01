@@ -13,7 +13,8 @@ enum vkr
     VKR_CREATE_SURFACE_FAIL,
     VKR_NO_PHYSICAL_DEVICES,
     VKR_NO_QUEUE_FAMILIES,
-    VKR_CREATE_DEVICE_FAIL
+    VKR_CREATE_DEVICE_FAIL,
+    VKR_CREATE_SWAPCHAIN_FAIL
 };
 }
 
@@ -82,6 +83,7 @@ struct vkr_context
     VkPhysicalDevice pdevice{};
     VkDevice device{};
     VkSurfaceKHR surface{};
+    VkSwapchainKHR swapchain{};
 
     vkr_queue_families qfams{};
     VkQueue gfx_q{};
@@ -108,8 +110,6 @@ struct vkr_init_info
     void *window{};
 };
 
-
-
 struct vkr_swap_chain_info {
     VkSurfaceCapabilitiesKHR capabilities;
     VkSurfaceFormatKHR* formats{nullptr};
@@ -117,14 +117,14 @@ struct vkr_swap_chain_info {
     VkPresentModeKHR* present_modes{nullptr};
     u32 present_mode_size{0};
     mem_arena *alloc_arena;
-    std::vector<VkPresentModeKHR> presentModes;
+//    std::vector<VkPresentModeKHR> presentModes;
 };
 
 const char *vkr_physical_device_type_str(VkPhysicalDeviceType type);
 vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice, VkSurfaceKHR surface);
 
 // Log out the physical devices and set device to the best one based on very simple scoring (dedicated takes the cake)
-int vkr_select_best_graphics_physical_device(VkInstance inst, VkPhysicalDevice *device);
+int vkr_select_best_graphics_physical_device(VkInstance inst, VkSurfaceKHR surface, VkPhysicalDevice *device);
 
 // Enumerate (log) the available extensions - if an extension is included in the passed in array then it will be
 // indicated as such
@@ -133,6 +133,15 @@ void vkr_enumerate_instance_extensions(const char *const *enabled_extensions = n
 // Enumerate (log) the available layers - if an extension is included in the passed in array then it will be
 // indicated as such
 void vkr_enumerate_validation_layers(const char *const *enabled_layers = nullptr, u32 enabled_layer_count = 0);
+
+int vkr_init_swapchain(VkDevice device,
+                       VkPhysicalDevice pdevice,
+                       VkSurfaceKHR surface,
+                       const VkAllocationCallbacks *alloc_cbs,
+                       const vkr_queue_families *qfams,
+                       void *window,
+                       VkSwapchainKHR *swapchain);
+
 
 int vkr_init_instance(const vkr_init_info *init_info, vkr_context *vk);
 void vkr_terminate_instance(vkr_context *vk);

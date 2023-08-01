@@ -3,6 +3,7 @@
 #include <GLFW/glfw3native.h>
 #include <cstring>
 
+#include "math/algorithm.h"
 #include "vkrenderer.h"
 #include "logging.h"
 #include "mem.h"
@@ -501,7 +502,7 @@ int vkr_create_device_and_queues(VkPhysicalDevice pdevice,
     return err_code::VKR_NO_ERROR;
 }
 
-int vkr_select_best_graphics_physical_device(VkInstance inst, VkPhysicalDevice *device)
+int vkr_select_best_graphics_physical_device(VkInstance inst, VkSurfaceKHR surface, VkPhysicalDevice *device)
 {
     u32 count{};
     int ret = vkEnumeratePhysicalDevices(inst, &count, nullptr);
@@ -521,6 +522,18 @@ int vkr_select_best_graphics_physical_device(VkInstance inst, VkPhysicalDevice *
     assert(ret == VK_SUCCESS);
     for (int i = 0; i < count; ++i) {
         int cur_score = 0;
+
+        u32 format_count{0};
+        vkGetPhysicalDeviceSurfaceFormatsKHR(pdevices[i], surface, &format_count, nullptr);
+        if (format_count == 0) {
+            continue;
+        }
+
+        u32 present_mode_count{0};
+        vkGetPhysicalDeviceSurfacePresentModesKHR(pdevices[i], surface, &present_mode_count, nullptr);
+        if (present_mode_count == 0) {
+            continue;
+        }
 
         VkPhysicalDeviceProperties props{};
         vkGetPhysicalDeviceProperties(pdevices[i], &props);
@@ -573,6 +586,84 @@ int vkr_select_best_graphics_physical_device(VkInstance inst, VkPhysicalDevice *
     return err_code::VKR_NO_ERROR;
 }
 
+int vkr_init_swapchain(VkDevice device,
+                       VkPhysicalDevice pdevice,
+                       VkSurfaceKHR surface,
+                       const VkAllocationCallbacks *alloc_cbs,
+                       const vkr_queue_families *qfams,
+                       void *window,
+                       VkSwapchainKHR *swapchain)
+{
+    VkSurfaceCapabilitiesKHR surface_caps{};
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pdevice, surface, &surface_caps);
+
+    VkSwapchainCreateInfoKHR swap_create{};
+    swap_create.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swap_create.surface = surface;
+    swap_create.imageArrayLayers = 1;
+    swap_create.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    swap_create.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    swap_create.preTransform = surface_caps.currentTransform;
+    swap_create.clipped = VK_TRUE;
+    swap_create.oldSwapchain = VK_NULL_HANDLE;
+    swap_create.minImageCount = surface_caps.minImageCount + 1;
+    if (surface_caps.maxImageCount != 0 && surface_caps.maxImageCount < swap_create.minImageCount) {
+        swap_create.minImageCount = surface_caps.maxImageCount;
+    }
+
+    uint32_t queue_fam_inds[] = {qfams->qinfo[VKR_QUEUE_FAM_TYPE_GFX].index, qfams->qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].index};
+    swap_create.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    swap_create.queueFamilyIndexCount = 0;
+    swap_create.pQueueFamilyIndices = nullptr;
+    if (queue_fam_inds[0] != queue_fam_inds[1]) {
+        swap_create.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+        swap_create.queueFamilyIndexCount = 2;
+        swap_create.pQueueFamilyIndices = queue_fam_inds;
+    }
+
+    u32 format_count{0};
+    vkGetPhysicalDeviceSurfaceFormatsKHR(pdevice, surface, &format_count, nullptr);
+    VkSurfaceFormatKHR *formats = (VkSurfaceFormatKHR *)mem_alloc(format_count * sizeof(VkSurfaceFormatKHR), mem_global_frame_lin_arena());
+    vkGetPhysicalDeviceSurfaceFormatsKHR(pdevice, surface, &format_count, formats);
+    int desired_ind{0};
+    for (int i = 0; i < format_count; ++i) {
+        if (formats[i].format == VK_FORMAT_B8G8R8A8_SRGB && formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+            desired_ind = i;
+            break;
+        }
+    }
+    swap_create.imageFormat = formats[desired_ind].format;
+    swap_create.imageColorSpace = formats[desired_ind].colorSpace;
+
+    u32 present_mode_count{0};
+    vkGetPhysicalDeviceSurfacePresentModesKHR(pdevice, surface, &present_mode_count, nullptr);
+    VkPresentModeKHR *present_modes =
+        (VkPresentModeKHR *)mem_alloc(sizeof(VkPresentModeKHR) * present_mode_count, mem_global_frame_lin_arena());
+    vkGetPhysicalDeviceSurfacePresentModesKHR(pdevice, surface, &present_mode_count, present_modes);
+    swap_create.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    for (int i = 0; i < present_mode_count; ++i) {
+        if (present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
+            swap_create.presentMode = present_modes[i];
+            break;
+        }
+    }
+
+    swap_create.imageExtent = surface_caps.currentExtent;
+    if (surface_caps.currentExtent.width == VKR_INVALID) {
+        int width, height;
+        glfwGetFramebufferSize((GLFWwindow *)window, &width, &height);
+        swap_create.imageExtent = {(u32)width, (u32)height};
+        swap_create.imageExtent.width =
+            std::clamp(swap_create.imageExtent.width, surface_caps.minImageExtent.width, surface_caps.maxImageExtent.width);
+        swap_create.imageExtent.height =
+            std::clamp(swap_create.imageExtent.height, surface_caps.minImageExtent.height, surface_caps.maxImageExtent.height);
+    }
+    if (vkCreateSwapchainKHR(device, &swap_create, alloc_cbs, swapchain) != VK_SUCCESS) {
+        return err_code::VKR_CREATE_SWAPCHAIN_FAIL;
+    }
+    return err_code::VKR_NO_ERROR;
+}
+
 int vkr_init(const vkr_init_info *init_info, vkr_context *vk)
 {
     ilog("Initializing vulkan");
@@ -605,7 +696,7 @@ int vkr_init(const vkr_init_info *init_info, vkr_context *vk)
         int ret = glfwCreateWindowSurface(vk->inst, (GLFWwindow *)init_info->window, &vk->alloc_cbs, &vk->surface);
         if (ret != VK_SUCCESS) {
             elog("Failed to create surface with err code %d", ret);
-            vkr_terminate_instance(vk);
+            vkr_terminate(vk);
             return err_code::VKR_CREATE_SURFACE_FAIL;
         }
         ilog("Successfully created window surface");
@@ -614,10 +705,10 @@ int vkr_init(const vkr_init_info *init_info, vkr_context *vk)
         wlog("No window provided - rendering to window surface disabled");
     }
 
-    int code = vkr_select_best_graphics_physical_device(vk->inst, &vk->pdevice);
+    int code = vkr_select_best_graphics_physical_device(vk->inst, vk->surface, &vk->pdevice);
     if (code != err_code::VKR_NO_ERROR) {
         elog("Failed to select graphics device - no device found");
-        vkr_terminate_instance(vk);
+        vkr_terminate(vk);
         return code;
     }
 
@@ -625,20 +716,27 @@ int vkr_init(const vkr_init_info *init_info, vkr_context *vk)
     for (int i = 0; i < VKR_QUEUE_FAM_TYPE_COUNT; ++i) {
         if (qfams.qinfo[i].available_count == 0) {
             elog("Could not find any graphics queue families");
-            vkr_terminate_instance(vk);
+            vkr_terminate(vk);
             return err_code::VKR_NO_QUEUE_FAMILIES;
         }
     }
 
     vkr_enumerate_device_extensions(vk->pdevice, DEVICE_EXTENSIONS, DEVICE_EXTENSION_COUNT);
-
     code = vkr_create_device_and_queues(vk->pdevice, &vk->alloc_cbs, VALIDATION_LAYERS, VALIDATION_LAYER_COUNT, &vk->device, &qfams);
+
     if (code != err_code::VKR_NO_ERROR) {
         elog("Device creation failed");
-        vkr_terminate_instance(vk);
+        vkr_terminate(vk);
         return code;
     }
-    return code;
+    
+    code = vkr_init_swapchain(vk->device, vk->pdevice, vk->surface, &vk->alloc_cbs, &qfams, init_info->window, &vk->swapchain);
+    if (code != err_code::VKR_NO_ERROR) {
+        elog("Failed to initialize swapchain");
+        vkr_terminate(vk);
+        return code;
+    }
+    return err_code::VKR_NO_ERROR;
 }
 
 void vkr_terminate_instance(vkr_context *vk)
@@ -663,6 +761,7 @@ intern void log_mem_stats(const char *type, const vk_mem_alloc_stats *stats)
 void vkr_terminate(vkr_context *vk)
 {
     ilog("Terminating vulkan");
+    vkDestroySwapchainKHR(vk->device, vk->swapchain, &vk->alloc_cbs);
     vkDestroySurfaceKHR(vk->inst, vk->surface, &vk->alloc_cbs);
     vkDestroyDevice(vk->device, &vk->alloc_cbs);
     vkr_terminate_instance(vk);
