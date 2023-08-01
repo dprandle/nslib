@@ -27,10 +27,24 @@ enum vkr_queue_fam_type
 inline constexpr const u32 MAX_QUEUE_REQUEST_COUNT=32;
 
 const u32 VKR_INVALID = (u32)-1;
+inline constexpr const u32 MEM_ALLOC_TYPE_COUNT = VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE+1;
+
+struct vk_mem_alloc_stats
+{
+    u32 alloc_count{};
+    u32 free_count{};
+    u32 realloc_count{};
+    sizet req_alloc{};
+    sizet actual_alloc{};
+    sizet req_free{};
+    sizet actual_free{};
+};
 
 struct mem_arena;
 struct vk_arenas
 {
+    vk_mem_alloc_stats stats[MEM_ALLOC_TYPE_COUNT] {};
+
     // Should persist through the lifetime of the program - only use free list arena
     mem_arena *persistent_arena{};
     // Should persist for the lifetime of a vulkan command
