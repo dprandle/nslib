@@ -199,14 +199,17 @@ intern void *vk_realloc(void *user, void *ptr, sizet size, sizet alignment, VkSy
     return ret;
 }
 
-void vkr_enumerate_device_extensions(VkPhysicalDevice pdevice, const char *const *enabled_extensions, u32 enabled_extension_count)
+void vkr_enumerate_device_extensions(VkPhysicalDevice pdevice,
+                                     const char *const *enabled_extensions,
+                                     u32 enabled_extension_count,
+                                     vk_arenas *arenas)
 {
     u32 extension_count{0};
     ilog("Enumerating device extensions...");
     int res = vkEnumerateDeviceExtensionProperties(pdevice, nullptr, &extension_count, nullptr);
     assert(res == VK_SUCCESS);
     VkExtensionProperties *ext_array =
-        (VkExtensionProperties *)mem_alloc(extension_count * sizeof(VkExtensionProperties), mem_global_frame_lin_arena());
+        (VkExtensionProperties *)mem_alloc(extension_count * sizeof(VkExtensionProperties), arenas->command_arena);
     res = vkEnumerateDeviceExtensionProperties(pdevice, nullptr, &extension_count, ext_array);
     assert(res == VK_SUCCESS);
     for (int i = 0; i < extension_count; ++i) {
@@ -220,14 +223,14 @@ void vkr_enumerate_device_extensions(VkPhysicalDevice pdevice, const char *const
     }
 }
 
-void vkr_enumerate_instance_extensions(const char *const *enabled_extensions, u32 enabled_extension_count)
+void vkr_enumerate_instance_extensions(const char *const *enabled_extensions, u32 enabled_extension_count, vk_arenas *arenas)
 {
     u32 extension_count{0};
     ilog("Enumerating instance extensions...");
     int res = vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, nullptr);
     assert(res == VK_SUCCESS);
     VkExtensionProperties *ext_array =
-        (VkExtensionProperties *)mem_alloc(extension_count * sizeof(VkExtensionProperties), mem_global_frame_lin_arena());
+        (VkExtensionProperties *)mem_alloc(extension_count * sizeof(VkExtensionProperties), arenas->command_arena);
     res = vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, ext_array);
     assert(res == VK_SUCCESS);
     for (int i = 0; i < extension_count; ++i) {
@@ -241,13 +244,13 @@ void vkr_enumerate_instance_extensions(const char *const *enabled_extensions, u3
     }
 }
 
-void vkr_enumerate_validation_layers(const char *const *enabled_layers, u32 enabled_layer_count)
+void vkr_enumerate_validation_layers(const char *const *enabled_layers, u32 enabled_layer_count, vk_arenas *arenas)
 {
     u32 layer_count{0};
     ilog("Enumerating vulkan validation layers...");
     int res = vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
     assert(res == VK_SUCCESS);
-    VkLayerProperties *layer_array = (VkLayerProperties *)mem_alloc(layer_count * sizeof(VkLayerProperties), mem_global_frame_lin_arena());
+    VkLayerProperties *layer_array = (VkLayerProperties *)mem_alloc(layer_count * sizeof(VkLayerProperties), arenas->command_arena);
     res = vkEnumerateInstanceLayerProperties(&layer_count, layer_array);
     assert(res == VK_SUCCESS);
 
@@ -328,16 +331,16 @@ int vkr_init_instance(const vkr_init_info *init_info, vkr_context *vk)
     // This is for clarity.. we could just directly pass the enabled extension count
     u32 ext_count{0};
     const char **glfw_ext = glfwGetRequiredInstanceExtensions(&ext_count);
-    auto ext = (char **)mem_alloc((ext_count + ADDITIONAL_INST_EXTENSION_COUNT) * sizeof(char *), mem_global_frame_lin_arena());
+    auto ext = (char **)mem_alloc((ext_count + ADDITIONAL_INST_EXTENSION_COUNT) * sizeof(char *), vk->arenas.command_arena);
 
     u32 copy_ind = 0;
     for (u32 i = 0; i < ext_count; ++i) {
-        ext[copy_ind] = (char *)mem_alloc(strlen(glfw_ext[i]) + 1, mem_global_frame_lin_arena());
+        ext[copy_ind] = (char *)mem_alloc(strlen(glfw_ext[i]) + 1, vk->arenas.command_arena);
         strcpy(ext[copy_ind], glfw_ext[i]);
         ++copy_ind;
     }
     for (u32 i = 0; i < ADDITIONAL_INST_EXTENSION_COUNT; ++i) {
-        ext[copy_ind] = (char *)mem_alloc(strlen(ADDITIONAL_INST_EXTENSIONS[i]) + 1, mem_global_frame_lin_arena());
+        ext[copy_ind] = (char *)mem_alloc(strlen(ADDITIONAL_INST_EXTENSIONS[i]) + 1, vk->arenas.command_arena);
         strcpy(ext[copy_ind], ADDITIONAL_INST_EXTENSIONS[i]);
         ilog("Got extension %s", ext[copy_ind]);
         ++copy_ind;
@@ -351,8 +354,8 @@ int vkr_init_instance(const vkr_init_info *init_info, vkr_context *vk)
     create_inf.enabledExtensionCount = ext_count + ADDITIONAL_INST_EXTENSION_COUNT;
     create_inf.ppEnabledLayerNames = VALIDATION_LAYERS;
     create_inf.enabledLayerCount = VALIDATION_LAYER_COUNT;
-    vkr_enumerate_instance_extensions(ext, create_inf.enabledExtensionCount);
-    vkr_enumerate_validation_layers(VALIDATION_LAYERS, VALIDATION_LAYER_COUNT);
+    vkr_enumerate_instance_extensions(ext, create_inf.enabledExtensionCount, &vk->arenas);
+    vkr_enumerate_validation_layers(VALIDATION_LAYERS, VALIDATION_LAYER_COUNT, &vk->arenas);
 
     int err = vkCreateInstance(&create_inf, &vk->alloc_cbs, &vk->inst);
     if (err == VK_SUCCESS) {
@@ -407,19 +410,21 @@ intern void fill_queue_offsets_and_create_inds(vkr_queue_families *qfams, u32 fa
     }
 }
 
-vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice, VkSurfaceKHR surface)
+vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice, VkSurfaceKHR surface, vk_arenas *arenas)
 {
     u32 count{};
     vkr_queue_families ret{};
     vkGetPhysicalDeviceQueueFamilyProperties(pdevice, &count, nullptr);
-    auto qfams = (VkQueueFamilyProperties *)mem_alloc(sizeof(VkQueueFamilyProperties) * count, mem_global_frame_lin_arena());
+    auto qfams = (VkQueueFamilyProperties *)mem_alloc(sizeof(VkQueueFamilyProperties) * count, arenas->command_arena);
     vkGetPhysicalDeviceQueueFamilyProperties(pdevice, &count, qfams);
     ilog("%d queue families available for selected device", count);
 
     // Crash if we ever get a higher count than our max queue fam allotment
     assert(count <= MAX_QUEUE_REQUEST_COUNT);
     for (u32 i = 0; i < count; ++i) {
-        if (check_flags(qfams[i].queueFlags, VK_QUEUE_GRAPHICS_BIT) && ret.qinfo[VKR_QUEUE_FAM_TYPE_GFX].available_count == 0) {
+        bool has_flag = check_flags(qfams[i].queueFlags, VK_QUEUE_GRAPHICS_BIT);
+        bool nothing_set_yet = ret.qinfo[VKR_QUEUE_FAM_TYPE_GFX].available_count == 0;
+        if (has_flag && nothing_set_yet) {
             ret.qinfo[VKR_QUEUE_FAM_TYPE_GFX].index = i;
             ret.qinfo[VKR_QUEUE_FAM_TYPE_GFX].available_count = qfams[i].queueCount;
             ilog("Selected queue family at index %d for graphics", i);
@@ -427,7 +432,8 @@ vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice, VkSurfaceKHR
 
         VkBool32 supported{false};
         vkGetPhysicalDeviceSurfaceSupportKHR(pdevice, i, surface, &supported);
-        if (supported && ret.qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].available_count == 0) {
+        if (supported && (ret.qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].available_count == 0 ||
+                          ret.qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].index == ret.qinfo[VKR_QUEUE_FAM_TYPE_GFX].index)) {
             ret.qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].index = i;
             ret.qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].available_count = qfams[i].queueCount;
             ilog("Selected queue family at index %d for presentation", i);
@@ -440,10 +446,10 @@ vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice, VkSurfaceKHR
 
 int vkr_create_device_and_queues(VkPhysicalDevice pdevice,
                                  VkAllocationCallbacks *alloc_cbs,
+                                 vkr_queue_families *qfams,
                                  const char *const *layers,
                                  u32 layer_count,
-                                 VkDevice *dev,
-                                 vkr_queue_families *qfams)
+                                 VkDevice *dev)
 {
     // Fill in the queue index offsets based on the fam index from vulkan - if our queue fams have the same index then
     // the queues coming from the later fams need to have an offset index set
@@ -454,13 +460,15 @@ int vkr_create_device_and_queues(VkPhysicalDevice pdevice,
             highest_ind = qfams->qinfo[i].create_ind;
         }
     }
-
     u32 create_size = highest_ind + 1;
 
     // NOTE: Make sure you init all vulkan structs to zero - undefined behavior including crashes result otherwise
     VkDeviceQueueCreateInfo qinfo[VKR_QUEUE_FAM_TYPE_COUNT]{};
     float qinfo_f[VKR_QUEUE_FAM_TYPE_COUNT][MAX_QUEUE_REQUEST_COUNT]{};
 
+    // Here we gather how many queues we want for each queue fam type and populate the queue create infos.
+    // Its highly likely that the different queue_fam_types will actually have the same vulkan queue family index -
+    // thats fine
     for (int i = 0; i < VKR_QUEUE_FAM_TYPE_COUNT; ++i) {
         u32 ind = qfams->qinfo[i].create_ind;
         qinfo[ind].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -502,7 +510,7 @@ int vkr_create_device_and_queues(VkPhysicalDevice pdevice,
     return err_code::VKR_NO_ERROR;
 }
 
-int vkr_select_best_graphics_physical_device(VkInstance inst, VkSurfaceKHR surface, VkPhysicalDevice *device)
+int vkr_select_best_graphics_physical_device(VkInstance inst, VkSurfaceKHR surface, vkr_physical_device_info *dev_info, vk_arenas *arenas)
 {
     u32 count{};
     int ret = vkEnumeratePhysicalDevices(inst, &count, nullptr);
@@ -512,17 +520,26 @@ int vkr_select_best_graphics_physical_device(VkInstance inst, VkSurfaceKHR surfa
         return err_code::VKR_NO_PHYSICAL_DEVICES;
     }
 
-    int sel_ind = 0;
-    int high_score = 0;
+    // This is used just so we can log which device we select without having to grab the info again
     VkPhysicalDeviceProperties sel_dev{};
 
+    // These are cached so we don't have to retreive the count again
+    int high_score = -1;
+
     ilog("Found %d physical devices", count);
-    auto pdevices = (VkPhysicalDevice *)mem_alloc(sizeof(VkPhysicalDevice) * count, mem_global_frame_lin_arena());
+    auto pdevices = (VkPhysicalDevice *)mem_alloc(sizeof(VkPhysicalDevice) * count, arenas->command_arena);
     ret = vkEnumeratePhysicalDevices(inst, &count, pdevices);
     assert(ret == VK_SUCCESS);
     for (int i = 0; i < count; ++i) {
         int cur_score = 0;
+        vkr_queue_families fams = vkr_get_queue_families(pdevices[i], surface, arenas);
 
+        // We dont want to select a device unless we can present with it.
+        if (fams.qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].index == VKR_INVALID || fams.qinfo[VKR_QUEUE_FAM_TYPE_GFX].index == VKR_INVALID) {
+            continue;
+        }
+
+        // We need at least one supported format and present mode
         u32 format_count{0};
         vkGetPhysicalDeviceSurfaceFormatsKHR(pdevices[i], surface, &format_count, nullptr);
         if (format_count == 0) {
@@ -537,9 +554,6 @@ int vkr_select_best_graphics_physical_device(VkInstance inst, VkSurfaceKHR surfa
 
         VkPhysicalDeviceProperties props{};
         vkGetPhysicalDeviceProperties(pdevices[i], &props);
-        if (i == 0) {
-            sel_dev = props;
-        }
 
         if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
             cur_score += 10;
@@ -574,28 +588,50 @@ int vkr_select_best_graphics_physical_device(VkInstance inst, VkSurfaceKHR surfa
              features.tessellationShader ? "true" : "false",
              cur_score);
 
+        // Save the device and cache the props so we can easily log them after selecting the device
         if (cur_score > high_score) {
-            sel_ind = i;
+            dev_info->pdevice = pdevices[i];
+            dev_info->qfams = fams;
+            vkr_fill_pdevice_swapchain_support(dev_info->pdevice, surface, &dev_info->swap_support);
             high_score = cur_score;
             sel_dev = props;
         }
     }
-
-    *device = pdevices[sel_ind];
     ilog("Selected device id:%d  name:%s  type:%s", sel_dev.deviceID, sel_dev.deviceName, vkr_physical_device_type_str(sel_dev.deviceType));
+    if (high_score == -1) {
+        return err_code::VKR_NO_SUITABLE_PHYSICAL_DEVICE;
+    }
+
     return err_code::VKR_NO_ERROR;
 }
 
+void vkr_fill_pdevice_swapchain_support(VkPhysicalDevice pdevice, VkSurfaceKHR surface, vkr_pdevice_swapchain_support *ssup)
+{
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pdevice, surface, &ssup->capabilities);
+
+    u32 format_count{0};
+    vkGetPhysicalDeviceSurfaceFormatsKHR(pdevice, surface, &format_count, nullptr);
+    arr_resize(&ssup->formats, format_count);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(pdevice, surface, &format_count, ssup->formats.data);
+
+    u32 present_mode_count{0};
+    vkGetPhysicalDeviceSurfacePresentModesKHR(pdevice, surface, &present_mode_count, nullptr);
+    arr_resize(&ssup->present_modes, present_mode_count);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(pdevice, surface, &present_mode_count, ssup->present_modes.data);
+}
+
 int vkr_init_swapchain(VkDevice device,
-                       VkPhysicalDevice pdevice,
                        VkSurfaceKHR surface,
+                       const vkr_physical_device_info *dev_info,
                        const VkAllocationCallbacks *alloc_cbs,
-                       const vkr_queue_families *qfams,
                        void *window,
                        VkSwapchainKHR *swapchain)
 {
-    VkSurfaceCapabilitiesKHR surface_caps{};
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pdevice, surface, &surface_caps);
+    // I no like typing too much
+    auto caps = &dev_info->swap_support.capabilities;
+    auto qfams = &dev_info->qfams;
+    auto formats = &dev_info->swap_support.formats;
+    auto pmodes = &dev_info->swap_support.present_modes;
 
     VkSwapchainCreateInfoKHR swap_create{};
     swap_create.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -603,14 +639,16 @@ int vkr_init_swapchain(VkDevice device,
     swap_create.imageArrayLayers = 1;
     swap_create.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     swap_create.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    swap_create.preTransform = surface_caps.currentTransform;
+    swap_create.preTransform = dev_info->swap_support.capabilities.currentTransform;
     swap_create.clipped = VK_TRUE;
     swap_create.oldSwapchain = VK_NULL_HANDLE;
-    swap_create.minImageCount = surface_caps.minImageCount + 1;
-    if (surface_caps.maxImageCount != 0 && surface_caps.maxImageCount < swap_create.minImageCount) {
-        swap_create.minImageCount = surface_caps.maxImageCount;
+    swap_create.minImageCount = caps->minImageCount + 1;
+    if (caps->maxImageCount != 0 && caps->maxImageCount < swap_create.minImageCount) {
+        swap_create.minImageCount = caps->maxImageCount;
     }
 
+    // Basically if our present queue is different than our graphics queue then we enable concurrent sharing mode..
+    // honestly not sure about that yet
     uint32_t queue_fam_inds[] = {qfams->qinfo[VKR_QUEUE_FAM_TYPE_GFX].index, qfams->qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].index};
     swap_create.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     swap_create.queueFamilyIndexCount = 0;
@@ -621,43 +659,40 @@ int vkr_init_swapchain(VkDevice device,
         swap_create.pQueueFamilyIndices = queue_fam_inds;
     }
 
-    u32 format_count{0};
-    vkGetPhysicalDeviceSurfaceFormatsKHR(pdevice, surface, &format_count, nullptr);
-    VkSurfaceFormatKHR *formats = (VkSurfaceFormatKHR *)mem_alloc(format_count * sizeof(VkSurfaceFormatKHR), mem_global_frame_lin_arena());
-    vkGetPhysicalDeviceSurfaceFormatsKHR(pdevice, surface, &format_count, formats);
-    int desired_ind{0};
-    for (int i = 0; i < format_count; ++i) {
-        if (formats[i].format == VK_FORMAT_B8G8R8A8_SRGB && formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-            desired_ind = i;
+    // Set the format to our ideal format, but just get the first one if thats not found
+    int desired_format_ind{0};
+    for (int i = 0; i < formats->size; ++i) {
+        if ((*formats)[i].format == VK_FORMAT_B8G8R8A8_SRGB && (*formats)[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+            desired_format_ind = i;
             break;
         }
     }
-    swap_create.imageFormat = formats[desired_ind].format;
-    swap_create.imageColorSpace = formats[desired_ind].colorSpace;
+    swap_create.imageFormat = (*formats)[desired_format_ind].format;
+    swap_create.imageColorSpace = (*formats)[desired_format_ind].colorSpace;
 
-    u32 present_mode_count{0};
-    vkGetPhysicalDeviceSurfacePresentModesKHR(pdevice, surface, &present_mode_count, nullptr);
-    VkPresentModeKHR *present_modes =
-        (VkPresentModeKHR *)mem_alloc(sizeof(VkPresentModeKHR) * present_mode_count, mem_global_frame_lin_arena());
-    vkGetPhysicalDeviceSurfacePresentModesKHR(pdevice, surface, &present_mode_count, present_modes);
+    // If mailbox is available then use it, otherwise use fifo
+    // TODO: This is arbitray - investigate these different modes to actually chose which one we want based off of
+    // something other than this tutorial
     swap_create.presentMode = VK_PRESENT_MODE_FIFO_KHR;
-    for (int i = 0; i < present_mode_count; ++i) {
-        if (present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
-            swap_create.presentMode = present_modes[i];
+    for (int i = 0; i < pmodes->size; ++i) {
+        if ((*pmodes)[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
+            swap_create.presentMode = (*pmodes)[i];
             break;
         }
     }
 
-    swap_create.imageExtent = surface_caps.currentExtent;
-    if (surface_caps.currentExtent.width == VKR_INVALID) {
+    // Handle the extents - if the screen coords don't match the pixel coords then we gotta set this from the frame
+    // buffer as by default the extents are screen coords - this is really only for retina displays
+    swap_create.imageExtent = caps->currentExtent;
+    if (caps->currentExtent.width == VKR_INVALID) {
         int width, height;
         glfwGetFramebufferSize((GLFWwindow *)window, &width, &height);
         swap_create.imageExtent = {(u32)width, (u32)height};
-        swap_create.imageExtent.width =
-            std::clamp(swap_create.imageExtent.width, surface_caps.minImageExtent.width, surface_caps.maxImageExtent.width);
-        swap_create.imageExtent.height =
-            std::clamp(swap_create.imageExtent.height, surface_caps.minImageExtent.height, surface_caps.maxImageExtent.height);
+        swap_create.imageExtent.width = std::clamp(swap_create.imageExtent.width, caps->minImageExtent.width, caps->maxImageExtent.width);
+        swap_create.imageExtent.height = std::clamp(swap_create.imageExtent.height, caps->minImageExtent.height, caps->maxImageExtent.height);
     }
+
+    // Create this baby boo
     if (vkCreateSwapchainKHR(device, &swap_create, alloc_cbs, swapchain) != VK_SUCCESS) {
         return err_code::VKR_CREATE_SWAPCHAIN_FAIL;
     }
@@ -705,43 +740,53 @@ int vkr_init(const vkr_init_info *init_info, vkr_context *vk)
         wlog("No window provided - rendering to window surface disabled");
     }
 
-    int code = vkr_select_best_graphics_physical_device(vk->inst, vk->surface, &vk->pdevice);
+    vkr_init_pdevice_swapchain_support(&vk->pdev_info.swap_support, vk->arenas.persistent_arena);
+
+    int code = vkr_select_best_graphics_physical_device(vk->inst, vk->surface, &vk->pdev_info, &vk->arenas);
     if (code != err_code::VKR_NO_ERROR) {
-        elog("Failed to select graphics device - no device found");
+        elog("Failed to select physical device code:%d", code);
         vkr_terminate(vk);
         return code;
     }
 
-    vkr_queue_families qfams = vkr_get_queue_families(vk->pdevice, vk->surface);
-    for (int i = 0; i < VKR_QUEUE_FAM_TYPE_COUNT; ++i) {
-        if (qfams.qinfo[i].available_count == 0) {
-            elog("Could not find any graphics queue families");
-            vkr_terminate(vk);
-            return err_code::VKR_NO_QUEUE_FAMILIES;
-        }
-    }
-
-    vkr_enumerate_device_extensions(vk->pdevice, DEVICE_EXTENSIONS, DEVICE_EXTENSION_COUNT);
-    code = vkr_create_device_and_queues(vk->pdevice, &vk->alloc_cbs, VALIDATION_LAYERS, VALIDATION_LAYER_COUNT, &vk->device, &qfams);
+    vkr_enumerate_device_extensions(vk->pdev_info.pdevice, DEVICE_EXTENSIONS, DEVICE_EXTENSION_COUNT, &vk->arenas);
+    code = vkr_create_device_and_queues(
+        vk->pdev_info.pdevice, &vk->alloc_cbs, &vk->pdev_info.qfams, VALIDATION_LAYERS, VALIDATION_LAYER_COUNT, &vk->device);
 
     if (code != err_code::VKR_NO_ERROR) {
         elog("Device creation failed");
         vkr_terminate(vk);
         return code;
     }
-    
-    code = vkr_init_swapchain(vk->device, vk->pdevice, vk->surface, &vk->alloc_cbs, &qfams, init_info->window, &vk->swapchain);
+
+    code = vkr_init_swapchain(vk->device, vk->surface, &vk->pdev_info, &vk->alloc_cbs, init_info->window, &vk->swapchain);
     if (code != err_code::VKR_NO_ERROR) {
         elog("Failed to initialize swapchain");
         vkr_terminate(vk);
         return code;
     }
+
     return err_code::VKR_NO_ERROR;
+}
+
+void vkr_init_pdevice_swapchain_support(vkr_pdevice_swapchain_support *ssup, mem_arena *arena)
+{
+    arr_init(&ssup->formats, arena);
+    arr_init(&ssup->present_modes, arena);
+}
+
+void vkr_terminate_pdevice_swapchain_support(vkr_pdevice_swapchain_support *ssup)
+{
+    arr_terminate(&ssup->formats);
+    arr_terminate(&ssup->present_modes);
+    ssup->capabilities = {};
 }
 
 void vkr_terminate_instance(vkr_context *vk)
 {
     vk->ext_funcs.destroy_debug_utils_messenger(vk->inst, vk->dbg_messenger, &vk->alloc_cbs);
+
+    // Destroying the instance calls more vk alloc calls
     vkDestroyInstance(vk->inst, &vk->alloc_cbs);
 }
 
@@ -762,6 +807,7 @@ void vkr_terminate(vkr_context *vk)
 {
     ilog("Terminating vulkan");
     vkDestroySwapchainKHR(vk->device, vk->swapchain, &vk->alloc_cbs);
+    vkr_terminate_pdevice_swapchain_support(&vk->pdev_info.swap_support);
     vkDestroySurfaceKHR(vk->inst, vk->surface, &vk->alloc_cbs);
     vkDestroyDevice(vk->device, &vk->alloc_cbs);
     vkr_terminate_instance(vk);

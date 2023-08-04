@@ -1,5 +1,6 @@
 #pragma once
 #include <vulkan/vulkan.h>
+#include "containers/array.h"
 #include "basic_types.h"
 
 namespace nslib
@@ -12,7 +13,7 @@ enum vkr
     VKR_CREATE_INSTANCE_FAIL,
     VKR_CREATE_SURFACE_FAIL,
     VKR_NO_PHYSICAL_DEVICES,
-    VKR_NO_QUEUE_FAMILIES,
+    VKR_NO_SUITABLE_PHYSICAL_DEVICE,
     VKR_CREATE_DEVICE_FAIL,
     VKR_CREATE_SWAPCHAIN_FAIL
 };
@@ -75,17 +76,31 @@ struct vkr_queue_families
     vkr_queue_family_info qinfo[VKR_QUEUE_FAM_TYPE_COUNT];
 };
 
+struct vkr_pdevice_swapchain_support
+{
+    VkSurfaceCapabilitiesKHR capabilities;
+    array<VkSurfaceFormatKHR> formats{};
+    array<VkPresentModeKHR> present_modes{};
+};
+
+struct vkr_physical_device_info
+{
+    VkPhysicalDevice pdevice{};
+    vkr_queue_families qfams{};
+    vkr_pdevice_swapchain_support swap_support{};
+};
+
 struct vkr_context
 {
     VkInstance inst{};
     VkDebugUtilsMessengerEXT dbg_messenger{};
     VkAllocationCallbacks alloc_cbs{};
-    VkPhysicalDevice pdevice{};
+
     VkDevice device{};
     VkSurfaceKHR surface{};
     VkSwapchainKHR swapchain{};
+    vkr_physical_device_info pdev_info{};
 
-    vkr_queue_families qfams{};
     VkQueue gfx_q{};
     VkQueue present_q{};
 
@@ -110,37 +125,30 @@ struct vkr_init_info
     void *window{};
 };
 
-struct vkr_swap_chain_info {
-    VkSurfaceCapabilitiesKHR capabilities;
-    VkSurfaceFormatKHR* formats{nullptr};
-    u32 format_size{0};
-    VkPresentModeKHR* present_modes{nullptr};
-    u32 present_mode_size{0};
-    mem_arena *alloc_arena;
-//    std::vector<VkPresentModeKHR> presentModes;
-};
-
 const char *vkr_physical_device_type_str(VkPhysicalDeviceType type);
-vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice, VkSurfaceKHR surface);
+vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice, VkSurfaceKHR surface, vk_arenas *arenas);
 
 // Log out the physical devices and set device to the best one based on very simple scoring (dedicated takes the cake)
-int vkr_select_best_graphics_physical_device(VkInstance inst, VkSurfaceKHR surface, VkPhysicalDevice *device);
+int vkr_select_best_graphics_physical_device(VkInstance inst, VkSurfaceKHR surface, VkPhysicalDevice *device, vk_arenas *arenas);
 
 // Enumerate (log) the available extensions - if an extension is included in the passed in array then it will be
 // indicated as such
-void vkr_enumerate_instance_extensions(const char *const *enabled_extensions = nullptr, u32 enabled_extension_count = 0);
+void vkr_enumerate_instance_extensions(const char *const *enabled_extensions, u32 enabled_extension_count, vk_arenas *arenas);
 
 // Enumerate (log) the available layers - if an extension is included in the passed in array then it will be
 // indicated as such
-void vkr_enumerate_validation_layers(const char *const *enabled_layers = nullptr, u32 enabled_layer_count = 0);
+void vkr_enumerate_validation_layers(const char *const *enabled_layers, u32 enabled_layer_count, vk_arenas *arenas);
 
 int vkr_init_swapchain(VkDevice device,
-                       VkPhysicalDevice pdevice,
                        VkSurfaceKHR surface,
+                       const vkr_physical_device_info *dev_info,
                        const VkAllocationCallbacks *alloc_cbs,
-                       const vkr_queue_families *qfams,
                        void *window,
                        VkSwapchainKHR *swapchain);
+
+void vkr_init_pdevice_swapchain_support(vkr_pdevice_swapchain_support *ssup, mem_arena *arena);
+void vkr_fill_pdevice_swapchain_support(VkPhysicalDevice pdevice, VkSurfaceKHR surface, vkr_pdevice_swapchain_support *ssup);
+void vkr_terminate_pdevice_swapchain_support(vkr_pdevice_swapchain_support *ssup);
 
 
 int vkr_init_instance(const vkr_init_info *init_info, vkr_context *vk);

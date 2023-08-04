@@ -316,26 +316,23 @@ sizet mem_block_size(void *ptr, mem_arena *arena)
 
 void *mem_realloc(void *ptr, sizet new_size, mem_arena *arena, sizet alignment)
 {
-    if (!ptr) {
-        return nullptr;
-    }
     if (!arena) {
         arena = g_fl_arena;
     }
     sizet block_size = 0;
     if (arena) {
-        block_size = mem_block_size(ptr, arena);
-        assert(block_size > 0);
-        
         // Create a new block and copy the mem to it from the old block (we use the lesser of the block sizes)
         auto new_block = mem_alloc(new_size, arena, alignment);
         if (new_size < block_size) {
             block_size = new_size;
         }
-        memcpy(new_block, ptr, block_size);
 
-        // Free the old block
-        mem_free(ptr, arena);
+        if (ptr) {
+            block_size = mem_block_size(ptr, arena);
+            assert(block_size > 0);
+            memcpy(new_block, ptr, block_size);
+            mem_free(ptr, arena);
+        }
         
         return new_block;
     }
