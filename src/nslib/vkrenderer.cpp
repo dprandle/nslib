@@ -470,14 +470,18 @@ int vkr_create_device_and_queues(VkPhysicalDevice pdevice,
     // Its highly likely that the different queue_fam_types will actually have the same vulkan queue family index -
     // thats fine
     for (int i = 0; i < VKR_QUEUE_FAM_TYPE_COUNT; ++i) {
-        u32 ind = qfams->qinfo[i].create_ind;
+        vkr_queue_family_info *cq = &qfams->qinfo[i];
+        u32 ind = cq->create_ind;
         qinfo[ind].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        assert(qfams->qinfo[i].requested_count > 0);
-        qinfo[ind].queueCount += qfams->qinfo[i].requested_count;
 
-        assert(qinfo[ind].queueCount <= qfams->qinfo[i].available_count);
-        qinfo[ind].queueFamilyIndex = qfams->qinfo[i].create_ind;
-        qinfo[ind].pQueuePriorities = qinfo_f[qfams->qinfo[i].create_ind];
+        // This handles the case when the present and graphics must be in the same queue in the same family which can
+        // happen if a gfx card has only 1 queue family with 1 available queue
+        int req_offset = std::min((int)cq->available_count - (int)(qinfo[ind].queueCount + cq->requested_count), 0);
+        cq->qoffset += req_offset;
+
+        qinfo[ind].queueCount += (cq->requested_count + req_offset);
+        qinfo[ind].queueFamilyIndex = cq->create_ind;
+        qinfo[ind].pQueuePriorities = qinfo_f[cq->create_ind];
     }
 
     // For now we will leave this blank - but probably enable geometry shaders later
@@ -502,8 +506,8 @@ int vkr_create_device_and_queues(VkPhysicalDevice pdevice,
     for (int i = 0; i < VKR_QUEUE_FAM_TYPE_COUNT; ++i) {
         for (u32 qind = 0; qind < qfams->qinfo[i].requested_count; ++qind) {
             u32 adjusted_ind = qind + qfams->qinfo[i].qoffset;
-            ilog("Getting queue %d from queue family %d", adjusted_ind, qfams->qinfo[i].index);
             vkGetDeviceQueue(*dev, qfams->qinfo[i].index, adjusted_ind, &(qfams->qinfo[i].qs[qind]));
+            ilog("Getting queue %d from queue family %d: %p", adjusted_ind, qfams->qinfo[i].index, qfams->qinfo[i].qs[qind]);
         }
     }
 
