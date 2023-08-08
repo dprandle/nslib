@@ -22,7 +22,7 @@
 
 #include "logging.h"
 #include "string.h"
-#include "libgen.h"
+//#include "libgen.h"
 
 #define MAX_CALLBACKS 32
 #define LOG_USE_COLOR
@@ -145,7 +145,7 @@ void log_log(int level, const char *file, int line, const char *fmt, ...)
 
     log_Event ev = {
         .fmt = fmt,
-        .file = basename(tmp_buf),
+        .file = "",//basename(tmp_buf),
         .line = line,
         .level = level,
     };

@@ -1,7 +1,7 @@
 #include <cstring>
 #include <stdlib.h>
+#include <GLFW/glfw3.h>
 
-#include "GLFW/glfw3.h"
 #include "input_mapping.h"
 #include "containers/hashmap.h"
 #include "platform.h"
@@ -369,8 +369,8 @@ const i16 MOUSE_BTN_MIDDLE = GLFW_MOUSE_BUTTON_MIDDLE;
 const i16 SCROLL_CHANGE = 8;
 const i16 CURSOR_POS_CHANGE = 9;
 
-extern const i8 INPUT_ACTION_PRESS = GLFW_PRESS;
-extern const i8 INPUT_ACTION_RELEASE = GLFW_RELEASE;
-extern const i8 INPUT_ACTION_REPEAT = GLFW_REPEAT;
+const i8 INPUT_ACTION_PRESS = GLFW_PRESS;
+const i8 INPUT_ACTION_RELEASE = GLFW_RELEASE;
+const i8 INPUT_ACTION_REPEAT = GLFW_REPEAT;
 
 } // namespace nslib
