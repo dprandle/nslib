@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../basic_types.h"
-#include <math.h>
+#include <cmath>
 //#include <iomanip>
 #include <type_traits>
 #include <algorithm>
@@ -142,8 +142,8 @@ struct cube_base;
 
 namespace math
 {
-inline constexpr float PI = 3.14159265359;
-inline constexpr float FLOAT_EPS = 0.001;
+inline constexpr float PI = 3.14159265359f;
+inline constexpr float FLOAT_EPS = 0.001f;
 inline constexpr char PRINT_MAT_DELIMITER = '\n';
 inline constexpr char PRINT_MAT_START = '\n';
 inline constexpr char PRINT_MAT_END = '\n';
@@ -152,8 +152,8 @@ inline constexpr char PRINT_START_VEC = '[';
 inline constexpr char PRINT_END_VEC = ']';
 inline constexpr i8 ROUND_TO_DEC = 4;
 
-inline constexpr float TO_DEGREES = (180.0 / PI);
-inline constexpr float TO_RADS = (PI / 180.0);
+inline constexpr float TO_DEGREES = (180.0f / PI);
+inline constexpr float TO_RADS = (PI / 180.0f);
 
 i8 count_digits(i32 number);
 
