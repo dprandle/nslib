@@ -90,39 +90,48 @@ struct vkr_physical_device_info
     vkr_pdevice_swapchain_support swap_support{};
 };
 
+struct vkr_swapchain_info
+{
+    array<VkImage> images;
+    array<VkImageView> image_views;
+    VkFormat format;
+    VkExtent2D extent;
+    VkSwapchainKHR swapchain;
+};
+
 struct vkr_context
 {
-    VkInstance inst{};
-    VkDebugUtilsMessengerEXT dbg_messenger{};
-    VkAllocationCallbacks alloc_cbs{};
+    VkInstance inst;
+    VkDebugUtilsMessengerEXT dbg_messenger;
+    VkAllocationCallbacks alloc_cbs;
 
-    VkDevice device{};
-    VkSurfaceKHR surface{};
-    VkSwapchainKHR swapchain{};
-    vkr_physical_device_info pdev_info{};
+    VkDevice device;
+    VkSurfaceKHR surface;
+    vkr_swapchain_info sw_info;
+    vkr_physical_device_info pdev_info;
 
-    VkQueue gfx_q{};
-    VkQueue present_q{};
+    VkQueue gfx_q;
+    VkQueue present_q;
 
-    vk_arenas arenas{};
+    vk_arenas arenas;
     extension_funcs ext_funcs;
-    int log_verbosity{};
+    int log_verbosity;
 };
 
 struct version_info
 {
-    int major{};
-    int minor{};
-    int patch{};
+    int major;
+    int minor;
+    int patch;
 };
 
 struct vkr_init_info
 {
-    const char *app_name{};
-    version_info vi{};
-    vk_arenas arenas{};
-    int log_verbosity{};
-    void *window{};
+    const char *app_name;
+    version_info vi;
+    vk_arenas arenas;
+    int log_verbosity;
+    void *window;
 };
 
 const char *vkr_physical_device_type_str(VkPhysicalDeviceType type);
@@ -144,12 +153,14 @@ int vkr_init_swapchain(VkDevice device,
                        const vkr_physical_device_info *dev_info,
                        const VkAllocationCallbacks *alloc_cbs,
                        void *window,
-                       VkSwapchainKHR *swapchain);
+                       vkr_swapchain_info *swinfo);
+
+void vkr_init_swapchain_info(vkr_swapchain_info *sw_info, mem_arena*arena);
+void vkr_terminate_swapchain_info(vkr_swapchain_info *sw_info);
 
 void vkr_init_pdevice_swapchain_support(vkr_pdevice_swapchain_support *ssup, mem_arena *arena);
 void vkr_fill_pdevice_swapchain_support(VkPhysicalDevice pdevice, VkSurfaceKHR surface, vkr_pdevice_swapchain_support *ssup);
 void vkr_terminate_pdevice_swapchain_support(vkr_pdevice_swapchain_support *ssup);
-
 
 int vkr_init_instance(const vkr_init_info *init_info, vkr_context *vk);
 void vkr_terminate_instance(vkr_context *vk);

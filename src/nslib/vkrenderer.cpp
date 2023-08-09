@@ -480,12 +480,14 @@ int vkr_create_device_and_queues(VkPhysicalDevice pdevice,
         cq->qoffset += req_offset;
 
         qinfo[ind].queueCount += (cq->requested_count + req_offset);
-        qinfo[ind].queueFamilyIndex = cq->create_ind;
+        qinfo[ind].queueFamilyIndex = cq->index;
         qinfo[ind].pQueuePriorities = qinfo_f[cq->create_ind];
+        ilog("Setting qind:%d to queue family index:%d with %d queues requested", ind, qinfo[ind].queueFamilyIndex, qinfo[ind].queueCount);
     }
 
     // For now we will leave this blank - but probably enable geometry shaders later
     VkPhysicalDeviceFeatures features{};
+    dlog("Creating %d queues", create_size);
 
     VkDeviceCreateInfo create_inf{};
     create_inf.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -629,7 +631,7 @@ int vkr_init_swapchain(VkDevice device,
                        const vkr_physical_device_info *dev_info,
                        const VkAllocationCallbacks *alloc_cbs,
                        void *window,
-                       VkSwapchainKHR *swapchain)
+                       vkr_swapchain_info *sw_info)
 {
     // I no like typing too much
     auto caps = &dev_info->swap_support.capabilities;
@@ -697,10 +699,54 @@ int vkr_init_swapchain(VkDevice device,
     }
 
     // Create this baby boo
-    if (vkCreateSwapchainKHR(device, &swap_create, alloc_cbs, swapchain) != VK_SUCCESS) {
+    if (vkCreateSwapchainKHR(device, &swap_create, alloc_cbs, &sw_info->swapchain) != VK_SUCCESS) {
         return err_code::VKR_CREATE_SWAPCHAIN_FAIL;
     }
+    sw_info->extent = swap_create.imageExtent;
+    sw_info->format = swap_create.imageFormat;
+    u32 image_count{};
+    VkResult res = vkGetSwapchainImagesKHR(device, sw_info->swapchain, &image_count, nullptr);
+    assert(res == VK_SUCCESS);
+    arr_resize(&sw_info->images, image_count);
+    res = vkGetSwapchainImagesKHR(device, sw_info->swapchain, &image_count, sw_info->images.data);
+    assert(res == VK_SUCCESS);
+
+    arr_resize(&sw_info->image_views, image_count);
+    for (int i = 0; i < sw_info->images.size; ++i) {
+        VkImageViewCreateInfo iview_create{};
+        iview_create.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        iview_create.image = sw_info->images[i];
+        iview_create.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        iview_create.format = sw_info->format;
+        
+        iview_create.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        iview_create.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        iview_create.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        iview_create.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        
+        iview_create.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        iview_create.subresourceRange.baseMipLevel = 0;
+        iview_create.subresourceRange.levelCount = 1;
+        iview_create.subresourceRange.baseArrayLayer = 0;
+        iview_create.subresourceRange.layerCount = 1;
+        VkResult res = vkCreateImageView(device, &iview_create, alloc_cbs, &sw_info->image_views[i]);
+        assert(res == VK_SUCCESS);
+    }
+    
     return err_code::VKR_NO_ERROR;
+}
+
+void vkr_init_swapchain_info(vkr_swapchain_info *sw_info, mem_arena*arena)
+{
+    *sw_info = {};
+    arr_init(&sw_info->images, arena);
+    arr_init(&sw_info->image_views, arena);
+}
+
+void vkr_terminate_swapchain_info(vkr_swapchain_info *sw_info)
+{
+    arr_terminate(&sw_info->images);
+    arr_terminate(&sw_info->image_views);
 }
 
 int vkr_init(const vkr_init_info *init_info, vkr_context *vk)
@@ -763,7 +809,8 @@ int vkr_init(const vkr_init_info *init_info, vkr_context *vk)
         return code;
     }
 
-    code = vkr_init_swapchain(vk->device, vk->surface, &vk->pdev_info, &vk->alloc_cbs, init_info->window, &vk->swapchain);
+    vkr_init_swapchain_info(&vk->sw_info, vk->arenas.persistent_arena);
+    code = vkr_init_swapchain(vk->device, vk->surface, &vk->pdev_info, &vk->alloc_cbs, init_info->window, &vk->sw_info);
     if (code != err_code::VKR_NO_ERROR) {
         elog("Failed to initialize swapchain");
         vkr_terminate(vk);
@@ -810,7 +857,11 @@ intern void log_mem_stats(const char *type, const vk_mem_alloc_stats *stats)
 void vkr_terminate(vkr_context *vk)
 {
     ilog("Terminating vulkan");
-    vkDestroySwapchainKHR(vk->device, vk->swapchain, &vk->alloc_cbs);
+    for (int i = 0; i < vk->sw_info.image_views.size; ++i) {
+        vkDestroyImageView(vk->device, vk->sw_info.image_views[i], &vk->alloc_cbs);
+    }
+    vkDestroySwapchainKHR(vk->device, vk->sw_info.swapchain, &vk->alloc_cbs);
+    vkr_terminate_swapchain_info(&vk->sw_info);
     vkr_terminate_pdevice_swapchain_support(&vk->pdev_info.swap_support);
     vkDestroySurfaceKHR(vk->inst, vk->surface, &vk->alloc_cbs);
     vkDestroyDevice(vk->device, &vk->alloc_cbs);
