@@ -28,8 +28,8 @@ intern const u32 VALIDATION_LAYER_COUNT = 1;
 intern const char *VALIDATION_LAYERS[VALIDATION_LAYER_COUNT] = {"VK_LAYER_KHRONOS_validation"};
 #endif
 
-intern const u32 ADDITIONAL_INST_EXTENSION_COUNT = 1;
-intern const char *ADDITIONAL_INST_EXTENSIONS[ADDITIONAL_INST_EXTENSION_COUNT] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME};
+intern const u32 ADDITIONAL_INST_EXTENSION_COUNT = 2;
+    intern const char *ADDITIONAL_INST_EXTENSIONS[ADDITIONAL_INST_EXTENSION_COUNT] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME};
 
 intern const u32 DEVICE_EXTENSION_COUNT = 1;
 intern const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
@@ -353,6 +353,7 @@ int vkr_init_instance(const vkr_init_info *init_info, vkr_context *vk)
     create_inf.ppEnabledExtensionNames = ext;
     create_inf.enabledExtensionCount = ext_count + ADDITIONAL_INST_EXTENSION_COUNT;
     create_inf.ppEnabledLayerNames = VALIDATION_LAYERS;
+    create_inf.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
     create_inf.enabledLayerCount = VALIDATION_LAYER_COUNT;
     vkr_enumerate_instance_extensions(ext, create_inf.enabledExtensionCount, &vk->arenas);
     vkr_enumerate_validation_layers(VALIDATION_LAYERS, VALIDATION_LAYER_COUNT, &vk->arenas);
