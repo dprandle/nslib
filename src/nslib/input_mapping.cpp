@@ -1,8 +1,7 @@
 #include <cstring>
 #include <stdlib.h>
-#include <assert.h>
+#include <GLFW/glfw3.h>
 
-#include "GLFW/glfw3.h"
 #include "input_mapping.h"
 #include "containers/hashmap.h"
 #include "platform.h"
@@ -16,7 +15,7 @@ intern void fill_event_from_platform_event(const platform_input_event *raw, inpu
     if (raw->type == PLATFORM_INPUT_EVENT_TYPE_CURSOR_POS) {
         ev->type = IEVENT_TYPE_CURSOR;
         ev->cursor_data.pos = raw->pos;
-        ev->cursor_data.norm_pos = raw->pos / platform_cursor_pos(raw->win_hndl);
+        ev->cursor_data.norm_pos = raw->pos / platform_window_size(raw->win_hndl);
     }
     else if (raw->type == PLATFORM_INPUT_EVENT_TYPE_SCROLL) {
         ev->type = IEVENT_TYPE_SCROLL;
@@ -81,9 +80,9 @@ void input_init_keymap(const char *name, input_keymap *km)
     int seed0 = rand();
     int seed1 = rand();
     strncpy(km->name, name, SMALL_STR_LEN);
-    km->hm = hashmap_new_with_allocator(ns_alloc,
-                                        ns_realloc,
-                                        ns_free,
+    km->hm = hashmap_new_with_allocator(mem_alloc,
+                                        mem_realloc,
+                                        mem_free,
                                         sizeof(input_keymap_entry),
                                         0,
                                         seed0,
@@ -108,17 +107,11 @@ const input_keymap_entry *input_set_keymap_entry(const input_keymap_entry *entry
     return (const input_keymap_entry *)hashmap_set(km->hm, entry);
 }
 
-const input_keymap_entry *input_get_keymap_entry(const input_keymap_entry *entry, const input_keymap *km)
-{
-    assert(entry);
-    assert(km);
-    return (const input_keymap_entry *)hashmap_get(km->hm, entry);
-}
-
 const input_keymap_entry *input_get_keymap_entry(u32 key, const input_keymap *km)
 {
+    assert(km);
     input_keymap_entry ie{{}, key};
-    return input_get_keymap_entry(&ie, km);
+    return (const input_keymap_entry *)hashmap_get(km->hm, &ie);
 }
 
 const input_keymap_entry *input_get_keymap_entry(const char *name, const input_keymap *km)
@@ -376,8 +369,8 @@ const i16 MOUSE_BTN_MIDDLE = GLFW_MOUSE_BUTTON_MIDDLE;
 const i16 SCROLL_CHANGE = 8;
 const i16 CURSOR_POS_CHANGE = 9;
 
-extern const i8 INPUT_ACTION_PRESS = GLFW_PRESS;
-extern const i8 INPUT_ACTION_RELEASE = GLFW_RELEASE;
-extern const i8 INPUT_ACTION_REPEAT = GLFW_REPEAT;
+const i8 INPUT_ACTION_PRESS = GLFW_PRESS;
+const i8 INPUT_ACTION_RELEASE = GLFW_RELEASE;
+const i8 INPUT_ACTION_REPEAT = GLFW_REPEAT;
 
 } // namespace nslib

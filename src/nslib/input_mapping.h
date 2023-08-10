@@ -60,7 +60,7 @@ using input_event_func = void(const input_event *ev, void *user);
 
 struct input_keymap_entry
 {
-    // First two MSB are the key or button, the mods ord together are the next byte, and the action is the LSB
+    // First 14 bits are key/button, next 10 bits are modifiers, and last 8 bits are action
     small_str name{};
     u32 key{};
     u32 flags{};
@@ -81,22 +81,34 @@ struct input_keymap_stack
     u8 count{0};
 };
 
+// Get the hash key for the passed in key/mouse button, modifiers, action combination
 u32 input_keymap_button_key(int key_or_button, int modifiers, int action);
+
+// Get the hash key for a cursor movement entry with the passed in modifiers
 u32 input_keymap_cursor_key(int modifiers);
+
+// Get the hash key for a scroll entry with the passed in modifiers
 u32 input_keymap_scroll_key(int modifiers);
+
+// Get the key/mouse button code from the hash key
 int input_button_from_key(u32 key);
+
+// Get the modifiers from the hash key
 int input_mods_from_key(u32 key);
+
+// Get the action from the hash key
 int input_action_from_key(u32 key);
 
-void input_init_keymap(const char *name, input_keymap *km);
-void input_terminate_keymap(input_keymap *km);
-
+// Set keymap entry overwriting an existing one if its there
 const input_keymap_entry *input_set_keymap_entry(const input_keymap_entry *entry, input_keymap *km);
 
-const input_keymap_entry *input_get_keymap_entry(const input_keymap_entry *entry, const input_keymap *km);
+// Find keymap entry by key and return it - return null if no match is found
 const input_keymap_entry *input_get_keymap_entry(u32 key, const input_keymap *km);
+
+// Find the keymap entry with name and return it - return null if no match is found
 const input_keymap_entry *input_get_keymap_entry(const char *name, const input_keymap *km);
 
+// Remove a keymap entry from the hashmap and return it
 const input_keymap_entry *input_remove_keymap_entry(const input_keymap_entry *entry, input_keymap *km);
 
 // Map the platform event to input_keymap_entries
@@ -113,5 +125,11 @@ bool input_keymap_in_stack(const input_keymap *km, const input_keymap_stack *sta
 
 // Pop to top keymap from the stack and return it
 input_keymap *input_pop_keymap(input_keymap_stack *stack);
+
+// Initialize the keymap and allocate the hashmap
+void input_init_keymap(const char *name, input_keymap *km);
+
+// Tear down the keymap and free the hashmap
+void input_terminate_keymap(input_keymap *km);
 
 } // namespace nslib
