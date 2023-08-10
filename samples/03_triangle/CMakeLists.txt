@@ -4,7 +4,6 @@ set(TARGET_NAME 03_triangle)
 file(GLOB src_files
   ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
 
-# Create lib
 add_executable(${TARGET_NAME} ${src_files})
 
 set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES
