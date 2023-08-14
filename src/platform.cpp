@@ -167,7 +167,7 @@ void *platform_realloc(void *ptr, sizet byte_size)
 
 int platform_init(const platform_init_info *settings, platform_ctxt *ctxt)
 {
-    ilog("Platform init");
+    ilog("Platform init version %d.%d.%d", NSLIB_VERSION_MAJOR, NSLIB_VERSION_MINOR, NSLIB_VERSION_PATCH);
     glfwSetErrorCallback(glfw_error_callback);
 
     if (!glfwInit()) {

@@ -1,6 +1,6 @@
-#include "platform.h"
-#include "vkrenderer.h"
-#include "logging.h"
+#include "nslib/platform.h"
+#include "nslib/vkrenderer.h"
+#include "nslib/logging.h"
 
 using namespace nslib;
 

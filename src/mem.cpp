@@ -280,7 +280,6 @@ void *mem_alloc(sizet bytes)
 
 void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment)
 {
-    assert(arena);
     if (!arena) {
         arena = g_fl_arena;
     }
