@@ -1,3 +1,7 @@
+#include <stdio.h>
+#include <errno.h>
+#include <string.h>
+
 #include "GLFW/glfw3.h"
 #include "input_kmcodes.h"
 #include "platform.h"
@@ -130,7 +134,7 @@ intern void set_glfw_callbacks(platform_ctxt *ctxt)
     glfwSetInputMode(glfw_win, GLFW_LOCK_KEY_MODS, GLFW_FALSE);
 }
 
-intern void init_mem_arenas(const platform_memory_init_info * info, platform_memory *mem)
+intern void init_mem_arenas(const platform_memory_init_info *info, platform_memory *mem)
 {
     mem_init_arena(info->free_list_size, MEM_ALLOC_FREE_LIST, &mem->free_list);
     mem_init_arena(info->stack_size, MEM_ALLOC_STACK, &mem->stack);
@@ -274,6 +278,201 @@ void platform_run_frame(platform_ctxt *ctxt)
     }
     mem_reset_arena(&ctxt->arenas.frame_linear);
     ++ctxt->finished_frames;
+}
+
+intern sizet platform_file_size(FILE *f, platform_file_err_desc *err)
+{
+    sizet ret{0};
+
+    sizet cur_p = ftell(f);
+    if (cur_p == -1L)
+        goto ftell_fail;
+
+    if (fseek(f, 0, SEEK_END) != 0)
+        goto fseek_fail;
+
+    ret = ftell(f);
+    if (ret == -1L)
+        goto ftell_fail;
+
+    if (fseek(f, cur_p, SEEK_SET) != 0)
+        goto fseek_fail;
+
+    return ret;
+
+fseek_fail:
+    if (err) {
+        err->code = err_code::FILE_SEEK_FAIL;
+        err->str = strerror(errno);
+    }
+    return ret;
+
+ftell_fail:
+    if (err) {
+        err->code = err_code::FILE_TELL_FAIL;
+        err->str = strerror(errno);
+    }
+    return ret;
+}
+
+sizet platform_file_size(const char *fname, platform_file_err_desc *err)
+{
+    sizet ret{0};
+    FILE *f = fopen(fname, "r");
+    if (f) {
+        ret = platform_file_size(f, err);
+        fclose(f);
+    }
+    else if (err) {
+        err->code = err_code::FILE_OPEN_FAIL;
+        err->str = strerror(errno);
+    }
+    return ret;
+}
+
+intern sizet platform_read_file(FILE *f, void *data, sizet element_size, sizet nelements, sizet byte_offset, platform_file_err_desc *err)
+{
+    sizet nelems{0};
+    if (byte_offset != 0 && fseek(f, byte_offset, SEEK_SET) != 0) {
+        if (err) {
+            err->code = err_code::FILE_SEEK_FAIL;
+            err->str = strerror(errno);
+        }
+    }
+    else {
+        nelems = fread(data, element_size, nelements, f);
+        if (nelems != nelements && err) {
+            err->code = err_code::FILE_READ_DIFF_SIZE;
+            err->str = strerror(errno);
+        }
+    }
+    return nelems;
+}
+
+sizet platform_read_file(const char *fname,
+                         const char *mode,
+                         void *data,
+                         sizet element_size,
+                         sizet nelements,
+                         sizet byte_offset,
+                         platform_file_err_desc *err)
+{
+    sizet elems{0};
+    FILE *f = fopen(fname, mode);
+    if (f) {
+        elems = platform_read_file(f, data, element_size, nelements, byte_offset, err);
+        fclose(f);
+    }
+    else if (err) {
+        err->code = err_code::FILE_OPEN_FAIL;
+        err->str = strerror(errno);
+    }
+    return elems;
+}
+
+sizet platform_read_file(const char *fname, void *data, sizet element_size, sizet nelements, sizet byte_offset, platform_file_err_desc *err)
+{
+    return platform_read_file(fname, "rb", data, element_size, nelements, byte_offset, err);
+}
+
+sizet platform_read_file(const char *fname, const char *mode, array<u8> *buffer, sizet byte_offset, platform_file_err_desc *err)
+{
+    sizet elems{0};
+    FILE *f = fopen(fname, mode);
+    if (f) {
+        sizet fsize = platform_file_size(f, err);
+        if (fsize > 0) {
+            arr_resize(buffer, fsize);
+            elems = platform_read_file(f, buffer->data, 1, buffer->size, byte_offset, err);
+        }
+        fclose(f);
+    }
+    else if (err) {
+        err->code = err_code::FILE_OPEN_FAIL;
+        err->str = strerror(errno);
+    }
+    return elems;
+}
+
+sizet platform_read_file(const char *fname, array<u8> *buffer, sizet byte_offset, platform_file_err_desc *err)
+{
+    return platform_read_file(fname, "rb", buffer, byte_offset, err);
+}
+
+intern sizet platform_write_file(FILE *f, const void *data, sizet element_size, sizet nelements, sizet byte_offset, platform_file_err_desc *err)
+{
+    sizet ret{0};
+    int seek = SEEK_SET;
+    if (byte_offset == -1) {
+        byte_offset = 0;
+        seek = SEEK_END;
+    }
+
+    if ((byte_offset != 0 || seek != SEEK_SET) && fseek(f, byte_offset, seek) != 0) {
+        if (err) {
+            err->code = err_code::FILE_SEEK_FAIL;
+            err->str = strerror(errno);
+        }
+        return ret;
+    }
+
+    ret = fwrite(data, element_size, nelements, f);
+    if (ret != nelements && err) {
+        err->code = err_code::FILE_WRITE_DIFF_SIZE;
+        err->str = strerror(errno);
+    }
+    return ret;
+}
+
+sizet platform_write_file(const char *fname,
+                          const char *mode,
+                          const void *data,
+                          sizet element_size,
+                          sizet nelements,
+                          sizet byte_offset,
+                          platform_file_err_desc *err)
+{
+    sizet ret{0};
+    FILE *f = fopen(fname, mode);
+    if (f) {
+        ret = platform_write_file(f, data, element_size, nelements, byte_offset, err);
+        fclose(f);
+    }
+    else if (err) {
+        err->code = err_code::FILE_OPEN_FAIL;
+        err->str = strerror(errno);
+    }
+    return ret;
+}
+
+sizet platform_write_file(const char *fname,
+                          const void *data,
+                          sizet element_size,
+                          sizet nelements,
+                          sizet byte_offset,
+                          platform_file_err_desc *err)
+{
+    return platform_write_file(fname, "wb", data, element_size, nelements, byte_offset, err);
+}
+
+sizet platform_write_file(const char *fname, const char *mode, const array<u8> *data, sizet byte_offset, platform_file_err_desc *err)
+{
+    sizet ret{0};
+    FILE *f = fopen(fname, mode);
+    if (f) {
+        ret = platform_write_file(f, data, 1, data->size, byte_offset, err);
+        fclose(f);
+    }
+    else if (err) {
+        err->code = err_code::FILE_OPEN_FAIL;
+        err->str = strerror(errno);
+    }
+    return ret;
+}
+
+sizet platform_write_file(const char *fname, const array<u8> *data, sizet byte_offset, platform_file_err_desc *err)
+{
+    return platform_write_file(fname, "wb", data, byte_offset, err);
 }
 
 } // namespace nslib

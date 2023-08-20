@@ -2,6 +2,7 @@
 #include "mem.h"
 #include "profile_timer.h"
 #include "math/vector2.h"
+#include "containers/array.h"
 
 namespace nslib
 {
@@ -15,7 +16,19 @@ enum platform
     PLATFORM_RUN_FRAME,
     PLATFORM_TERMINATE
 };
-}
+
+enum file
+{
+    FILE_NO_ERROR,
+    FILE_OPEN_FAIL,
+    FILE_TELL_FAIL,
+    FILE_SEEK_FAIL,
+    FILE_READ_DIFF_SIZE,
+    FILE_WRITE_DIFF_SIZE,
+    FILE_GET_CWD_FAIL
+};
+
+} // namespace err_code
 
 struct platform_window_flags
 {
@@ -42,9 +55,9 @@ struct platform_window_init_info
 
 struct platform_memory_init_info
 {
-    sizet free_list_size{500*MB_SIZE};
-    sizet stack_size{100*MB_SIZE};
-    sizet frame_linear_size{100*MB_SIZE};
+    sizet free_list_size{500 * MB_SIZE};
+    sizet stack_size{100 * MB_SIZE};
+    sizet frame_linear_size{100 * MB_SIZE};
 };
 
 struct platform_init_info
@@ -99,6 +112,12 @@ struct platform_ctxt
     int argc;
 };
 
+struct platform_file_err_desc
+{
+    int code;
+    const char *str;
+};
+
 int platform_init(const platform_init_info *settings, platform_ctxt *ctxt);
 int platform_terminate(platform_ctxt *ctxt);
 
@@ -115,6 +134,54 @@ dvec2 platform_cursor_pos(void *window_hndl);
 void platform_window_process_input(platform_ctxt *pf);
 bool platform_window_should_close(void *window_hndl);
 
+sizet platform_file_size(const char *fname, platform_file_err_desc *err);
+
+sizet platform_read_file(const char *fname,
+                         const char *mode,
+                         void *data,
+                         sizet element_size,
+                         sizet nelements,
+                         sizet byte_offset = 0,
+                         platform_file_err_desc *err = nullptr);
+
+sizet platform_read_file(const char *fname,
+                         void *data,
+                         sizet element_size,
+                         sizet nelements,
+                         sizet byte_offset = 0,
+                         platform_file_err_desc *err = nullptr);
+
+// If 0, vec will be resized to entire file size
+sizet platform_read_file(const char *fname, const char *mode, array<u8> *buffer, sizet byte_offset = 0, platform_file_err_desc *err = nullptr);
+
+sizet platform_read_file(const char *fname, array<u8> *buffer, sizet byte_offset = 0, platform_file_err_desc *err = nullptr);
+
+sizet platform_write_file(const char *fname,
+                          const char *mode,
+                          const void *data,
+                          sizet element_size,
+                          sizet nelements,
+                          sizet byte_offset = 0,
+                          platform_file_err_desc *err = nullptr);
+
+sizet platform_write_file(const char *fname,
+                          const void *data,
+                          sizet element_size,
+                          sizet nelements,
+                          sizet byte_offset = 0,
+                          platform_file_err_desc *err = nullptr);
+    
+sizet platform_write_file(const char *fname,
+                          const char *mode,
+                          const array<u8> *data,
+                          sizet byte_offset = 0,
+                          platform_file_err_desc *err = nullptr);
+
+sizet platform_write_file(const char *fname,
+                          const array<u8> *data,
+                          sizet byte_offset = 0,
+                          platform_file_err_desc *err = nullptr);
+    
 } // namespace nslib
 
 #define DEFINE_APPLICATION_MAIN(client_app_data_type)                                                                                      \
