@@ -55,7 +55,7 @@ struct hashmap
     sizet mask;
     sizet growat;
     sizet shrinkat;
-    uint8_t growpower;
+    u8 growpower;
     bool oom;
     void *buckets;
     void *spare;
@@ -64,7 +64,7 @@ struct hashmap
 
 void hashmap_set_grow_by_power(struct hashmap *map, sizet power)
 {
-    map->growpower = power < 1 ? 1 : power > 16 ? 16 : power;
+    map->growpower = (u8)(power < 1 ? 1 : power > 16 ? 16 : power);
 }
 
 static struct bucket *bucket_at0(void *buckets, sizet bucketsz, sizet i)
@@ -151,8 +151,8 @@ struct hashmap *hashmap_new_with_allocator(void *(*_malloc)(sizet),
     }
     memset(map->buckets, 0, map->bucketsz * map->nbuckets);
     map->growpower = 1;
-    map->growat = map->nbuckets * GROW_AT;
-    map->shrinkat = map->nbuckets * SHRINK_AT;
+    map->growat = (sizet)(map->nbuckets * GROW_AT);
+    map->shrinkat = (sizet)(map->nbuckets * SHRINK_AT);
     map->malloc = _malloc;
     map->realloc = _realloc;
     map->free = _free;
@@ -222,8 +222,8 @@ void hashmap_clear(struct hashmap *map, bool update_cap)
     }
     memset(map->buckets, 0, map->bucketsz * map->nbuckets);
     map->mask = map->nbuckets - 1;
-    map->growat = map->nbuckets * 0.75;
-    map->shrinkat = map->nbuckets * 0.10;
+    map->growat = (sizet)(map->nbuckets * 0.75);
+    map->shrinkat = (sizet)(map->nbuckets * 0.10);
 }
 
 static bool resize0(struct hashmap *map, sizet new_cap)
@@ -277,7 +277,7 @@ const void *hashmap_set_with_hash(struct hashmap *map, const void *item, u64 has
     hash = clip_hash(hash);
     map->oom = false;
     if (map->count == map->growat) {
-        if (!resize(map, map->nbuckets * (1 << map->growpower))) {
+        if (!resize(map, map->nbuckets * i32(1 << map->growpower))) {
             map->oom = true;
             return NULL;
         }
@@ -486,19 +486,17 @@ bool hashmap_iter(struct hashmap *map, sizet *i, void **item)
 // hashmap_sip returns a hash value for `data` using SipHash-2-4.
 u64 hashmap_sip(const void *data, sizet len, u64 seed0, u64 seed1)
 {
-    return siphash((uint8_t *)data, len, seed0, seed1);
+    return siphash((u8 *)data, len, seed0, seed1);
 }
 
 // hashmap_murmur returns a hash value for `data` using Murmur3_86_128.
-u64 hashmap_murmur(const void *data, sizet len, u64 seed0, u64 seed1)
+u64 hashmap_murmur(const void *data, sizet len, u64 seed0, u64)
 {
-    (void)seed1;
-    return murmurhash3(data, len, seed0);
+    return murmurhash3(data, len, (u32)seed0);
 }
 
-u64 hashmap_xxhash3(const void *data, sizet len, u64 seed0, u64 seed1)
+u64 hashmap_xxhash3(const void *data, sizet len, u64 seed0, u64)
 {
-    (void)seed1;
     return xxhash3(data, len, seed0);
 }
 

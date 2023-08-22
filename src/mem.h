@@ -24,12 +24,12 @@ struct free_header
 struct alloc_header
 {
     sizet block_size;
-    char padding;
+    sizet padding;
 };
 
 struct stack_alloc_header
 {
-    char padding;
+    sizet padding;
 };
 
 enum placement_policy

@@ -100,7 +100,7 @@ u32 murmurhash2(const void *key, sizet len, u32 seed)
 
     // Initialize the hash to a 'random' value
 
-    u32 h = seed ^ len;
+    u32 h = (u32)(seed ^ len);
 
     // Mix 4 bytes at a time into the hash
 
@@ -162,7 +162,7 @@ u64 murmurhash3(const void *key, sizet len, u32 seed)
     u32 c3 = 0x38b34ae5;
     u32 c4 = 0xa1e38b93;
     const u32 *blocks = (const u32 *)(data + nblocks * 16);
-    for (sizet i = -nblocks; i; i++) {
+    for (sizet i = -1*nblocks; i; i++) {
         u32 k1 = blocks[i * 4 + 0];
         u32 k2 = blocks[i * 4 + 1];
         u32 k3 = blocks[i * 4 + 2];

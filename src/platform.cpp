@@ -188,7 +188,7 @@ int platform_init(const platform_init_info *settings, platform_ctxt *ctxt)
     set_glfw_callbacks(ctxt);
 
     // Seed random number generator
-    srand(time(NULL));
+    srand((u32)time(NULL));
 
     auto mon = glfwGetPrimaryMonitor();
     vec2 scale;
@@ -295,7 +295,7 @@ intern sizet platform_file_size(FILE *f, platform_file_err_desc *err)
     if (ret == -1L)
         goto ftell_fail;
 
-    if (fseek(f, cur_p, SEEK_SET) != 0)
+    if (fseek(f, (long)cur_p, SEEK_SET) != 0)
         goto fseek_fail;
 
     return ret;
@@ -333,7 +333,7 @@ sizet platform_file_size(const char *fname, platform_file_err_desc *err)
 intern sizet platform_read_file(FILE *f, void *data, sizet element_size, sizet nelements, sizet byte_offset, platform_file_err_desc *err)
 {
     sizet nelems{0};
-    if (byte_offset != 0 && fseek(f, byte_offset, SEEK_SET) != 0) {
+    if (byte_offset != 0 && fseek(f, (long)byte_offset, SEEK_SET) != 0) {
         if (err) {
             err->code = err_code::FILE_SEEK_FAIL;
             err->str = strerror(errno);
@@ -408,7 +408,7 @@ intern sizet platform_write_file(FILE *f, const void *data, sizet element_size, 
         seek = SEEK_END;
     }
 
-    if ((byte_offset != 0 || seek != SEEK_SET) && fseek(f, byte_offset, seek) != 0) {
+    if ((byte_offset != 0 || seek != SEEK_SET) && fseek(f, (long)byte_offset, seek) != 0) {
         if (err) {
             err->code = err_code::FILE_SEEK_FAIL;
             err->str = strerror(errno);

@@ -9,6 +9,16 @@
 #define IS_POSIX_SYSTEM
 #endif
 
+#ifdef _WIN32
+#    ifdef DLL_EXPORTS
+#        define dllapi __declspec(dllexport)
+#    else
+#        define dllapi __declspec(dllimport)
+#    endif
+#elif
+#    define dllapi
+#endif
+
 // Check if all of the flags in provided flags
 #define check_all_flags(bitmask, flags) (((bitmask) & (flags)) == (flags))
 

@@ -110,7 +110,7 @@ void arr_set_capacity(array<T> *arr, sizet new_cap)
         arr->size = arr->capacity;
 
 #if !defined(NDEBUG)
-    for (int i = arr->size; i < arr->capacity; ++i)
+    for (sizet i = arr->size; i < arr->capacity; ++i)
         arr->data[i] = {};
 #endif
 }
@@ -260,7 +260,7 @@ void arr_resize(array<T> *arr, sizet new_size)
 
 // If in debug - clear the removed data (if any) to 0
 #if !defined(NDEBUG)
-    for (int i = new_size; i < arr->size; ++i)
+    for (sizet i = new_size; i < arr->size; ++i)
         arr->data[i] = {};
 #endif
     arr->size = new_size;

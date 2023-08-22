@@ -63,7 +63,7 @@ inline __m128 _sse_dp(const __m128 &left, const __m128 &right)
 
 namespace nslib
 {
-inline constexpr float FLOAT_EPS = 0.001;
+inline constexpr float FLOAT_EPS = 0.001f;
 
 template<class T>
 struct is_vec
@@ -284,7 +284,7 @@ U operator/(T lhs_, U rhs_)
     using value_type = T;                                                                                                                  \
     using iterator = ind_ret_type *;                                                                                                       \
     using const_iterator = const ind_ret_type *;                                                                                           \
-    static constexpr u8 size_ = element_count;                                                                                             \
+    static constexpr sizet size_ = element_count;                                                                                          \
     template<class U>                                                                                                                      \
     type(const type<U> &conv)                                                                                                              \
     {                                                                                                                                      \
@@ -315,11 +315,11 @@ U operator/(T lhs_, U rhs_)
     {                                                                                                                                      \
         return *this = *this / rhs_;                                                                                                       \
     }                                                                                                                                      \
-    inline const ind_ret_type &operator[](u8 val_) const                                                                                   \
+    inline const ind_ret_type &operator[](sizet val_) const                                                                                \
     {                                                                                                                                      \
         return data[val_];                                                                                                                 \
     }                                                                                                                                      \
-    inline ind_ret_type &operator[](u8 val_)                                                                                               \
+    inline ind_ret_type &operator[](sizet val_)                                                                                            \
     {                                                                                                                                      \
         return data[val_];                                                                                                                 \
     }                                                                                                                                      \
