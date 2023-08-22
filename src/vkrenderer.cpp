@@ -212,9 +212,9 @@ void vkr_enumerate_device_extensions(VkPhysicalDevice pdevice,
         (VkExtensionProperties *)mem_alloc(extension_count * sizeof(VkExtensionProperties), arenas->command_arena);
     res = vkEnumerateDeviceExtensionProperties(pdevice, nullptr, &extension_count, ext_array);
     assert(res == VK_SUCCESS);
-    for (int i = 0; i < extension_count; ++i) {
+    for (u32 i = 0; i < extension_count; ++i) {
         bool ext_enabled{false};
-        for (int j = 0; j < enabled_extension_count; ++j) {
+        for (u32 j = 0; j < enabled_extension_count; ++j) {
             if (strncmp(enabled_extensions[j], ext_array[i].extensionName, MAX_EXTENSION_STR_LEN) == 0) {
                 ext_enabled = true;
             }
@@ -233,9 +233,9 @@ void vkr_enumerate_instance_extensions(const char *const *enabled_extensions, u3
         (VkExtensionProperties *)mem_alloc(extension_count * sizeof(VkExtensionProperties), arenas->command_arena);
     res = vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, ext_array);
     assert(res == VK_SUCCESS);
-    for (int i = 0; i < extension_count; ++i) {
+    for (u32 i = 0; i < extension_count; ++i) {
         bool ext_enabled{false};
-        for (int j = 0; j < enabled_extension_count; ++j) {
+        for (u32 j = 0; j < enabled_extension_count; ++j) {
             if (strncmp(enabled_extensions[j], ext_array[i].extensionName, MAX_EXTENSION_STR_LEN) == 0) {
                 ext_enabled = true;
             }
@@ -254,9 +254,9 @@ void vkr_enumerate_validation_layers(const char *const *enabled_layers, u32 enab
     res = vkEnumerateInstanceLayerProperties(&layer_count, layer_array);
     assert(res == VK_SUCCESS);
 
-    for (int i = 0; i < layer_count; ++i) {
+    for (u32 i = 0; i < layer_count; ++i) {
         bool enabled{false};
-        for (int j = 0; j < enabled_layer_count; ++j) {
+        for (u32 j = 0; j < enabled_layer_count; ++j) {
             if (strcmp(enabled_layers[j], layer_array[i].layerName) == 0) {
                 enabled = true;
             }
@@ -396,7 +396,7 @@ intern void fill_queue_offsets_and_create_inds(vkr_queue_families *qfams, u32 fa
 {
     bool found_match = false;
     u32 highest_ind = 0;
-    for (int i = 0; i < fam_ind; ++i) {
+    for (u32 i = 0; i < fam_ind; ++i) {
         if (qfams->qinfo[i].index == qfams->qinfo[fam_ind].index) {
             found_match = true;
             qfams->qinfo[fam_ind].qoffset += qfams->qinfo[i].requested_count;
@@ -537,7 +537,7 @@ int vkr_select_best_graphics_physical_device(VkInstance inst, VkSurfaceKHR surfa
     auto pdevices = (VkPhysicalDevice *)mem_alloc(sizeof(VkPhysicalDevice) * count, arenas->command_arena);
     ret = vkEnumeratePhysicalDevices(inst, &count, pdevices);
     assert(ret == VK_SUCCESS);
-    for (int i = 0; i < count; ++i) {
+    for (u32 i = 0; i < count; ++i) {
         int cur_score = 0;
         vkr_queue_families fams = vkr_get_queue_families(pdevices[i], surface, arenas);
 

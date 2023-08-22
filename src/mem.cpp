@@ -120,8 +120,8 @@ intern void *mem_free_list_alloc(mem_arena *arena, sizet size, sizet alignment)
     }
 
     // Search through the free list for a free block that has enough space to allocate our data
-    sizet padding;
-    mem_node *affected_node, *prev_node;
+    sizet padding{};
+    mem_node *affected_node{}, *prev_node{};
     find(&arena->mfl, size, alignment, padding, prev_node, affected_node);
     assert(affected_node);
 
@@ -221,7 +221,7 @@ intern void mem_pool_free(mem_arena *mem, void *ptr)
 intern void *mem_stack_alloc(mem_arena *arena, sizet size, sizet alignment)
 {
     sizet current_addr = (sizet)arena->start + arena->mstack.offset;
-    char padding = calc_padding_with_header(current_addr, alignment, sizeof(stack_alloc_header));
+    sizet padding = calc_padding_with_header(current_addr, alignment, sizeof(stack_alloc_header));
 
     if ((arena->mstack.offset + padding + size) > arena->total_size)
         return nullptr;
@@ -388,8 +388,8 @@ void mem_reset_arena(mem_arena *arena)
     switch (arena->alloc_type) {
     case (MEM_ALLOC_POOL): {
         // Create a linked-list with all free positions
-        int nchunks = arena->total_size / arena->mpool.chunk_size;
-        for (int i = 0; i < nchunks; ++i) {
+        sizet nchunks = arena->total_size / arena->mpool.chunk_size;
+        for (sizet i = 0; i < nchunks; ++i) {
             sizet address = (sizet)arena->start + i * arena->mpool.chunk_size;
             ll_push(&arena->mpool.free_list, (mem_node *)address);
         }
