@@ -99,6 +99,13 @@ struct vkr_swapchain_info
     VkSwapchainKHR swapchain;
 };
 
+struct vkr_pipeline_info
+{
+    VkRenderPass rpass;
+    VkPipelineLayout layout;
+    VkPipeline pipeline;
+};
+
 struct vkr_context
 {
     VkInstance inst;
@@ -134,6 +141,12 @@ struct vkr_init_info
     void *window;
 };
 
+struct vkr_pipeline_init_info
+{
+    byte_array frag_shader_data;
+    byte_array vert_shader_data;
+};
+
 const char *vkr_physical_device_type_str(VkPhysicalDeviceType type);
 vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice, VkSurfaceKHR surface, vk_arenas *arenas);
 
@@ -147,6 +160,9 @@ void vkr_enumerate_instance_extensions(const char *const *enabled_extensions, u3
 // Enumerate (log) the available layers - if an extension is included in the passed in array then it will be
 // indicated as such
 void vkr_enumerate_validation_layers(const char *const *enabled_layers, u32 enabled_layer_count, vk_arenas *arenas);
+
+void vkr_init_pipeline(const vkr_pipeline_init_info *init_info, const vk_arenas *arenas, vkr_pipeline_info *pipe_info);
+void vkr_terminate_pipeline(const vk_arenas *arenas, vkr_pipeline_info *pipe_info);
 
 int vkr_init_swapchain(VkDevice device,
                        VkSurfaceKHR surface,

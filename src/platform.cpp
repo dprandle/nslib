@@ -375,7 +375,7 @@ sizet platform_read_file(const char *fname, void *data, sizet element_size, size
     return platform_read_file(fname, "rb", data, element_size, nelements, byte_offset, err);
 }
 
-sizet platform_read_file(const char *fname, const char *mode, array<u8> *buffer, sizet byte_offset, platform_file_err_desc *err)
+sizet platform_read_file(const char *fname, const char *mode, byte_array *buffer, sizet byte_offset, platform_file_err_desc *err)
 {
     sizet elems{0};
     FILE *f = fopen(fname, mode);
@@ -394,7 +394,7 @@ sizet platform_read_file(const char *fname, const char *mode, array<u8> *buffer,
     return elems;
 }
 
-sizet platform_read_file(const char *fname, array<u8> *buffer, sizet byte_offset, platform_file_err_desc *err)
+sizet platform_read_file(const char *fname, byte_array *buffer, sizet byte_offset, platform_file_err_desc *err)
 {
     return platform_read_file(fname, "rb", buffer, byte_offset, err);
 }
@@ -455,7 +455,7 @@ sizet platform_write_file(const char *fname,
     return platform_write_file(fname, "wb", data, element_size, nelements, byte_offset, err);
 }
 
-sizet platform_write_file(const char *fname, const char *mode, const array<u8> *data, sizet byte_offset, platform_file_err_desc *err)
+sizet platform_write_file(const char *fname, const char *mode, const byte_array *data, sizet byte_offset, platform_file_err_desc *err)
 {
     sizet ret{0};
     FILE *f = fopen(fname, mode);
@@ -470,7 +470,7 @@ sizet platform_write_file(const char *fname, const char *mode, const array<u8> *
     return ret;
 }
 
-sizet platform_write_file(const char *fname, const array<u8> *data, sizet byte_offset, platform_file_err_desc *err)
+sizet platform_write_file(const char *fname, const byte_array *data, sizet byte_offset, platform_file_err_desc *err)
 {
     return platform_write_file(fname, "wb", data, byte_offset, err);
 }

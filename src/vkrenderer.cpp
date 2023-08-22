@@ -29,7 +29,8 @@ intern const char *VALIDATION_LAYERS[VALIDATION_LAYER_COUNT] = {"VK_LAYER_KHRONO
 #endif
 
 intern const u32 ADDITIONAL_INST_EXTENSION_COUNT = 2;
-    intern const char *ADDITIONAL_INST_EXTENSIONS[ADDITIONAL_INST_EXTENSION_COUNT] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME};
+intern const char *ADDITIONAL_INST_EXTENSIONS[ADDITIONAL_INST_EXTENSION_COUNT] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+                                                                                  VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME};
 
 intern const u32 DEVICE_EXTENSION_COUNT = 1;
 intern const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
@@ -719,12 +720,12 @@ int vkr_init_swapchain(VkDevice device,
         iview_create.image = sw_info->images[i];
         iview_create.viewType = VK_IMAGE_VIEW_TYPE_2D;
         iview_create.format = sw_info->format;
-        
+
         iview_create.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
         iview_create.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
         iview_create.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
         iview_create.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-        
+
         iview_create.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         iview_create.subresourceRange.baseMipLevel = 0;
         iview_create.subresourceRange.levelCount = 1;
@@ -733,11 +734,11 @@ int vkr_init_swapchain(VkDevice device,
         VkResult res = vkCreateImageView(device, &iview_create, alloc_cbs, &sw_info->image_views[i]);
         assert(res == VK_SUCCESS);
     }
-    
+
     return err_code::VKR_NO_ERROR;
 }
 
-void vkr_init_swapchain_info(vkr_swapchain_info *sw_info, mem_arena*arena)
+void vkr_init_swapchain_info(vkr_swapchain_info *sw_info, mem_arena *arena)
 {
     *sw_info = {};
     arr_init(&sw_info->images, arena);
@@ -748,6 +749,18 @@ void vkr_terminate_swapchain_info(vkr_swapchain_info *sw_info)
 {
     arr_terminate(&sw_info->images);
     arr_terminate(&sw_info->image_views);
+}
+
+void vkr_init_pipeline(const vkr_pipeline_init_info *init_info, const vk_arenas *arenas, vkr_pipeline_info *pipe_info)
+{
+    byte_array loaded_data{};
+    arr_init(&loaded_data, arenas->command_arena);
+    
+}
+
+void vkr_terminate_pipeline(const vk_arenas *arenas, vkr_pipeline_info *pipe_info)
+{
+    
 }
 
 int vkr_init(const vkr_init_info *init_info, vkr_context *vk)

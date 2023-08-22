@@ -34,10 +34,10 @@ struct array
     using const_iterator = const T *;
     using value_type = T;
 
+    mem_arena *arena{};
+    T *data{};
     sizet size{};
     sizet capacity{};
-    T *data{};
-    mem_arena *arena{};
 
     inline const T &operator[](sizet ind) const
     {
@@ -349,5 +349,7 @@ sizet arr_index_of(T *bufobj, typename T::value_type *item)
     }
     return npos;
 }
+
+using byte_array = array<u8>;
 
 } // namespace nslib

@@ -152,9 +152,9 @@ sizet platform_read_file(const char *fname,
                          platform_file_err_desc *err = nullptr);
 
 // If 0, vec will be resized to entire file size
-sizet platform_read_file(const char *fname, const char *mode, array<u8> *buffer, sizet byte_offset = 0, platform_file_err_desc *err = nullptr);
+sizet platform_read_file(const char *fname, const char *mode, byte_array *buffer, sizet byte_offset = 0, platform_file_err_desc *err = nullptr);
 
-sizet platform_read_file(const char *fname, array<u8> *buffer, sizet byte_offset = 0, platform_file_err_desc *err = nullptr);
+sizet platform_read_file(const char *fname, byte_array *buffer, sizet byte_offset = 0, platform_file_err_desc *err = nullptr);
 
 sizet platform_write_file(const char *fname,
                           const char *mode,
@@ -173,12 +173,12 @@ sizet platform_write_file(const char *fname,
     
 sizet platform_write_file(const char *fname,
                           const char *mode,
-                          const array<u8> *data,
+                          const byte_array *data,
                           sizet byte_offset = 0,
                           platform_file_err_desc *err = nullptr);
 
 sizet platform_write_file(const char *fname,
-                          const array<u8> *data,
+                          const byte_array *data,
                           sizet byte_offset = 0,
                           platform_file_err_desc *err = nullptr);
     
