@@ -79,7 +79,7 @@ void input_init_keymap(const char *name, input_keymap *km)
     assert(name);
     int seed0 = rand();
     int seed1 = rand();
-    strncpy_s(km->name, name, SMALL_STR_LEN);
+    strncpy(km->name, name, SMALL_STR_LEN);
     km->hm = hashmap_new_with_allocator(mem_alloc,
                                         mem_realloc,
                                         mem_free,

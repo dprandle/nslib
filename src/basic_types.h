@@ -15,7 +15,7 @@
 #    else
 #        define dllapi __declspec(dllimport)
 #    endif
-#elif
+#else
 #    define dllapi
 #endif
 
