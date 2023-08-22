@@ -1,5 +1,5 @@
-#include "nslib/platform.h"
-#include "nslib/logging.h"
+#include "platform.h"
+#include "logging.h"
 
 using namespace nslib;
 

@@ -11,7 +11,7 @@ function(create_sample TARGET_NAME)
   set_target_properties(${TARGET_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY $<1:${CMAKE_BINARY_DIR}/bin>)
 
-  target_include_directories(${TARGET_NAME} PUBLIC ${NSLIB_INCLUDE_DIR})
+  target_include_directories(${TARGET_NAME} PUBLIC ${NSLIB_SRC_DIR})
   target_link_libraries(${TARGET_NAME} ${NSLIB_TARGET_NAME})
 endfunction()
 

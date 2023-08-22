@@ -1,6 +1,6 @@
-#include "nslib/input_mapping.h"
-#include "nslib/platform.h"
-#include "nslib/logging.h"
+#include "input_mapping.h"
+#include "platform.h"
+#include "logging.h"
 
 using namespace nslib;
 
