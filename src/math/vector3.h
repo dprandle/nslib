@@ -110,7 +110,7 @@ inline float dot(const vector3<float> &lhs, const vector3<float> &rhs)
 
 #endif
 
-template<basic_number T>
+template<arithmetic_type T>
 void cross(vector3<T> *srcvec, const vector3<T> &cross_with_)
 {
     T tmpx = srcvec->x, tmpy = srcvec->y;
@@ -119,7 +119,7 @@ void cross(vector3<T> *srcvec, const vector3<T> &cross_with_)
     srcvec->z = tmpx * cross_with_.y - tmpy * cross_with_.x;
 }
 
-template<basic_number T>
+template<arithmetic_type T>
 vector3<T> cross(vector3<T> lhs, const vector3<T> &rhs)
 {
     cross(&lhs, rhs);

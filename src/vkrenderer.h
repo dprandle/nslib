@@ -171,7 +171,7 @@ int vkr_init_swapchain(VkDevice device,
                        void *window,
                        vkr_swapchain_info *swinfo);
 
-void vkr_init_swapchain_info(vkr_swapchain_info *sw_info, mem_arena*arena);
+void vkr_init_swapchain_info(vkr_swapchain_info *sw_info, mem_arena *arena);
 void vkr_terminate_swapchain_info(vkr_swapchain_info *sw_info);
 
 void vkr_init_pdevice_swapchain_support(vkr_pdevice_swapchain_support *ssup, mem_arena *arena);

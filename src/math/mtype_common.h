@@ -1,6 +1,6 @@
 #pragma once
 #include "../basic_types.h"
-#include <type_traits>
+#include "../basic_type_traits.h"
 
 #define NOBLE_STEED_SSE_BIT (0x00000001)
 #define NOBLE_STEED_SSE2_BIT (0x00000002)
@@ -96,24 +96,6 @@ template<class T>
 concept vec_or_quat_type = vec_type<T> || quat_type<T>;
 
 template<class T>
-concept floating_pt = std::is_floating_point_v<T>;
-
-template<class T>
-concept integral = std::is_integral_v<T>;
-
-template<class T>
-concept signed_number = std::is_signed_v<T>;
-
-template<class T>
-concept signed_integral = integral<T> && signed_number<T>;
-
-template<class T>
-concept unsigned_integral = integral<T> && std::is_unsigned_v<T>;
-
-template<class T>
-concept basic_number = integral<T> || floating_pt<T>;
-
-template<class T>
 concept holds_floating_pt = floating_pt<typename T::value_type>;
 
 template<class T>
@@ -123,7 +105,7 @@ template<class T>
 concept holds_signed_number = signed_number<typename T::value_type>;
 
 template<class T>
-concept holds_basic_number = basic_number<typename T::value_type>;
+concept holds_arithmetic_type = arithmetic_type<typename T::value_type>;
 
 template<class T>
 struct vector2;
@@ -233,7 +215,7 @@ T operator*(T lhs_, const T &rhs_)
     return lhs_;
 }
 
-template<basic_number T, holds_basic_arithmetic_type U>
+template<arithmetic_type T, holds_basic_arithmetic_type U>
 U operator*(U lhs_, T rhs_)
 {
     for (auto &&element : lhs_)
@@ -241,7 +223,7 @@ U operator*(U lhs_, T rhs_)
     return lhs_;
 }
 
-template<basic_number T, holds_basic_arithmetic_type U>
+template<arithmetic_type T, holds_basic_arithmetic_type U>
 U operator*(T lhs_, const U &rhs_)
 {
     return rhs_ * lhs_;
@@ -255,7 +237,7 @@ T operator/(T lhs_, const T &rhs_)
     return lhs_;
 }
 
-template<basic_number T, holds_basic_arithmetic_type U>
+template<arithmetic_type T, holds_basic_arithmetic_type U>
 U operator/(const U lhs_, T rhs_)
 {
     T tmp((T)1.0 / rhs_);

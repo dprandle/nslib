@@ -190,7 +190,7 @@ void input_map_event(const platform_input_event *raw, const input_keymap_stack *
             if (kentry->cb) {
                 kentry->cb(&ev, kentry->cb_user_param);
             }
-            should_return = !check_flags(kentry->flags, IEVENT_FLAG_DONT_CONSUME);
+            should_return = !test_flags(kentry->flags, IEVENT_FLAG_DONT_CONSUME);
         }
         if (kanymod && kanymod != kentry) {
             ev.name = kanymod->name;
@@ -198,7 +198,7 @@ void input_map_event(const platform_input_event *raw, const input_keymap_stack *
             if (kanymod->cb) {
                 kanymod->cb(&ev, kanymod->cb_user_param);
             }
-            should_return = should_return || !check_flags(kanymod->flags, IEVENT_FLAG_DONT_CONSUME);
+            should_return = should_return || !test_flags(kanymod->flags, IEVENT_FLAG_DONT_CONSUME);
         }
         if (should_return) {
             return;

@@ -561,7 +561,7 @@ inline vector4<float> operator*(const vector4<float> &lhs, const matrix4<float> 
     return math::transpose(rhs) * lhs;
 }
 
-template<basic_number T>
+template<arithmetic_type T>
 inline matrix4<float> operator*(matrix4<float> lhs, T rhs)
 {
     __m128 r = _mm_set_ss(rhs);
@@ -572,7 +572,7 @@ inline matrix4<float> operator*(matrix4<float> lhs, T rhs)
     return lhs;
 }
 
-template<basic_number T>
+template<arithmetic_type T>
 inline matrix3<float> operator*(const matrix3<float> &lhs, T rhs)
 {
     __m128 r = _mm_set_ss(rhs);
@@ -583,7 +583,7 @@ inline matrix3<float> operator*(const matrix3<float> &lhs, T rhs)
     return math::basis(m4);
 }
 
-template<basic_number T>
+template<arithmetic_type T>
 inline matrix4<float> operator/(matrix4<float> lhs, T rhs)
 {
     __m128 r = _mm_set_ss(1.0f / rhs);
@@ -594,7 +594,7 @@ inline matrix4<float> operator/(matrix4<float> lhs, T rhs)
     return lhs;
 }
 
-template<basic_number T>
+template<arithmetic_type T>
 inline matrix3<float> operator/(const matrix3<float> &lhs, T rhs)
 {
     __m128 r = _mm_set_ss(1.0f / rhs);

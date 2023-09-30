@@ -424,7 +424,7 @@ vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice, VkSurfaceKHR
     // Crash if we ever get a higher count than our max queue fam allotment
     assert(count <= MAX_QUEUE_REQUEST_COUNT);
     for (u32 i = 0; i < count; ++i) {
-        bool has_flag = check_flags(qfams[i].queueFlags, VK_QUEUE_GRAPHICS_BIT);
+        bool has_flag = test_flags(qfams[i].queueFlags, VK_QUEUE_GRAPHICS_BIT);
         bool nothing_set_yet = ret.qinfo[VKR_QUEUE_FAM_TYPE_GFX].available_count == 0;
         if (has_flag && nothing_set_yet) {
             ret.qinfo[VKR_QUEUE_FAM_TYPE_GFX].index = i;
@@ -755,7 +755,6 @@ void vkr_init_pipeline(const vkr_pipeline_init_info *init_info, const vk_arenas 
 {
     byte_array loaded_data{};
     arr_init(&loaded_data, arenas->command_arena);
-    
 }
 
 void vkr_terminate_pipeline(const vk_arenas *arenas, vkr_pipeline_info *pipe_info)

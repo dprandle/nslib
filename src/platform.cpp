@@ -221,22 +221,22 @@ void *platform_create_window(const platform_window_init_info *settings)
     glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
     ivec2 sz = settings->resolution;
 
-    if (check_flags(settings->win_flags, platform_window_flags::SCALE_TO_MONITOR)) {
+    if (test_flags(settings->win_flags, platform_window_flags::SCALE_TO_MONITOR)) {
         vec2 scale;
         glfwGetMonitorContentScale(monitor, &scale.x, &scale.y);
         sz = vec2(sz) * scale;
     }
 
     bool fullsreen = false;
-    if (check_flags(settings->win_flags, platform_window_flags::FULLSCREEN)) {
-        glfwWindowHint(GLFW_AUTO_ICONIFY, (int)check_flags(settings->win_flags, platform_window_flags::FULLSCREEN_AUTO_ICONIFTY));
-        glfwWindowHint(GLFW_CENTER_CURSOR, (int)check_flags(settings->win_flags, platform_window_flags::FULLSCREEN_CENTER_CURSOR));
+    if (test_flags(settings->win_flags, platform_window_flags::FULLSCREEN)) {
+        glfwWindowHint(GLFW_AUTO_ICONIFY, (int)test_flags(settings->win_flags, platform_window_flags::FULLSCREEN_AUTO_ICONIFTY));
+        glfwWindowHint(GLFW_CENTER_CURSOR, (int)test_flags(settings->win_flags, platform_window_flags::FULLSCREEN_CENTER_CURSOR));
     }
     else {
-        glfwWindowHint(GLFW_VISIBLE, (int)check_flags(settings->win_flags, platform_window_flags::VISIBLE));
-        glfwWindowHint(GLFW_DECORATED, (int)check_flags(settings->win_flags, platform_window_flags::DECORATED));
-        glfwWindowHint(GLFW_MAXIMIZED, (int)check_flags(settings->win_flags, platform_window_flags::MAXIMIZE));
-        glfwWindowHint(GLFW_FLOATING, (int)check_flags(settings->win_flags, platform_window_flags::ALWAYS_ON_TOP));
+        glfwWindowHint(GLFW_VISIBLE, (int)test_flags(settings->win_flags, platform_window_flags::VISIBLE));
+        glfwWindowHint(GLFW_DECORATED, (int)test_flags(settings->win_flags, platform_window_flags::DECORATED));
+        glfwWindowHint(GLFW_MAXIMIZED, (int)test_flags(settings->win_flags, platform_window_flags::MAXIMIZE));
+        glfwWindowHint(GLFW_FLOATING, (int)test_flags(settings->win_flags, platform_window_flags::ALWAYS_ON_TOP));
         monitor = nullptr;
     }
     return glfwCreateWindow(sz.x, sz.y, settings->title, monitor, nullptr);

@@ -266,7 +266,7 @@ inline matrix2<float> operator-(matrix2<float> lhs, const matrix2<float> &rhs)
     return lhs;
 }
 
-template<basic_number T>
+template<arithmetic_type T>
 inline matrix2<float> operator*(matrix2<float> lhs, T rhs)
 {
     __m128 s = _mm_set1_ps(rhs);
@@ -274,7 +274,7 @@ inline matrix2<float> operator*(matrix2<float> lhs, T rhs)
     return lhs;
 }
 
-template<basic_number T>
+template<arithmetic_type T>
 inline matrix2<float> operator/(matrix2<float> lhs, T rhs)
 {
     __m128 s = _mm_set1_ps(1.0 / rhs);

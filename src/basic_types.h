@@ -20,10 +20,10 @@
 #endif
 
 // Check if all of the flags in provided flags
-#define check_all_flags(bitmask, flags) (((bitmask) & (flags)) == (flags))
+#define test_all_flags(bitmask, flags) (((bitmask) & (flags)) == (flags))
 
 // Check if any of the bits provided in \param flags are set in \param bitmask
-#define check_flags(bitmask, flags) (((bitmask) & (flags)) != 0)
+#define test_flags(bitmask, flags) (((bitmask) & (flags)) != 0)
 
 // Unset all of the bits provided by \param flags in \param bitmask
 #define unset_flags(bitmask, flags) ((bitmask) &= ~(flags))

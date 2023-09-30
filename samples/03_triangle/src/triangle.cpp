@@ -1,3 +1,5 @@
+#include "binary_archive.h"
+#include "robj_common.h"
 #include "platform.h"
 #include "vkrenderer.h"
 #include "logging.h"
@@ -20,10 +22,17 @@ int app_init(platform_ctxt *ctxt, app_data *app)
 {
     ilog("App init");
     version_info v{1,0,0};
-    vkr_init_info vkii{"03 Triangle", {1,0,0}, {}, LOG_DEBUG, ctxt->win_hndl};
+    vkr_init_info vkii{"03 Triangle", {1,0,0}, {}, LOG_TRACE, ctxt->win_hndl};
     if (vkr_init(&vkii, &app->vk) != err_code::VKR_NO_ERROR) {
         return err_code::PLATFORM_INIT;
     }
+
+    robj_common test;
+    test.id = 43;
+    binary_fixed_buffer_archive<1000> ba{};
+    ba.dir = PACK_DIR_OUT;
+    pack_unpack(ba, test, {});
+
     return err_code::PLATFORM_NO_ERROR;
 }
 
