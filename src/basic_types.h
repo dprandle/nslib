@@ -5,18 +5,18 @@
 
 #include "limits.h"
 
-#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+#if defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
 #define IS_POSIX_SYSTEM
 #endif
 
 #ifdef _WIN32
-#    ifdef DLL_EXPORTS
-#        define dllapi __declspec(dllexport)
-#    else
-#        define dllapi __declspec(dllimport)
-#    endif
+#ifdef DLL_EXPORTS
+#define dllapi __declspec(dllexport)
 #else
-#    define dllapi
+#define dllapi __declspec(dllimport)
+#endif
+#else
+#define dllapi
 #endif
 
 // Check if all of the flags in provided flags
@@ -62,5 +62,12 @@ const int MB_SIZE = 1024 * KB_SIZE;
 using small_str = char[SMALL_STR_LEN];
 
 inline constexpr const sizet npos = LONG_MAX;
+
+template<class F, class S>
+struct pair
+{
+    F first;
+    S second;
+};
 
 } // namespace nslib

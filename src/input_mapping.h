@@ -2,12 +2,12 @@
 
 #include "math/vector2.h"
 #include "input_kmcodes.h"
+#include "containers/hashmap.h"
 
 namespace nslib
 {
 constexpr const u8 MAX_INPUT_CONTEXT_STACK_COUNT = 32;
 
-struct hashmap;
 struct mem_arena;
 struct platform_input_event;
 struct platform_frame_input;
@@ -62,16 +62,23 @@ struct input_keymap_entry
 {
     // First 14 bits are key/button, next 10 bits are modifiers, and last 8 bits are action
     small_str name{};
-    u32 key{};
     u32 flags{};
     input_event_func *cb{};
     void *cb_user_param{};
 };
 
+u64 hash_type(const pair<const u32, input_keymap_entry> *item, u32 seed0, u32 seed1);
+
+bool operator==(const input_keymap_entry &lhs, const input_keymap_entry &rhs);
+inline bool operator!=(const input_keymap_entry &lhs, const input_keymap_entry &rhs)
+{
+    return !(lhs == rhs);
+}
+
 struct input_keymap
 {
     small_str name{};
-    hashmap *hm{};
+    hashmap<u32, input_keymap_entry> hm{};
 };
 
 // The most important keymap is at the back of the array
@@ -100,7 +107,7 @@ int input_mods_from_key(u32 key);
 int input_action_from_key(u32 key);
 
 // Set keymap entry overwriting an existing one if its there
-const input_keymap_entry *input_set_keymap_entry(const input_keymap_entry *entry, input_keymap *km);
+const input_keymap_entry *input_set_keymap_entry(u32 key, const input_keymap_entry *entry, input_keymap *km);
 
 // Find keymap entry by key and return it - return null if no match is found
 const input_keymap_entry *input_get_keymap_entry(u32 key, const input_keymap *km);

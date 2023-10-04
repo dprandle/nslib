@@ -68,7 +68,7 @@ int app_init(platform_ctxt *ctxt, app_data *app)
 
     // The don't consume flag is set so that keymaps lower in the context stack will still react to this key
     input_keymap_entry sel{"Select"};
-    sel.key = input_keymap_button_key(MOUSE_BTN_RIGHT, MOD_NONE, INPUT_ACTION_RELEASE);
+    int sel_key = input_keymap_button_key(MOUSE_BTN_RIGHT, MOD_NONE, INPUT_ACTION_RELEASE);
     sel.cb = key_mbutton_func;
     sel.flags = IEVENT_FLAG_DONT_CONSUME;
     
