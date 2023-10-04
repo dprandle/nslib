@@ -259,7 +259,7 @@ void hashmap_init(hashmap<Key, Value> *hm)
     int seed1 = generate_rand_seed();
     auto hash_func = [](const void *item, u64 seed0, u64 seed1) -> u64 {
         auto cast = (typename hashmap<Key, Value>::value_type *)item;
-        return hash_type(&cast->first, seed0, seed1);
+        return hash_type(cast, seed0, seed1);
     };
 
     // We only care about == so jsut return 1 in all other cases
