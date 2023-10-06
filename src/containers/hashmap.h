@@ -165,7 +165,7 @@ bool ihashmap_scan(struct ihashmap *map, bool (*iter)(const void *item, void *ud
 //
 // The function returns true if an item was retrieved; false if the end of the
 // iteration has been reached.
-bool ihashmap_iter(struct ihashmap *map, sizet *i, void **item);
+bool ihashmap_iter(const struct ihashmap *map, sizet *i, void **item);
 
 // hashmap_sip returns a hash value for `data` using SipHash-2-4.
 u64 ihashmap_sip(const void *data, sizet len, u64 seed0, u64 seed1);
@@ -203,7 +203,6 @@ template<class Key, class Value>
 struct hashmap
 {
     using value_type = pair<const Key, Value>;
-    using iterator = value_type *;
     using mapped_type = Value;
     using key_type = Key;
 
@@ -227,9 +226,6 @@ struct hashmap
         return *this;
     }
 
-    mapped_type &operator[](const key_type &key)
-    {}
-
     ihashmap *hm{nullptr};
 };
 
@@ -238,36 +234,117 @@ malloc_func_type *get_global_malloc_func();
 realloc_func_type *get_global_realloc_func();
 free_func_type *get_global_free_func();
 
-template<class Key, class Value>
-void hashmap_terminate(hashmap<Key, Value> *hm)
+template<class K, class T, class LambdaFunc>
+void hashmap_for_each(hashmap<K, T> *hm, LambdaFunc func)
+{
+    assert(hm->hm);
+    sizet i;
+    auto item = hashmap_iter(hm, &i);
+    while (item) {
+        if (!func(item)) {
+            return;
+        }
+        item = hashmap_iter(hm, &i);
+    }
+}
+    
+template<class K, class T>
+pair<const K, T> * hashmap_iter(const hashmap<K, T> *hm, sizet *i)
+{
+    assert(hm->hm);
+    assert(i);
+    pair<const K, T> *item{nullptr};
+    ihashmap_iter(hm->hm, i, (void**)&item);
+    return item;
+}
+
+
+template<class K, class T>
+bool hashmap_next(const hashmap<K, T> *hm, sizet *i, pair<const K, T> **item)
+{
+    assert(hm->hm);
+    assert(i);
+    return ihashmap_iter(hm->hm, i, item);
+}
+
+template<class K, class T>
+pair<const K,T> *hashmap_insert(hashmap<K, T> *hm, const K &key, const T &value)
+{
+    assert(hm->hm);
+    if (hashmap_find(hm, key)) {
+        return nullptr;
+    }
+    pair<K,T> item{key,value};
+    return (pair<const K,T>*)ihashmap_set(hm->hm,&item);
+}
+
+template<class K, class T>
+pair<const K,T> *hashmap_clear(hashmap<K, T> *hm, bool update_cap)
+{
+    assert(hm->hm);
+    ihashmap_clear(hm, update_cap);
+}
+
+template<class K, class T>
+pair<const K,T> *hashmap_set(hashmap<K, T> *hm, const K &key, const T *value)
+{
+    assert(hm->hm);
+    pair<K,T> item{};
+    item.first = key;
+    item.second = *value;
+    return (pair<const K,T>*)ihashmap_set(hm->hm, &item);
+}
+    
+template<class K, class T>
+pair<const K,T> *hashmap_find(const hashmap<K, T> *hm, const K &key)
+{
+    assert(hm->hm);
+    pair<K,T> find_item{key,{}};
+    return (pair<const K,T>*)ihashmap_get(hm->hm, &find_item);
+}
+
+template<class K, class T>
+pair<const K,T> *hashmap_remove(hashmap<K, T> *hm, const K &key)
+{
+    assert(hm->hm);
+    pair<K,T> find_item{key,{}};
+    return (pair<const K, T>*)ihashmap_delete(hm->hm, &find_item);
+}
+
+template<class K, class T>
+void hashmap_terminate(hashmap<K, T> *hm)
 {
     if (hm) {
         ihashmap_free(hm->hm);
     }
 }
 
-template<class Key, class Value>
-u64 hash_type(const pair<const Key, Value> *, u64, u64)
-{
-    return 0;
-}
+// template<class K, class T>
+// u64 hash_type(const pair<const K, T> *, u64, u64)
+// {
+//     return 0;
+// }
 
 template<class Key, class Value>
 void hashmap_init(hashmap<Key, Value> *hm)
 {
     int seed0 = generate_rand_seed();
     int seed1 = generate_rand_seed();
+
+    // Hash func attempts to call the hash_type function
     auto hash_func = [](const void *item, u64 seed0, u64 seed1) -> u64 {
         auto cast = (typename hashmap<Key, Value>::value_type *)item;
         return hash_type(cast, seed0, seed1);
     };
 
-    // We only care about == so jsut return 1 in all other cases
+    // We only care about == so jsut return 1 in all other cases - If the hashed value of the keys are equal then we
+    // check to see if the key itself is equal
     auto compare_func = [](const void *a, const void *b, void *) -> i32 {
-        auto cast_a = (const pair<Key, Value> *)a;
-        auto cast_b = (const pair<Key, Value> *)b;
-        return (cast_a->second == cast_b->second) ? 0 : 1;
+        auto cast_a = (const pair<const Key, Value> *)a;
+        auto cast_b = (const pair<const Key, Value> *)b;
+        return (cast_a->first == cast_b->first) ? 0 : 1;
     };
+    
     hm->hm = ihashmap_new_with_allocator(get_global_malloc_func(),
                                          get_global_realloc_func(),
                                          get_global_free_func(),

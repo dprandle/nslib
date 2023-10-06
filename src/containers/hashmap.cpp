@@ -32,7 +32,7 @@ static struct ihashmap_bucket *bucket_at0(void *buckets, sizet bucketsz, sizet i
     return (struct ihashmap_bucket *)(((char *)buckets) + (bucketsz * i));
 }
 
-static struct ihashmap_bucket *bucket_at(struct ihashmap *map, sizet index)
+static struct ihashmap_bucket *bucket_at(const struct ihashmap *map, sizet index)
 {
     return bucket_at0(map->buckets, map->bucketsz, index);
 }
@@ -378,7 +378,7 @@ bool ihashmap_scan(struct ihashmap *map, bool (*iter)(const void *item, void *ud
     return true;
 }
 
-bool ihashmap_iter(struct ihashmap *map, sizet *i, void **item)
+bool ihashmap_iter(const struct ihashmap *map, sizet *i, void **item)
 {
     struct ihashmap_bucket *bucket;
     do {

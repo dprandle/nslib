@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <GLFW/glfw3.h>
 
+#include "logging.h"
 #include "input_mapping.h"
 #include "containers/hashmap.h"
 #include "platform.h"
@@ -85,18 +86,21 @@ void input_terminate_keymap(input_keymap *km)
     memset(km, 0, sizeof(input_keymap));
 }
 
-const input_keymap_entry *input_set_keymap_entry(u32 key, const input_keymap_entry *entry, input_keymap *km)
+bool input_set_keymap_entry(u32 key, const input_keymap_entry *entry, input_keymap *km)
 {
     assert(entry);
     assert(km);
-    return (const input_keymap_entry *)ihashmap_set(km->hm.hm, entry);
+    return hashmap_set(&km->hm, key, entry);
 }
 
 const input_keymap_entry *input_get_keymap_entry(u32 key, const input_keymap *km)
 {
     assert(km);
-    input_keymap_entry ie{{}, key};
-    return (const input_keymap_entry *)ihashmap_get(km->hm.hm, &ie);
+    auto item = hashmap_find(&km->hm, key);
+    if (item) {
+        return &item->second;
+    }
+    return nullptr;
 }
 
 const input_keymap_entry *input_get_keymap_entry(const char *name, const input_keymap *km)
@@ -104,21 +108,20 @@ const input_keymap_entry *input_get_keymap_entry(const char *name, const input_k
     assert(name);
     assert(km);
     sizet i{0};
-    void *item{};
-    while (ihashmap_iter(km->hm.hm, &i, &item)) {
-        input_keymap_entry *kitem = (input_keymap_entry *)item;
-        if (strncmp(name, kitem->name, SMALL_STR_LEN) == 0) {
-            return kitem;
+    auto item = hashmap_iter(&km->hm, &i);
+    while (item) {
+        if (strncmp(name, item->second.name, SMALL_STR_LEN) == 0) {
+            return &item->second;
         }
+        item = hashmap_iter(&km->hm, &i);
     }
     return nullptr;
 }
 
-const input_keymap_entry *input_remove_keymap_entry(const input_keymap_entry *entry, input_keymap *km)
+bool input_remove_keymap_entry(u32 key, input_keymap *km)
 {
-    assert(entry);
     assert(km);
-    return (const input_keymap_entry *)ihashmap_delete(km->hm.hm, entry);
+    return hashmap_remove(&km->hm, key);
 }
 
 // Push km to the top of the keymap stack - top is highest priority in input_map_event

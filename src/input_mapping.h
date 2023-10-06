@@ -67,7 +67,6 @@ struct input_keymap_entry
     void *cb_user_param{};
 };
 
-template<u32, input_keymap_entry>
 u64 hash_type(const pair<const u32, input_keymap_entry> *item, u32 seed0, u32 seed1);
 
 bool operator==(const input_keymap_entry &lhs, const input_keymap_entry &rhs);
@@ -107,8 +106,9 @@ int input_mods_from_key(u32 key);
 // Get the action from the hash key
 int input_action_from_key(u32 key);
 
-// Set keymap entry overwriting an existing one if its there
-const input_keymap_entry *input_set_keymap_entry(u32 key, const input_keymap_entry *entry, input_keymap *km);
+// Set keymap entry overwriting an existing one if its there - returns true if overwrote an existing entry otherwise
+// returns false
+bool input_set_keymap_entry(u32 key, const input_keymap_entry *entry, input_keymap *km);
 
 // Find keymap entry by key and return it - return null if no match is found
 const input_keymap_entry *input_get_keymap_entry(u32 key, const input_keymap *km);
@@ -116,8 +116,8 @@ const input_keymap_entry *input_get_keymap_entry(u32 key, const input_keymap *km
 // Find the keymap entry with name and return it - return null if no match is found
 const input_keymap_entry *input_get_keymap_entry(const char *name, const input_keymap *km);
 
-// Remove a keymap entry from the hashmap and return it
-const input_keymap_entry *input_remove_keymap_entry(const input_keymap_entry *entry, input_keymap *km);
+// Remove a keymap entry - returns true if removed
+bool input_remove_keymap_entry(u32 key, input_keymap *km);
 
 // Map the platform event to input_keymap_entries
 void input_map_event(const platform_input_event *raw, const input_keymap_stack *stack);
