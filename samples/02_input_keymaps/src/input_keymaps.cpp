@@ -115,6 +115,8 @@ int app_init(platform_ctxt *ctxt, app_data *app)
     push_km.cb_user_param = app;
 
     input_keymap_entry push_km2{"Push KM 2"};
+    push_km2.flags = 27;
+    push_km2.cb_user_param = app;
     push_km2.cb = [](const input_event *ev, void *user) {
         ilog("%s", ev->name);
         auto app = (app_data *)user;
@@ -122,7 +124,6 @@ int app_init(platform_ctxt *ctxt, app_data *app)
             input_push_keymap(&app->km2, &app->stack);
         }
     };
-    push_km2.cb_user_param = app;
 
     input_keymap_entry pop_km{"Pop KM"};
     pop_km.cb = [](const input_event *ev, void *user) {
@@ -132,6 +133,7 @@ int app_init(platform_ctxt *ctxt, app_data *app)
             input_pop_keymap(&app->stack);
         }
     };
+
     pop_km.cb_user_param = app;
     input_set_keymap_entry(input_keymap_button_key(KEY_N1, MOD_ANY, INPUT_ACTION_PRESS), &push_km, &app->km3);
     input_set_keymap_entry(input_keymap_button_key(KEY_N2, MOD_ANY, INPUT_ACTION_PRESS), &push_km2, &app->km3);

@@ -274,7 +274,7 @@ pair<const K,T> *hashmap_insert(hashmap<K, T> *hm, const K &key, const T &value)
     if (hashmap_find(hm, key)) {
         return nullptr;
     }
-    pair<K,T> item{key,value};
+    pair<const K,T> item{key,value};
     return (pair<const K,T>*)ihashmap_set(hm->hm,&item);
 }
 
@@ -289,9 +289,7 @@ template<class K, class T>
 pair<const K,T> *hashmap_set(hashmap<K, T> *hm, const K &key, const T *value)
 {
     assert(hm->hm);
-    pair<K,T> item{};
-    item.first = key;
-    item.second = *value;
+    pair<const K,T> item{key, *value};
     return (pair<const K,T>*)ihashmap_set(hm->hm, &item);
 }
     
@@ -299,15 +297,20 @@ template<class K, class T>
 pair<const K,T> *hashmap_find(const hashmap<K, T> *hm, const K &key)
 {
     assert(hm->hm);
-    pair<K,T> find_item{key,{}};
-    return (pair<const K,T>*)ihashmap_get(hm->hm, &find_item);
+    pair<const K,T> find_item{key,{}};
+    auto item = (pair<const K,T>*)ihashmap_get(hm->hm, &find_item);
+    if (item) {
+        auto item2 = (pair<const K,T>*)ihashmap_get(hm->hm, &find_item);
+        return item;
+    }
+    return nullptr;
 }
 
 template<class K, class T>
 pair<const K,T> *hashmap_remove(hashmap<K, T> *hm, const K &key)
 {
     assert(hm->hm);
-    pair<K,T> find_item{key,{}};
+    pair<const K,T> find_item{key,{}};
     return (pair<const K, T>*)ihashmap_delete(hm->hm, &find_item);
 }
 
@@ -333,7 +336,7 @@ void hashmap_init(hashmap<Key, Value> *hm)
 
     // Hash func attempts to call the hash_type function
     auto hash_func = [](const void *item, u64 seed0, u64 seed1) -> u64 {
-        auto cast = (typename hashmap<Key, Value>::value_type *)item;
+        auto cast = (const pair<const Key, Value> *)item;
         return hash_type(cast, seed0, seed1);
     };
 
@@ -348,7 +351,7 @@ void hashmap_init(hashmap<Key, Value> *hm)
     hm->hm = ihashmap_new_with_allocator(get_global_malloc_func(),
                                          get_global_realloc_func(),
                                          get_global_free_func(),
-                                         sizeof(Value),
+                                         sizeof(pair<Key,Value>),
                                          0,
                                          seed0,
                                          seed1,
