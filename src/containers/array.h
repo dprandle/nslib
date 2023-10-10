@@ -1,5 +1,6 @@
 #pragma once
 
+#include <utility>
 #include "../basic_types.h"
 #include "../mem.h"
 
@@ -39,6 +40,29 @@ struct array
     sizet size{};
     sizet capacity{};
 
+    array()
+    {}
+
+    array(const array &copy)
+    {
+        arr_init(this, copy.arena, copy.capacity);
+        arr_copy(this, &copy);
+    }
+
+    ~array()
+    {
+        arr_terminate(this);
+    }
+
+    array &operator=(array rhs)
+    {
+        std::swap(arena, rhs.arena);
+        std::swap(size, rhs.size);
+        std::swap(capacity, rhs.capacity);
+        std::swap(data, rhs.data);
+        return *this;
+    }
+
     inline const T &operator[](sizet ind) const
     {
         return data[ind];
@@ -50,7 +74,7 @@ struct array
 };
 
 template<class T>
-void arr_init(array<T> *arr, mem_arena *arena, sizet initial_capacity=0)
+void arr_init(array<T> *arr, mem_arena *arena, sizet initial_capacity = 0)
 {
     arr->arena = arena;
     arr_set_capacity(arr, initial_capacity);
@@ -60,7 +84,6 @@ template<class T>
 void arr_terminate(array<T> *arr)
 {
     mem_free(arr->data, arr->arena);
-    *arr = {};
 }
 
 template<class T>
@@ -92,7 +115,7 @@ void arr_copy(array<T> *dest, const array<T> *source)
 {
     arr_resize(dest, source->size);
     for (sizet i = 0; i < source->size; ++i) {
-        dest[i] = source[i];
+        (*dest)[i] = (*source)[i];
     }
 }
 
@@ -102,7 +125,7 @@ void arr_set_capacity(array<T> *arr, sizet new_cap)
     // New cap can't be any smaller than mem_nod since we are using free list allocator
     while (new_cap * sizeof(T) < sizeof(mem_node))
         ++new_cap;
-    arr->data = (T*)mem_realloc(arr->data, new_cap*sizeof(T), arr->arena);
+    arr->data = (T *)mem_realloc(arr->data, new_cap * sizeof(T), arr->arena);
     arr->capacity = new_cap;
 
     // Shrink the old size if its greater than the new capacity (so we only copy those items)
@@ -142,7 +165,7 @@ T *arr_push_back(array<T> *arr, const T &item)
 
     T *ret = &arr->data[arr->size];
     *ret = item;
-    ++arr->buf.size;
+    ++arr->size;
     return ret;
 }
 

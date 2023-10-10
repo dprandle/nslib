@@ -212,7 +212,13 @@ struct hashmap
 
     // Deep copy the contents of copy in to this hashmap - use the same allocators as copy as well
     hashmap(const hashmap &copy)
-    {}
+    {
+        hashmap_init(this);
+        auto hm_item = hashmap_iter(&copy);
+        while (hm_item) {
+            hashmap_set(*this, hm_item);
+        }
+    }
 
     // Clear all items and release associated memory
     ~hashmap()
@@ -223,6 +229,9 @@ struct hashmap
     // Operator= uses copy and swap idiom
     hashmap &operator=(hashmap rhs)
     {
+        auto tmp = hm;
+        hm = rhs.hm;
+        rhs.hm = tmp;
         return *this;
     }
 
@@ -247,9 +256,19 @@ void hashmap_for_each(hashmap<K, T> *hm, LambdaFunc func)
         item = hashmap_iter(hm, &i);
     }
 }
-    
+
 template<class K, class T>
-pair<const K, T> * hashmap_iter(const hashmap<K, T> *hm, sizet *i)
+const pair<const K, T> * hashmap_iter(const hashmap<K, T> *hm, sizet *i)
+{
+    assert(hm->hm);
+    assert(i);
+    pair<const K, T> *item{nullptr};
+    ihashmap_iter(hm->hm, i, (void**)&item);
+    return item;
+}
+
+template<class K, class T>
+pair<const K, T> * hashmap_iter(hashmap<K, T> *hm, sizet *i)
 {
     assert(hm->hm);
     assert(i);
@@ -260,7 +279,15 @@ pair<const K, T> * hashmap_iter(const hashmap<K, T> *hm, sizet *i)
 
 
 template<class K, class T>
-bool hashmap_next(const hashmap<K, T> *hm, sizet *i, pair<const K, T> **item)
+bool hashmap_next(const hashmap<K, T> *hm, sizet *i, const pair<const K, T> **item)
+{
+    assert(hm->hm);
+    assert(i);
+    return ihashmap_iter(hm->hm, i, item);
+}
+
+template<class K, class T>
+bool hashmap_next(hashmap<K, T> *hm, sizet *i, pair<const K, T> **item)
 {
     assert(hm->hm);
     assert(i);
@@ -292,18 +319,21 @@ pair<const K,T> *hashmap_set(hashmap<K, T> *hm, const K &key, const T *value)
     pair<const K,T> item{key, *value};
     return (pair<const K,T>*)ihashmap_set(hm->hm, &item);
 }
-    
+
 template<class K, class T>
-pair<const K,T> *hashmap_find(const hashmap<K, T> *hm, const K &key)
+const pair<const K,T> *hashmap_find(const hashmap<K, T> *hm, const K &key)
 {
     assert(hm->hm);
     pair<const K,T> find_item{key,{}};
-    auto item = (pair<const K,T>*)ihashmap_get(hm->hm, &find_item);
-    if (item) {
-        auto item2 = (pair<const K,T>*)ihashmap_get(hm->hm, &find_item);
-        return item;
-    }
-    return nullptr;
+    return (pair<const K,T>*)ihashmap_get(hm->hm, &find_item);
+}
+
+template<class K, class T>
+pair<const K,T> *hashmap_find(hashmap<K, T> *hm, const K &key)
+{
+    assert(hm->hm);
+    pair<const K,T> find_item{key,{}};
+    return (pair<const K,T>*)ihashmap_get(hm->hm, &find_item);
 }
 
 template<class K, class T>

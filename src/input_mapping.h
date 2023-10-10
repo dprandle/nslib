@@ -111,11 +111,17 @@ int input_action_from_key(u32 key);
 bool input_set_keymap_entry(u32 key, const input_keymap_entry *entry, input_keymap *km);
 
 // Find keymap entry by key and return it - return null if no match is found
-input_keymap_entry *input_get_keymap_entry(u32 key, const input_keymap *km);
+input_keymap_entry *input_get_keymap_entry(u32 key, input_keymap *km);
 
 // Find the keymap entry with name and return it - return null if no match is found
-input_keymap_entry *input_get_keymap_entry(const char *name, const input_keymap *km);
+input_keymap_entry *input_get_keymap_entry(const char *name, input_keymap *km);
 
+// Find keymap entry by key and return it - return null if no match is found
+const input_keymap_entry *input_get_keymap_entry(u32 key, const input_keymap *km);
+
+// Find the keymap entry with name and return it - return null if no match is found
+const input_keymap_entry *input_get_keymap_entry(const char *name, const input_keymap *km);
+    
 // Remove a keymap entry - returns true if removed
 bool input_remove_keymap_entry(u32 key, input_keymap *km);
 

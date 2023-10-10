@@ -93,7 +93,7 @@ bool input_set_keymap_entry(u32 key, const input_keymap_entry *entry, input_keym
     return hashmap_set(&km->hm, key, entry);
 }
 
-input_keymap_entry *input_get_keymap_entry(u32 key, const input_keymap *km)
+input_keymap_entry *input_get_keymap_entry(u32 key, input_keymap *km)
 {
     assert(km);
     auto item = hashmap_find(&km->hm, key);
@@ -103,7 +103,17 @@ input_keymap_entry *input_get_keymap_entry(u32 key, const input_keymap *km)
     return nullptr;
 }
 
-input_keymap_entry *input_get_keymap_entry(const char *name, const input_keymap *km)
+const input_keymap_entry *input_get_keymap_entry(u32 key, const input_keymap *km)
+{
+    assert(km);
+    auto item = hashmap_find(&km->hm, key);
+    if (item) {
+        return &item->second;
+    }
+    return nullptr;
+}
+
+input_keymap_entry *input_get_keymap_entry(const char *name, input_keymap *km)
 {
     assert(name);
     assert(km);
@@ -117,6 +127,22 @@ input_keymap_entry *input_get_keymap_entry(const char *name, const input_keymap 
     }
     return nullptr;
 }
+
+const input_keymap_entry *input_get_keymap_entry(const char *name, const input_keymap *km)
+{
+    assert(name);
+    assert(km);
+    sizet i{0};
+    auto item = hashmap_iter(&km->hm, &i);
+    while (item) {
+        if (strncmp(name, item->second.name, SMALL_STR_LEN) == 0) {
+            return &item->second;
+        }
+        item = hashmap_iter(&km->hm, &i);
+    }
+    return nullptr;
+}
+    
 
 bool input_remove_keymap_entry(u32 key, input_keymap *km)
 {
@@ -167,8 +193,8 @@ void input_map_event(const platform_input_event *raw, const input_keymap_stack *
 
     for (u8 i = stack->count; i != 0; --i) {
         const input_keymap *cur_map = stack->kmaps[i - 1];
-        input_keymap_entry *kentry = input_get_keymap_entry(key, cur_map);
-        input_keymap_entry *kanymod = input_get_keymap_entry(key_any, cur_map);
+        const input_keymap_entry *kentry = input_get_keymap_entry(key, cur_map);
+        const input_keymap_entry *kanymod = input_get_keymap_entry(key_any, cur_map);
 
         bool should_return = false;
         if (kentry) {
