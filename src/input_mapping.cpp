@@ -29,11 +29,6 @@ intern void fill_event_from_platform_event(const platform_input_event *raw, inpu
     }
 }
 
-u64 hash_type(const pair<const u32, input_keymap_entry> *item, u32 seed0, u32 seed1)
-{
-    return item->first;
-}
-
 bool operator==(const input_keymap_entry &lhs, const input_keymap_entry &rhs)
 {
     return strcmp(lhs.name, rhs.name);

@@ -6,7 +6,7 @@
 #include "math/algorithm.h"
 #include "vkrenderer.h"
 #include "logging.h"
-#include "mem.h"
+#include "memory.h"
 
 #define PRINT_MEM_DEBUG false
 #define PRINT_MEM_INSTANCE_ONLY true

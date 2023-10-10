@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include "../basic_types.h"
+#include "../hashfuncs.h"
 
 namespace nslib
 {
@@ -167,15 +168,6 @@ bool ihashmap_scan(struct ihashmap *map, bool (*iter)(const void *item, void *ud
 // iteration has been reached.
 bool ihashmap_iter(const struct ihashmap *map, sizet *i, void **item);
 
-// hashmap_sip returns a hash value for `data` using SipHash-2-4.
-u64 ihashmap_sip(const void *data, sizet len, u64 seed0, u64 seed1);
-
-// hashmap_murmur returns a hash value for `data` using Murmur3_86_128.
-u64 ihashmap_murmur(const void *data, sizet len, u64 seed0, u64 seed1);
-
-// hashmap_xxhash3 returns a hash value for `data` using xxhash algorithm
-u64 ihashmap_xxhash3(const void *data, sizet len, u64 seed0, u64 seed1);
-
 // hashmap_get_with_hash works like hashmap_get but you provide your
 // own hash. The 'hash' callback provided to the hashmap_new function
 // will not be called
@@ -192,9 +184,6 @@ const void *ihashmap_delete_with_hash(struct ihashmap *map, const void *key, u64
 const void *ihashmap_set_with_hash(struct ihashmap *map, const void *item, u64 hash);
 
 void ihashmap_set_grow_by_power(struct ihashmap *map, sizet power);
-
-template<class Key, class Value>
-using hashmap_hash_func = u64(const pair<const Key, Value> &k, u64 seed0, u64 seed1);
 
 // hashmap is an open addressed hash map using robinhood hashing.
 // Since hashmap manages memory, but we want it to act like a built in type in terms of copying and equality testing, we
@@ -352,12 +341,6 @@ void hashmap_terminate(hashmap<K, T> *hm)
     }
 }
 
-// template<class K, class T>
-// u64 hash_type(const pair<const K, T> *, u64, u64)
-// {
-//     return 0;
-// }
-
 template<class Key, class Value>
 void hashmap_init(hashmap<Key, Value> *hm)
 {
@@ -367,7 +350,7 @@ void hashmap_init(hashmap<Key, Value> *hm)
     // Hash func attempts to call the hash_type function
     auto hash_func = [](const void *item, u64 seed0, u64 seed1) -> u64 {
         auto cast = (const pair<const Key, Value> *)item;
-        return hash_type(cast, seed0, seed1);
+        return hash_type(cast->first, seed0, seed1);
     };
 
     // We only care about == so jsut return 1 in all other cases - If the hashed value of the keys are equal then we

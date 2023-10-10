@@ -1,5 +1,5 @@
 #pragma once
-#include "mem.h"
+#include "memory.h"
 #include "profile_timer.h"
 #include "math/vector2.h"
 #include "containers/array.h"
@@ -185,8 +185,8 @@ sizet platform_write_file(const char *fname,
 } // namespace nslib
 
 #define DEFINE_APPLICATION_MAIN(client_app_data_type)                                                                                      \
-    client_app_data_type client_app_data{};                                                                                                \
     nslib::platform_ctxt ctxt{};                                                                                                           \
+    client_app_data_type client_app_data{};                                                                                                \
     int load_platform_settings(nslib::platform_init_info *settings, client_app_data_type *client_app_data);                                \
     int app_init(nslib::platform_ctxt *ctxt, client_app_data_type *client_app_data);                                                       \
     int app_terminate(nslib::platform_ctxt *ctxt, client_app_data_type *client_app_data);                                                  \

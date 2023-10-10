@@ -1,12 +1,13 @@
 #include "input_mapping.h"
 #include "platform.h"
 #include "logging.h"
+#include "robj_common.h"
+#include "containers/string.h"
 
 using namespace nslib;
 
 struct app_data
 {
-
 };
 
 int load_platform_settings(platform_init_info *settings, app_data *app)
@@ -19,7 +20,7 @@ int load_platform_settings(platform_init_info *settings, app_data *app)
 int app_init(platform_ctxt *ctxt, app_data *app)
 {
     array<int> arr1;
-    arr_init(&arr1, &ctxt->arenas.free_list);
+    arr_init(&arr1);
     arr_push_back(&arr1, 35);
     arr_push_back(&arr1, 22);
     arr_push_back(&arr1, 12);
@@ -33,7 +34,15 @@ int app_init(platform_ctxt *ctxt, app_data *app)
             ilog("Arr2[%d]: %d", i, arr2[i]);
         }
     }
-    
+
+    array<rid> rids;
+    rid id1 = gen_id("id1");
+    rid id2 = gen_id("id2");
+    rid id3 = gen_id("id3");
+    rid id4 = gen_id("this_is_some_longer_text");
+
+    string str;
+
     return err_code::PLATFORM_NO_ERROR;
 }
 

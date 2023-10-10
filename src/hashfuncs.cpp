@@ -468,4 +468,25 @@ void crc32(const void *key, sizet len, u32 seed, void *out)
     *(u32 *)out = crc;
 }
 
+
+u64 hash_ptr_sip(const void *data, sizet len, u64 seed0, u64 seed1)
+{
+    return siphash((u8 *)data, len, seed0, seed1);
+}
+
+u64 hash_ptr_murmur(const void *data, sizet len, u64 seed0, u64)
+{
+    return murmurhash3(data, len, (u32)seed0);
+}
+
+u64 hash_ptr_xxhash3(const void *data, sizet len, u64 seed0, u64)
+{
+    return xxhash3(data, len, seed0);
+}
+
+u64 hash_type(const char* key, u64 seed0, u64 seed1)
+{
+    return hash_ptr_murmur(key, strlen(key), seed0, seed1);
+}
+
 } // namespace nslib

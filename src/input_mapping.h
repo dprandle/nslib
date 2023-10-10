@@ -67,8 +67,6 @@ struct input_keymap_entry
     void *cb_user_param{};
 };
 
-u64 hash_type(const pair<const u32, input_keymap_entry> *item, u32 seed0, u32 seed1);
-
 bool operator==(const input_keymap_entry &lhs, const input_keymap_entry &rhs);
 inline bool operator!=(const input_keymap_entry &lhs, const input_keymap_entry &rhs)
 {

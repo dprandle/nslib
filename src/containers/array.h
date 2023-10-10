@@ -2,11 +2,10 @@
 
 #include <utility>
 #include "../basic_types.h"
-#include "../mem.h"
+#include "../memory.h"
 
 namespace nslib
 {
-
 template<class T, sizet N>
 struct static_array
 {
@@ -74,9 +73,12 @@ struct array
 };
 
 template<class T>
-void arr_init(array<T> *arr, mem_arena *arena, sizet initial_capacity = 0)
+void arr_init(array<T> *arr, mem_arena *arena=nullptr, sizet initial_capacity = 0)
 {
     arr->arena = arena;
+    if (!arr->arena) {
+        arr->arena = mem_global_arena();
+    }
     arr_set_capacity(arr, initial_capacity);
 }
 

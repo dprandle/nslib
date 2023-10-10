@@ -4,7 +4,7 @@
 
 #include "logging.h"
 #include "platform.h"
-#include "mem.h"
+#include "memory.h"
 #include "math/algorithm.h"
 
 #include <iostream>

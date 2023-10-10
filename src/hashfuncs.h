@@ -46,4 +46,27 @@ u64 xxhash3(const void *data, sizet len, u64 seed);
 
 void crc32(const void *key, int len, u32 seed, void *out);
 
+// hashmap_sip returns a hash value for `data` using SipHash-2-4.
+u64 hash_ptr_sip(const void *data, sizet len, u64 seed0, u64 seed1);
+
+// hashmap_murmur returns a hash value for `data` using Murmur3_86_128.
+u64 hash_ptr_murmur(const void *data, sizet len, u64 seed0, u64 seed1);
+
+// hashmap_xxhash3 returns a hash value for `data` using xxhash algorithm
+u64 hash_ptr_xxhash3(const void *data, sizet len, u64 seed0, u64 seed1);
+
+// Simply 1 for 1 hash - the key has been computed already and we just make use of the hash buckets
+inline u64 hash_type(u32 key, u64, u64) {
+    return (u64)key;
+}
+
+// Simply 1 for 1 hash - the key has been computed already and we just make use of the hash buckets
+inline u64 hash_type(u64 key, u64, u64) {
+    return key;
+}
+
+// Hash strings
+u64 hash_type(const char* key, u64, u64);
+
+
 } // namespace nslib
