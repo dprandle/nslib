@@ -91,7 +91,7 @@ void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment=8);
 
 void *mem_alloc(sizet bytes);
 
-void *mem_realloc(void *ptr, sizet size, mem_arena *arena, sizet alignment = 8);
+void *mem_realloc(void *ptr, sizet size, mem_arena *arena, sizet alignment = 8, bool free_ptr_after_cpy=true);
 
 void *mem_realloc(void *ptr, sizet size);
 

@@ -55,10 +55,7 @@ struct array
 
     array &operator=(array rhs)
     {
-        std::swap(arena, rhs.arena);
-        std::swap(size, rhs.size);
-        std::swap(capacity, rhs.capacity);
-        std::swap(data, rhs.data);
+        swap(this, &rhs);
         return *this;
     }
 
@@ -73,7 +70,16 @@ struct array
 };
 
 template<class T>
-void arr_init(array<T> *arr, mem_arena *arena=nullptr, sizet initial_capacity = 0)
+void swap(array<T> *lhs, array<T> *rhs)
+{
+    std::swap(lhs->arena, rhs->arena);
+    std::swap(lhs->size, rhs->size);
+    std::swap(lhs->capacity, rhs->capacity);
+    std::swap(lhs->data, rhs->data);
+}
+
+template<class T>
+void arr_init(array<T> *arr, mem_arena *arena = nullptr, sizet initial_capacity = 0)
 {
     arr->arena = arena;
     if (!arr->arena) {

@@ -313,7 +313,7 @@ sizet mem_block_size(void *ptr, mem_arena *arena)
     return 0;
 }
 
-void *mem_realloc(void *ptr, sizet new_size, mem_arena *arena, sizet alignment)
+void *mem_realloc(void *ptr, sizet new_size, mem_arena *arena, sizet alignment, bool free_ptr_after_copy)
 {
     if (!arena) {
         arena = g_fl_arena;
@@ -330,7 +330,9 @@ void *mem_realloc(void *ptr, sizet new_size, mem_arena *arena, sizet alignment)
             block_size = mem_block_size(ptr, arena);
             assert(block_size > 0);
             memcpy(new_block, ptr, block_size);
-            mem_free(ptr, arena);
+            if (free_ptr_after_copy) {
+                mem_free(ptr, arena);
+            }
         }
         
         return new_block;
