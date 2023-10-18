@@ -17,7 +17,7 @@ struct rid
     u64 id{0};
 };
 
-string to_string(const rid &rid);
+string makestr(const rid &rid);
 
 inline u64 hash_type(const rid &id, u64, u64)
 {

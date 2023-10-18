@@ -2,6 +2,7 @@
 
 #include "ihashmap.h"
 #include "../hashfuncs.h"
+#include "string.h"
 
 namespace nslib
 {
@@ -47,7 +48,21 @@ template<class T, class LambdaFunc>
 void hashset_for_each(hashset<T> *hs, LambdaFunc func)
 {
     assert(hs->hm);
-    sizet i;
+    sizet i{};
+    auto item = hashset_iter(hs, &i);
+    while (item) {
+        if (!func(item)) {
+            return;
+        }
+        item = hashset_iter(hs, &i);
+    }
+}
+
+template<class T, class LambdaFunc>
+void hashset_for_each(const hashset<T> *hs, LambdaFunc func)
+{
+    assert(hs->hm);
+    sizet i{};
     auto item = hashset_iter(hs, &i);
     while (item) {
         if (!func(item)) {
@@ -179,5 +194,18 @@ void hashset_init(hashset<T> *hs)
                                          nullptr,
                                          hs);
 }
+
+template<class T>
+string makestr(const hashset<T> &hs) {
+    string ret("\nhashset {");
+    auto for_each = [&ret](const T *item) {
+        ret += "\n" + makestr(*item);
+        return true;
+    };
+    hashset_for_each(&hs, for_each);
+    ret += "\n}";
+    return ret;
+}
+
 
 } // namespace nslib

@@ -53,7 +53,21 @@ template<class K, class T, class LambdaFunc>
 void hashmap_for_each(hashmap<K, T> *hm, LambdaFunc func)
 {
     assert(hm->hm);
-    sizet i;
+    sizet i{};
+    auto item = hashmap_iter(hm, &i);
+    while (item) {
+        if (!func(item)) {
+            return;
+        }
+        item = hashmap_iter(hm, &i);
+    }
+}
+
+template<class K, class T, class LambdaFunc>
+void hashmap_for_each(const hashmap<K, T> *hm, LambdaFunc func)
+{
+    assert(hm->hm);
+    sizet i{};
     auto item = hashmap_iter(hm, &i);
     while (item) {
         if (!func(item)) {
@@ -192,14 +206,15 @@ void hashmap_init(hashmap<Key, Value> *hm)
 }
 
 template<class Key, class Value>
-string to_string(const hashmap<Key, Value> &hm) {
+string makestr(const hashmap<Key, Value> &hm) {
     string ret("\nhashmap {");
-    auto for_each = [&ret](const pair<const Key, Value> *item) {
-        ret += "\nkey: " + to_string(item->first);
-        ret += "\nval: " + to_string(item->second);
+    auto for_each = [&ret](const pair<const Key, Value> *item) -> bool {
+        ret += "\nkey: " + makestr(item->first);
+        ret += "\nval: " + makestr(item->second);
+        return true;
     };
+    hashmap_for_each(&hm, for_each);
     ret += "\n}";
-    hashmap_for_each(hm, for_each);
     return ret;
 }
 

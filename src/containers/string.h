@@ -6,6 +6,7 @@
 namespace nslib
 {
 
+#define makecstr(p) str_cstr(makestr(p))
 struct string
 {
     using iterator = char *;
@@ -38,6 +39,11 @@ inline bool operator!=(const string &lhs, const string &rhs)
 inline const char *str_cstr(const string *str)
 {
     return (str->buf.capacity > string::SMALL_STR_SIZE) ? str->buf.data : str->sos;
+}
+
+inline const char *str_cstr(const string &str)
+{
+    return (str.buf.capacity > string::SMALL_STR_SIZE) ? str.buf.data : str.sos;
 }
 
 inline char *str_data(string *str)
@@ -104,30 +110,33 @@ string *str_args(string *dest, const char *format_txt, Args &&...args)
 u64 hash_type(const string &key, u64 seed0, u64 seed1);
 
 template<signed_integral T>
-string to_string(T n) {
+string makestr(T n) {
     string ret;
     str_args(&ret, "%d", n);
     return ret;
 }
 
 template<unsigned_integral T>
-string to_string(T n) {
+string makestr(T n) {
     string ret;
     str_args(&ret, "%u", n);
     return ret;
 }
 
 template<floating_pt T>
-string to_string(T n) {
+string makestr(T n) {
     string ret;
     str_args(&ret, "%f", n);
     return ret;
 }
 
-string to_string(void* i);
-string to_string(i64 i);
-string to_string(u64 i);
-string to_string(char c);
+inline const string& makestr(const string &str) {return str;}
+
+
+string makestr(void* i);
+string makestr(i64 i);
+string makestr(u64 i);
+string makestr(char c);
 
 
 

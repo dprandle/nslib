@@ -24,6 +24,12 @@ bool operator==(const custom_type_0 &lhs, const custom_type_0 &rhs) {
     return (lhs.id == rhs.id && lhs.val1 == rhs.val1);
 }
 
+string makestr(const custom_type_0 &item) {
+    string ret;
+    str_args(&ret, "val1:%d str:%s", item.val1, makecstr(item.id));
+    return ret;
+}
+
 struct custom_type_1 {
     int val1;
     string str;
@@ -37,12 +43,22 @@ bool operator==(const custom_type_1 &lhs, const custom_type_1 &rhs) {
     return (lhs.str == rhs.str && lhs.val1 == rhs.val1);
 }
 
+string makestr(const custom_type_1 &item) {
+    string ret;
+    str_args(&ret, "val1:%d str:%s", item.val1, str_cstr(&item.str));
+    return ret;
+}
 
 struct custom_type_2 {
     int val1;
     int val2;
 };
 
+string makestr(const custom_type_2 &item) {
+    string ret;
+    str_args(&ret, "val1:%d val2:%d", item.val1, item.val2);
+    return ret;
+}
 
 int load_platform_settings(platform_init_info *settings, app_data *app)
 {
@@ -77,14 +93,14 @@ void test_arrays()
         }
     }
 
-    arr_push_back(&rids, rid("id1"));
-    arr_push_back(&rids, rid("id2"));
-    arr_push_back(&rids, rid("id3"));
-    arr_push_back(&rids, rid("id4"));
+    arr_push_back(&rids, rid("key1"));
+    arr_push_back(&rids, rid("key2"));
+    arr_push_back(&rids, rid("key3"));
+    arr_push_back(&rids, rid("key4"));
     
     auto iter = arr_begin(&rids);
     while (iter != arr_end(&rids)) {
-        output += to_string(*iter);
+        output += makestr(*iter);
         ++iter;
     }
     ilog("Output: %s", str_cstr(&output));
@@ -137,7 +153,13 @@ void test_hashmaps()
     hashset_set(&hs4, custom_type_1{2, "key2"});
     hashset_set(&hs4, custom_type_1{3, "key3"});
     hashset_set(&hs4, custom_type_1{4, "key4"});
-    
+
+    ilog("HM1 %s", makecstr(hm1));
+    ilog("HM2 %s", makecstr(hm2));
+    ilog("HS1 %s", makecstr(hs1));
+    ilog("HS2 %s", makecstr(hs2));
+    ilog("HS3 %s", makecstr(hs3));
+    ilog("HS4 %s", makecstr(hs4));
 }
 
 

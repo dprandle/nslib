@@ -238,28 +238,28 @@ u64 hash_type(const string &key, u64 seed0, u64 seed1)
     return hash_type(str_cstr(&key), seed0, seed1);
 }
 
-string to_string(char c)
+string makestr(char c)
 {
     string ret;
     str_args(&ret, "%c", c);
     return ret;
 }
 
-string to_string(u64 i)
+string makestr(u64 i)
 {
     string ret;
     str_args(&ret, "%lu", i);
     return ret;
 }
 
-string to_string(i64 i)
+string makestr(i64 i)
 {
     string ret;
     str_args(&ret, "%ld", i);
     return ret;
 }
 
-string to_string(void* i)
+string makestr(void* i)
 {
     string ret;
     str_args(&ret, "%p", i);

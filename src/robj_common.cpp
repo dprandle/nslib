@@ -13,10 +13,10 @@ rid::rid(const string &_str) : str(_str), id(hash_type(str, 0, 0))
 rid::rid(const char *_str) : str(_str), id(hash_type(str, 0, 0))
 {}
 
-string to_string(const rid &rid)
+string makestr(const rid &rid)
 {
     string ret;
-    ret += "\nrid {\nid:" + to_string(rid.id) + "\nstr:" + rid.str + "\n}";
+    ret += "\nrid {\nid:" + makestr(rid.id) + "\nstr:" + rid.str + "\n}";
     return ret;
 }
 
