@@ -146,7 +146,7 @@ intern void *mem_free_list_alloc(mem_arena *arena, sizet size, sizet alignment)
     arena->used += required_size;
     arena->peak = std::max(arena->peak, arena->used);
 
-    #if DO_DEBUG_PRINT
+#if DO_DEBUG_PRINT
     dlog("@H:%p @D:%p S:%d AP:%d P:%d M:%d R:%d",
          (void *)header_addr,
          (void *)data_addr,
@@ -155,7 +155,7 @@ intern void *mem_free_list_alloc(mem_arena *arena, sizet size, sizet alignment)
          padding,
          arena->used,
          rest);
-    #endif
+#endif
     return (void *)data_addr;
 }
 
@@ -193,9 +193,9 @@ intern void mem_free_list_free(mem_arena *arena, void *ptr)
 
     // Merge contiguous nodes
     coalescence(&arena->mfl, it_prev, free_node);
-    #if DO_DEBUG_PRINT
+#if DO_DEBUG_PRINT
     dlog("ptr:%p H:%p S:%d M:%d", ptr, (void *)free_node, free_node->data.block_size, arena->used);
-    #endif
+#endif
 }
 
 intern void *mem_pool_alloc(mem_arena *arena)
@@ -280,26 +280,34 @@ void *mem_alloc(sizet bytes)
 
 void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment)
 {
+    void *ret{nullptr};
     if (!arena) {
         arena = g_fl_arena;
     }
     if (arena) {
         switch (arena->alloc_type) {
         case (MEM_ALLOC_FREE_LIST):
-            return mem_free_list_alloc(arena, bytes, alignment);
+            ret = mem_free_list_alloc(arena, bytes, alignment);
+            break;
         case (MEM_ALLOC_POOL):
             assert(bytes == arena->mpool.chunk_size);
-            return mem_pool_alloc(arena);
+            ret = mem_pool_alloc(arena);
+            break;
         case (MEM_ALLOC_STACK):
-            return mem_stack_alloc(arena, bytes, alignment);
+            ret = mem_stack_alloc(arena, bytes, alignment);
+            break;
         case (MEM_ALLOC_LINEAR):
-            return mem_linear_alloc(arena, bytes, alignment);
+            ret = mem_linear_alloc(arena, bytes, alignment);
+            break;
         }
     }
     else {
-        return platform_alloc(bytes);
+        ret = platform_alloc(bytes);
     }
-    return nullptr;
+#if !defined(NDEBUG)
+    memset(ret, 0, bytes);
+#endif
+    return ret;
 }
 
 sizet mem_block_size(void *ptr, mem_arena *arena)
@@ -313,28 +321,43 @@ sizet mem_block_size(void *ptr, mem_arena *arena)
     return 0;
 }
 
+sizet mem_block_user_size(void *ptr, mem_arena *arena)
+{
+    if (arena->alloc_type == MEM_ALLOC_FREE_LIST) {
+        return mem_free_list_block_size(ptr) - sizeof(alloc_header);
+    }
+    else if (arena->alloc_type == MEM_ALLOC_POOL) {
+        return mem_pool_block_size(arena, ptr);
+    }
+    return 0;
+}
+
+
 void *mem_realloc(void *ptr, sizet new_size, mem_arena *arena, sizet alignment, bool free_ptr_after_copy)
 {
     if (!arena) {
         arena = g_fl_arena;
     }
-    sizet block_size = 0;
     if (arena) {
         // Create a new block and copy the mem to it from the old block (we use the lesser of the block sizes)
         auto new_block = mem_alloc(new_size, arena, alignment);
-        if (new_size < block_size) {
-            block_size = new_size;
-        }
+        sizet old_block_size{0};
 
         if (ptr) {
-            block_size = mem_block_size(ptr, arena);
-            assert(block_size > 0);
+            old_block_size = mem_block_user_size(ptr, arena);
+            sizet block_size{new_size};
+            assert(old_block_size > 0);
+
+            // We only want to copy the lesser size of the blocks bytes
+            if (new_size > old_block_size) {
+                block_size = old_block_size;
+            }
+
             memcpy(new_block, ptr, block_size);
             if (free_ptr_after_copy) {
                 mem_free(ptr, arena);
             }
         }
-        
         return new_block;
     }
     else {

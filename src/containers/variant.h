@@ -1,5 +1,6 @@
 #pragma once
 #include "../basic_types.h"
+#include "string.h"
 
 namespace nslib
 {

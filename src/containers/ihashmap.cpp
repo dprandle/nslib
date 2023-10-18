@@ -9,8 +9,7 @@
 #include <stddef.h>
 
 #include "../memory.h"
-#include "hashmap.h"
-#include "../hashfuncs.h"
+#include "ihashmap.h"
 
 #define GROW_AT 0.60
 #define SHRINK_AT 0.10
@@ -134,17 +133,17 @@ int generate_rand_seed()
     return rand();
 }
 
-malloc_func_type *get_global_malloc_func()
+malloc_func_type *global_malloc_func()
 {
     return mem_alloc;
 }
 
-realloc_func_type *get_global_realloc_func()
+realloc_func_type *global_realloc_func()
 {
     return mem_realloc;
 }
 
-free_func_type *get_global_free_func()
+free_func_type *global_free_func()
 {
     return mem_free;
 }

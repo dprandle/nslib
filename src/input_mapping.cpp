@@ -85,7 +85,7 @@ bool input_set_keymap_entry(u32 key, const input_keymap_entry *entry, input_keym
 {
     assert(entry);
     assert(km);
-    return hashmap_set(&km->hm, key, entry);
+    return hashmap_set(&km->hm, key, *entry);
 }
 
 input_keymap_entry *input_get_keymap_entry(u32 key, input_keymap *km)

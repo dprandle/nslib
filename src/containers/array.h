@@ -1,6 +1,7 @@
 #pragma once
 
 #include <utility>
+
 #include "../basic_types.h"
 #include "../memory.h"
 
@@ -14,8 +15,8 @@ struct static_array
     using value_type = T;
     static inline constexpr sizet capacity = N;
 
-    T data[N];
-    sizet size{0};
+    T data[N]{};
+    sizet size{};
 
     inline const T &operator[](sizet ind) const
     {
@@ -39,8 +40,9 @@ struct array
     sizet size{};
     sizet capacity{};
 
-    array()
-    {}
+    array(){
+        arr_init(this);
+    }
 
     array(const array &copy)
     {
@@ -81,8 +83,10 @@ void swap(array<T> *lhs, array<T> *rhs)
 template<class T>
 void arr_init(array<T> *arr, mem_arena *arena = nullptr, sizet initial_capacity = 0)
 {
-    arr->arena = arena;
-    if (!arr->arena) {
+    if (arena) {
+        arr->arena = arena;
+    }
+    else if (!arr->arena) {
         arr->arena = mem_global_arena();
     }
     arr_set_capacity(arr, initial_capacity);
@@ -91,13 +95,13 @@ void arr_init(array<T> *arr, mem_arena *arena = nullptr, sizet initial_capacity 
 template<class T>
 void arr_terminate(array<T> *arr)
 {
-    mem_free(arr->data, arr->arena);
+    arr_set_capacity(arr, 0);
 }
 
 template<class T>
 typename T::iterator arr_begin(T *arrobj)
 {
-    return &arrobj->data[0];
+    return arrobj->data;
 }
 
 template<class T>
@@ -130,20 +134,24 @@ void arr_copy(array<T> *dest, const array<T> *source)
 template<class T>
 void arr_set_capacity(array<T> *arr, sizet new_cap)
 {
-    // New cap can't be any smaller than mem_nod since we are using free list allocator
-    while (new_cap * sizeof(T) < sizeof(mem_node))
-        ++new_cap;
-    arr->data = (T *)mem_realloc(arr->data, new_cap * sizeof(T), arr->arena);
+    if (new_cap == arr->capacity) {
+        return;
+    }
+    
+    if (new_cap > 0) {
+        // New cap can't be any smaller than mem_nod since we are using free list allocator
+        while (new_cap * sizeof(T) < sizeof(mem_node))
+            ++new_cap;
+        arr->data = (T *)mem_realloc(arr->data, new_cap * sizeof(T), arr->arena);
+    }
+    else if (arr->data){
+        mem_free(arr->data, arr->arena);
+    }
     arr->capacity = new_cap;
 
     // Shrink the old size if its greater than the new capacity (so we only copy those items)
     if (arr->size > arr->capacity)
         arr->size = arr->capacity;
-
-#if !defined(NDEBUG)
-    for (sizet i = arr->size; i < arr->capacity; ++i)
-        arr->data[i] = {};
-#endif
 }
 
 template<class T>
@@ -166,15 +174,10 @@ void arr_shrink_to_fit(array<T> *arr)
 template<class T>
 T *arr_push_back(array<T> *arr, const T &item)
 {
-    assert(arr->size <= arr->capacity);
-    if (arr->size == arr->capacity) {
-        arr_set_capacity(arr, arr->capacity * 2);
-    }
-
-    T *ret = &arr->data[arr->size];
-    *ret = item;
-    ++arr->size;
-    return ret;
+    sizet sz = arr->size;
+    arr_resize(arr, sz+1);
+    (*arr)[sz] = item;
+    return &(*arr)[sz];
 }
 
 template<class T, sizet N>
@@ -182,23 +185,19 @@ T *arr_push_back(static_array<T, N> *arr, const T &item)
 {
     if (arr->size == arr->capacity)
         return nullptr;
-    T *ret = &arr->data[arr->size];
-    *ret = item;
+    sizet sz = arr->size;
     ++arr->size;
-    return ret;
+    arr->data[sz] = item;
+    return &arr->data[sz];
 }
 
 template<class T, class... Args>
 T *arr_emplace_back(array<T> *arr, Args &&...args)
 {
-    assert(arr->size <= arr->capacity);
-    if (arr->size == arr->capacity) {
-        arr_set_capacity(arr, arr->capacity * 2);
-    }
-
-    T *ret = &arr->data[arr->size];
+    sizet sz = arr->size;
+    arr_resize(arr, sz+1);
+    T *ret = &arr->data[sz];
     new (ret) T(std::forward<Args>(args)...);
-    ++arr->size;
     return ret;
 }
 
@@ -270,11 +269,11 @@ typename T::iterator arr_find(T *bufobj, const typename T::value_type &item)
     return iter;
 }
 
-template<class T>
-void arr_resize(array<T> *arr, sizet new_size)
+template<class T, class... Args>
+array<T>* arr_resize(array<T> *arr, sizet new_size, Args &&...args)
 {
     if (arr->size == new_size)
-        return;
+        return arr;
 
     // Make sure our current size doesn't exceed the capacity - it shouldnt that would definitely be a bug if it did.
     assert(arr->size <= arr->capacity);
@@ -289,37 +288,11 @@ void arr_resize(array<T> *arr, sizet new_size)
         arr_set_capacity(arr, cap);
     }
 
-// If in debug - clear the removed data (if any) to 0
-#if !defined(NDEBUG)
-    for (sizet i = new_size; i < arr->size; ++i)
-        arr->data[i] = {};
-#endif
-    arr->size = new_size;
-}
-
-template<class T>
-void arr_resize(array<T> *arr, sizet new_size, T default_val)
-{
-    assert(arr->size <= arr->capacity);
-    sizet cap = arr->capacity;
-    if (new_size > cap) {
-        if (cap < 1) {
-            cap = 1;
-        }
-        while (cap < new_size)
-            cap *= 2;
-        arr_set_capacity(arr, cap);
+    for (int i = arr->size; i < new_size; ++i) {
+        new (&arr->data[i]) T(std::forward<Args>(args)...);
     }
-    for (int i = arr->buf.size; i < new_size; ++i) {
-        arr->buf.data[i] = default_val;
-    }
-
-// If in debug - clear the removed data (if any) to 0
-#if !defined(NDEBUG)
-    for (int i = new_size; i < arr->size; ++i)
-        arr->data[i] = {};
-#endif
     arr->size = new_size;
+    return arr;
 }
 
 template<class T>
