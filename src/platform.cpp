@@ -6,6 +6,7 @@
 #include "input_kmcodes.h"
 #include "platform.h"
 #include "logging.h"
+#include "cJSON.h"
 
 namespace nslib
 {
@@ -142,6 +143,12 @@ intern void init_mem_arenas(const platform_memory_init_info *info, platform_memo
     mem_set_global_arena(&mem->free_list);
     mem_set_global_stack_arena(&mem->stack);
     mem_set_global_frame_lin_arena(&mem->frame_linear);
+
+    // Set up our json alloc and free funcs
+    cJSON_Hooks hooks;
+    hooks.malloc_fn = mem_alloc;
+    hooks.free_fn = mem_free;
+    cJSON_InitHooks(&hooks);
 }
 
 intern void terminate_mem_arenas(platform_memory *mem)
@@ -341,10 +348,6 @@ intern sizet platform_read_file(FILE *f, void *data, sizet element_size, sizet n
     }
     else {
         nelems = fread(data, element_size, nelements, f);
-        if (nelems != nelements && err) {
-            err->code = err_code::FILE_READ_DIFF_SIZE;
-            err->str = strerror(errno);
-        }
     }
     return nelems;
 }

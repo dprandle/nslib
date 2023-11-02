@@ -93,6 +93,14 @@ struct vector4
     };
 };
 
+pup_func_tt(vector4)
+{
+    pup_member(x);
+    pup_member(y);
+    pup_member(z);
+    pup_member(w);
+}    
+
 // Enable type trait
 template<class U>
 struct is_vec<vector4<U>>

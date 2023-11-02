@@ -2,15 +2,33 @@
 #include <cstring>
 
 #include "logging.h"
+#include "containers/string.h"
+#include "containers/array.h"
+#include "containers/hashmap.h"
+#include "containers/hashset.h"
+
 #include "basic_types.h"
 #include "basic_type_traits.h"
 
+#define pup_func(type)                                                                                                                     \
+    template<class ArchiveT>                                                                                                               \
+    void pack_unpack(ArchiveT *ar, type &val, const pack_var_info &vinfo)
+
+#define pup_func_tt(type)                                                                                                                  \
+    template<class ArchiveT, class... Args>                                                                                                \
+    void pack_unpack(ArchiveT *ar, type<Args...> &val, const pack_var_info &vinfo)
+
+#define pup_member(mem_name) pup_var(ar, val.mem_name, {#mem_name, {}})
+#define pup_member_meta(mem_name, ...) pup_var(ar, val.mem_name, {#mem_name, {__VA_ARGS__}})
+#define pup_member_name(mem_name, name) pup_var(ar, val.mem_name, {name, {}})
+#define pup_member_info(mem_name, info) pup_var(ar, val.mem_name, info)
+
 namespace nslib
 {
-enum pack_dir
+enum struct pack_dir
 {
-    PACK_DIR_IN,
-    PACK_DIR_OUT
+    OUT,
+    IN
 };
 
 namespace pack_va_flags
@@ -30,7 +48,7 @@ struct pack_var_meta
 
 struct pack_var_info
 {
-    const char *name{};
+    const char *name{nullptr};
     pack_var_meta meta{};
 };
 
@@ -43,18 +61,42 @@ const char *get_flag_for_type(T &var)
 
 // Returns the printf or logging flag needed to log this type
 template<integral T>
-const char* get_flag_for_type(T &var)
+const char *get_flag_for_type(T &var)
 {
     return "%d";
 }
 
-#define pup_func(type)                                                                                                                     \
-    template<class ArchiveT>                                                                                                               \
-    void pack_unpack(ArchiveT &ar, type &val, const pack_var_info &vinfo)
+template<class ArchiveT, class T>
+void pack_unpack_begin(ArchiveT *, T &, const pack_var_info &vinfo)
+{
+    dlog("Pack %s begin", vinfo.name);
+}
 
-#define pup_member(mem_name) pack_unpack(ar, val.mem_name, {#mem_name, {}})
-#define pup_member_meta(mem_name, ...) pack_unpack(ar, val.mem_name, {#mem_name, {__VA_ARGS__}})
-#define pup_member_name(mem_name, name) pack_unpack(ar, val.mem_name, {name, {}})
-#define pup_member_info(mem_name, info) pack_unpack(ar, val.mem_name, info)
+template<class ArchiveT, class T>
+void pack_unpack_end(ArchiveT *, T &, const pack_var_info &vinfo)
+{
+    dlog("Pack %s end", vinfo.name);
+}
+
+template<class ArchiveT, class T>
+void pup_var(ArchiveT *ar, T &val, const pack_var_info &vinfo)
+{
+    pack_unpack_begin(ar, val, vinfo);
+    pack_unpack(ar, val, vinfo);
+    pack_unpack_end(ar, val, vinfo);
+}
+
+template<class ArchiveT>
+void pup_var(ArchiveT *ar, string &val, const pack_var_info &vinfo)
+{
+    sizet size = val.buf.size;
+    pup_var(ar, size, {"size"});
+    str_resize(&val, size);
+    for (sizet i = 0; i < size; ++i) {
+        string s;
+        str_args(&s, "[%d]", i);
+        pup_var(ar, val[i], {str_cstr(s)});
+    }
+}
 
 } // namespace nslib

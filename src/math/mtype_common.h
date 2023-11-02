@@ -1,6 +1,8 @@
 #pragma once
 #include "../basic_types.h"
 #include "../basic_type_traits.h"
+#include "../archive_common.h"
+
 
 #define NOBLE_STEED_SSE_BIT (0x00000001)
 #define NOBLE_STEED_SSE2_BIT (0x00000002)

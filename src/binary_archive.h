@@ -14,7 +14,7 @@ struct is_binary_archive
 struct binary_buffer_archive
 {
     u8 *data;
-    int dir;
+    pack_dir dir;
     sizet cur_offset{0};
 };
 
@@ -29,7 +29,7 @@ template<sizet N>
 struct binary_fixed_buffer_archive
 {
     static constexpr sizet size = N;
-    int dir;
+    pack_dir dir;
     sizet cur_offset{0};
     u8 data[size];
 };
@@ -44,25 +44,35 @@ struct is_binary_archive<binary_fixed_buffer_archive<N>>
 template<class T>
 concept binary_archive_type = is_binary_archive<T>::value;
 
+template<binary_archive_type ArchiveT, class T>
+void pack_unpack_begin(ArchiveT *, T &, const pack_var_info &vinfo) {
+    dlog("Pack binary archive %s begin", vinfo.name);
+}
+
+template<binary_archive_type ArchiveT, class T>
+void pack_unpack_end(ArchiveT *, T &, const pack_var_info &vinfo) {
+    dlog("Pack binary archive %s end", vinfo.name);
+}
+
 template<binary_archive_type ArchiveT, arithmetic_type T>
-void pack_unpack(ArchiveT &ar, T &val, const pack_var_info &vinfo)
+void pack_unpack(ArchiveT *ar, T &val, const pack_var_info &vinfo)
 {
     char logging_statement[]{"Packing %s %d bytes for %s with value xx"};
     const char *flag = get_flag_for_type(val);
     memcpy(strstr(logging_statement, "xx"), flag, 2);
 
     sizet sz = sizeof(T);
-    if (ar.dir == PACK_DIR_IN)
-        memcpy(&val, ar.data + ar.cur_offset, sz);
+    if (ar->dir == pack_dir::IN)
+        memcpy(&val, ar->data + ar->cur_offset, sz);
     else
-        memcpy(ar.data + ar.cur_offset, &val, sz);
-    tlog(logging_statement, (ar.dir) ? "out" : "in", sz, vinfo.name, val);
-    ar.cur_offset += sz;
+        memcpy(ar->data + ar->cur_offset, &val, sz);
+    tlog(logging_statement, (ar->dir == pack_dir::OUT) ? "out" : "in", sz, vinfo.name, val);
+    ar->cur_offset += sz;
 }
 
 // Special function for fixed size arrays of arithmetic type
 template<binary_archive_type ArchiveT, arithmetic_type T, sizet N>
-void pack_unpack(ArchiveT &ar, T (&val)[N], const pack_var_info &vinfo)
+void pack_unpack(ArchiveT *ar, T (&val)[N], const pack_var_info &vinfo)
 {
     sizet sz = sizeof(T);
     if (test_flags(vinfo.meta.flags, pack_va_flags::FIXED_ARRAY_CUSTOM_SIZE))
@@ -70,18 +80,18 @@ void pack_unpack(ArchiveT &ar, T (&val)[N], const pack_var_info &vinfo)
     else
         sz *= N;
 
-    if (ar.dir == PACK_DIR_IN)
-        memcpy(val, ar.data + ar.cur_offset, sz);
+    if (ar->dir == pack_dir::IN)
+        memcpy(val, ar->data + ar->cur_offset, sz);
     else
-        memcpy(ar.data + ar.cur_offset, val, sz);
+        memcpy(ar->data + ar->cur_offset, val, sz);
 
-    tlog("Packing %s %d bytes for %s (array)", (ar.dir) ? "out" : "in", sz, vinfo.name);
-    ar.cur_offset += sz;
+    tlog("Packing %s %d bytes for %s (array)", (ar->dir) ? "out" : "in", sz, vinfo.name);
+    ar->cur_offset += sz;
 }
 
 // Special function for fixed size arrays of non arithmetic type (we call pack_)
 template<binary_archive_type ArchiveT, class T, sizet N>
-void pack_unpack(ArchiveT &ar, T (&val)[N], const pack_var_info &vinfo)
+void pack_unpack(ArchiveT *ar, T (&val)[N], const pack_var_info &vinfo)
 {
     sizet size = 0;
     if (test_flags(vinfo.meta.flags, pack_va_flags::FIXED_ARRAY_CUSTOM_SIZE))
@@ -90,7 +100,7 @@ void pack_unpack(ArchiveT &ar, T (&val)[N], const pack_var_info &vinfo)
         size = N;
 
     for (int i = 0; i < size; ++i) {
-        pack_unpack(ar, val[i], vinfo);
+        pup_var(ar, val[i], vinfo);
     }
 }
 

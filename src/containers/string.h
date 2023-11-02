@@ -27,6 +27,8 @@ struct string
     char &operator[](sizet ind);
 };
 
+using string_array = array<string>;
+
 string operator+(const string &lhs, const string &rhs);
 
 bool operator==(const string &lhs, const string &rhs);
@@ -51,14 +53,14 @@ inline char *str_data(string *str)
     return (str->buf.capacity > string::SMALL_STR_SIZE) ? str->buf.data : str->sos;
 }
 
-inline sizet str_len(const string *str)
+inline sizet str_len(const string &str)
 {
-    return str->buf.size;
+    return str.buf.size;
 }
 
-inline sizet str_capacity(const string *str)
+inline sizet str_capacity(const string &str)
 {
-    return str->buf.capacity;
+    return str.buf.capacity;
 }
 
 void swap(string *lhs, string *rhs);
@@ -71,15 +73,15 @@ void str_set_capacity(string *str, sizet new_cap);
 
 string::iterator str_begin(string *str);
 
-string::const_iterator str_begin(const string *str);
+string::const_iterator str_begin(const string &str);
 
 string::iterator str_end(string *str);
 
-string::const_iterator str_end(const string *str);
+string::const_iterator str_end(const string &str);
 
-bool str_empty(const string *str);
+bool str_empty(const string &str);
 
-string *str_copy(string *dest, const string *src);
+string *str_copy(string *dest, const string &src);
 
 string *str_copy(string *dest, const char *src);
 
@@ -93,7 +95,7 @@ string *str_shrink_to_fit(string *str);
 
 string *str_push_back(string *str, char c);
 
-string *str_append(string *str, const string *to_append);
+string *str_append(string *str, const string &to_append);
 
 string *str_append(string *str, const char *to_append);
 
@@ -101,7 +103,7 @@ template<class... Args>
 string *str_args(string *dest, const char *format_txt, Args &&...args)
 {
     sizet needed_space = snprintf(nullptr, 0, format_txt, std::forward<Args>(args)...);
-    sizet sz = str_len(dest);
+    sizet sz = str_len(*dest);
     str_resize(dest, sz + needed_space);
     snprintf(str_data(dest)+sz, needed_space+1, format_txt, args...);
     return dest;

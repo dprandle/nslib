@@ -17,6 +17,12 @@ struct rid
     u64 id{0};
 };
 
+pup_func(rid)
+{
+//    pup_member(str);
+    pup_member(id);
+}
+
 string makestr(const rid &rid);
 
 inline u64 hash_type(const rid &id, u64, u64)
@@ -39,7 +45,7 @@ struct robj_cache_common
 
 struct robj_common
 {
-    u32 id;
+    rid id;
 };
 
 pup_func(robj_common)

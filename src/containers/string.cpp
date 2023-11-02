@@ -42,7 +42,7 @@ string::string()
 string::string(const string &copy)
 {
     str_init(this, copy.buf.arena);
-    str_copy(this, &copy);
+    str_copy(this, copy);
 }
 
 string::string(const char *copy, mem_arena *arena)
@@ -67,7 +67,7 @@ string &string::operator=(string rhs)
 
 string &string::operator+=(const string &rhs)
 {
-    return *str_append(this, &rhs);
+    return *str_append(this, rhs);
 }
 
 const char &string::operator[](sizet ind) const
@@ -88,14 +88,14 @@ string operator+(const string &lhs, const string &rhs)
 }
 
 bool operator==(const string &lhs, const string &rhs) {
-    if (str_len(&lhs) != str_len(&rhs)) {
+    if (str_len(lhs) != str_len(rhs)) {
         return false;
     }
-    else if (str_len(&lhs) == 0) {
+    else if (str_len(lhs) == 0) {
         return true;
     }
     sizet i{0};
-    while (i < str_len(&lhs) && lhs[i] == rhs[i])
+    while (i < str_len(lhs) && lhs[i] == rhs[i])
         ++i;
     return i == lhs.buf.size;
 }
@@ -105,22 +105,22 @@ string::iterator str_begin(string *str)
     return str_data(str);
 }
 
-string::const_iterator str_begin(const string *str)
+string::const_iterator str_begin(const string &str)
 {
     return str_cstr(str);
 }
 
 string::iterator str_end(string *str)
 {
-    return str_data(str) + str_len(str);
+    return str_data(str) + str_len(*str);
 }
 
-string::const_iterator str_end(const string *str)
+string::const_iterator str_end(const string &str)
 {
     return str_cstr(str) + str_len(str);
 }
 
-bool str_empty(const string *str)
+bool str_empty(const string &str)
 {
     return (str_len(str) == 0);
 }
@@ -144,9 +144,9 @@ void str_terminate(string *str)
     arr_terminate(&str->buf);
 }
 
-string *str_copy(string *dest, const string *src)
+string *str_copy(string *dest, const string &src)
 {
-    str_resize(dest, src->buf.size);
+    str_resize(dest, src.buf.size);
     memcpy(str_data(dest), str_cstr(src), dest->buf.size);
     return dest;
 }
@@ -160,13 +160,13 @@ string *str_copy(string *dest, const char *src)
 
 string *str_resize(string *str, sizet new_size, char c)
 {
-    if (str_len(str) == new_size)
+    if (str_len(*str) == new_size)
         return str;
 
     // Make sure our current size doesn't exceed the capacity - it shouldnt that would definitely be a bug if it did.
-    assert(str_len(str) < str_capacity(str));
+    assert(str_len(*str) < str_capacity(*str));
 
-    sizet cap = str_capacity(str);
+    sizet cap = str_capacity(*str);
     if ((new_size + 1) > cap) {
         if (cap < 1) {
             cap = 1;
@@ -176,7 +176,7 @@ string *str_resize(string *str, sizet new_size, char c)
         str_set_capacity(str, cap);
     }
     
-    for (int i = str_len(str); i < new_size; ++i) {
+    for (int i = str_len(*str); i < new_size; ++i) {
         (*str)[i] = c;
     }
     (*str)[new_size] = 0; // null terminator
@@ -192,7 +192,7 @@ string *str_clear(string *str)
 
 string *str_reserve(string *str, sizet new_cap)
 {
-    if (new_cap > str_capacity(str)) {
+    if (new_cap > str_capacity(*str)) {
         str_set_capacity(str, new_cap);
     }
     return str;
@@ -200,24 +200,24 @@ string *str_reserve(string *str, sizet new_cap)
 
 string *str_shrink_to_fit(string *str)
 {
-    assert(str_len(str) <= str_capacity(str));
-    if (str_len(str)+1 < str_capacity(str)) {
-        str_set_capacity(str, str_len(str)+1);
+    assert(str_len(*str) <= str_capacity(*str));
+    if (str_len(*str)+1 < str_capacity(*str)) {
+        str_set_capacity(str, str_len(*str)+1);
     }
     return str;
 }
 
 string *str_push_back(string *str, char c)
 {
-    sizet sz = str_len(str);
+    sizet sz = str_len(*str);
     str_resize(str, sz + 1);
     (*str)[sz] = c;
     return str;
 }
 
-string *str_append(string *str, const string *to_append)
+string *str_append(string *str, const string &to_append)
 {
-    sizet sz = str_len(str);
+    sizet sz = str_len(*str);
     sizet append_len = str_len(to_append);
     str_resize(str, sz + append_len);
     memcpy(str_data(str) + sz, str_cstr(to_append), append_len);
@@ -226,7 +226,7 @@ string *str_append(string *str, const string *to_append)
 
 string *str_append(string *str, const char *to_append)
 {
-    sizet sz = str_len(str);
+    sizet sz = str_len(*str);
     sizet append_len = strlen(to_append);
     str_resize(str, sz + append_len);
     memcpy(str_data(str) + sz, to_append, append_len);
