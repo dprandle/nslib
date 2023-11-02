@@ -14,7 +14,7 @@ struct is_binary_archive
 struct binary_buffer_archive
 {
     u8 *data;
-    pack_dir dir;
+    archive_opmode opmode;
     sizet cur_offset{0};
 };
 
@@ -29,7 +29,7 @@ template<sizet N>
 struct binary_fixed_buffer_archive
 {
     static constexpr sizet size = N;
-    pack_dir dir;
+    archive_opmode opmode;
     sizet cur_offset{0};
     u8 data[size];
 };
@@ -62,11 +62,11 @@ void pack_unpack(ArchiveT *ar, T &val, const pack_var_info &vinfo)
     memcpy(strstr(logging_statement, "xx"), flag, 2);
 
     sizet sz = sizeof(T);
-    if (ar->dir == pack_dir::IN)
+    if (ar->opmode == archive_opmode::UNPACK)
         memcpy(&val, ar->data + ar->cur_offset, sz);
     else
         memcpy(ar->data + ar->cur_offset, &val, sz);
-    tlog(logging_statement, (ar->dir == pack_dir::OUT) ? "out" : "in", sz, vinfo.name, val);
+    tlog(logging_statement, (ar->opmode == archive_opmode::PACK) ? "out" : "in", sz, vinfo.name, val);
     ar->cur_offset += sz;
 }
 
@@ -80,7 +80,7 @@ void pack_unpack(ArchiveT *ar, T (&val)[N], const pack_var_info &vinfo)
     else
         sz *= N;
 
-    if (ar->dir == pack_dir::IN)
+    if (ar->dir == archive_opmode::UNPACK)
         memcpy(val, ar->data + ar->cur_offset, sz);
     else
         memcpy(ar->data + ar->cur_offset, val, sz);

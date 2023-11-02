@@ -9,7 +9,7 @@ namespace nslib
 
 struct string_archive
 {
-    const pack_dir dir = pack_dir::OUT;
+    const archive_opmode opmode = archive_opmode::UNPACK;
     
     string txt;
     string cur_indent;
@@ -92,6 +92,14 @@ void pack_unpack(string_archive *ar, T (&val)[N], const pack_var_info &vinfo)
     for (sizet i = 0; i < N; ++i) {
         pup_var(ar, val[i], {});
     }
+}
+
+template<class T>
+string makestr(const T &item) {
+    string_archive sa{};
+    T & no_const = (T &)item;
+    pack_unpack(&sa, no_const, {});
+    return sa.txt;
 }
 
 } // namespace nslib

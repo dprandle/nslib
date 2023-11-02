@@ -27,7 +27,7 @@ pup_func(fancy_struct)
 int load_platform_settings(platform_init_info *settings, app_data *app)
 {
     settings->wind.resolution = {1920,1080};
-    settings->wind.title = "03 Triangle";
+    settings->wind.title = "05 Pack Unpack";
     return err_code::PLATFORM_NO_ERROR;
 }
 
@@ -40,16 +40,20 @@ int app_init(platform_ctxt *ctxt, app_data *app)
     fancy_struct fs;
     vec4 bla{4,3,2,1};
     vec4 bla_arr[5];
+    vec4 bla_arr_2[5][5];
     for (int i = 0; i < 5; ++i) {
         bla_arr[i] = {i*1.0f, i*2.0f, i*3.0f, i*4.0f};
+        for (int j = 0; j < 5; ++j) {
+            bla_arr_2[i][j] = {i + j*1.0f, i + 2.0f*j, i + 3.0f*j, i + 4.0f*j };
+        }
     }
-    
     
     binary_fixed_buffer_archive<1000> ba{};
     pup_var(&ba, test, {"test"});
     pup_var(&ba, bla, {"bla"});
     pup_var(&ba, bla_arr, {"bla_arr"});
-    pup_var(&ba, fs, {"bla_arr"});
+    pup_var(&ba, bla_arr_2, {"bla_arr_2"});
+    pup_var(&ba, fs, {"fancy_struc"});
     
     
     platform_file_err_desc err;
@@ -61,7 +65,7 @@ int app_init(platform_ctxt *ctxt, app_data *app)
 
     err = {};
     ba = {};
-    ba.dir = pack_dir::IN;
+    ba.opmode = archive_opmode::UNPACK;
     
     sizet read_ind = platform_read_file("bin_out.bin", ba.data, 1, ba.size, 0, &err);
     if (err.code != err_code::FILE_NO_ERROR) {
@@ -82,21 +86,22 @@ int app_init(platform_ctxt *ctxt, app_data *app)
     pup_var(&ba, test, {"test"});
     pup_var(&ba, bla, {"bla"});
     pup_var(&ba, bla_arr, {"bla_arr"});
+    pup_var(&ba, bla_arr_2, {"bla_arr_2"});
     pup_var(&ba, fs, {"bla_arr"});
 
     string_archive sa{};
-    pup_var(&sa, test, {"test"});
-    pup_var(&sa, bla, {"bla"});
-    pup_var(&sa, bla_arr, {"bla_arr"});
-    pup_var(&sa, fs, {"fancy_struc"});
-    ilog("Scooby:\n%s", str_cstr(sa.txt));
+    ilog("test: \n%s", makecstr(test));
+    ilog("bla: \n%s", makecstr(bla));
+    ilog("bla_arr: \n%s", makecstr(bla_arr));
+    ilog("bla_arr_2: \n%s", makecstr(bla_arr_2));
+    ilog("fancy_strc: \n%s", makecstr(fs));
 
     json_archive ja{};
     pup_var(&ja, test, {"test"});
     pup_var(&ja, bla, {"bla"});
     pup_var(&ja, bla_arr, {"bla_arr"});
+    pup_var(&ja, bla_arr_2, {"bla_arr_2"});
     pup_var(&ja, fs, {"fancy_struc"});
-    ilog("Scooby:\n%s", str_cstr(sa.txt));
     
     return err_code::PLATFORM_NO_ERROR;
 }

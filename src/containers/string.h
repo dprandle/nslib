@@ -134,12 +134,9 @@ string makestr(T n) {
 
 inline const string& makestr(const string &str) {return str;}
 
-
 string makestr(void* i);
 string makestr(i64 i);
 string makestr(u64 i);
 string makestr(char c);
-
-
 
 } // namespace nslib

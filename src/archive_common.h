@@ -25,10 +25,11 @@
 
 namespace nslib
 {
-enum struct pack_dir
+// Pack direction - OUT means packing the objects to the archive, and IN means 
+enum struct archive_opmode
 {
-    OUT,
-    IN
+    PACK,
+    UNPACK
 };
 
 namespace pack_va_flags
@@ -78,16 +79,8 @@ void pack_unpack_end(ArchiveT *, T &, const pack_var_info &vinfo)
     dlog("Pack %s end", vinfo.name);
 }
 
-template<class ArchiveT, class T>
-void pup_var(ArchiveT *ar, T &val, const pack_var_info &vinfo)
-{
-    pack_unpack_begin(ar, val, vinfo);
-    pack_unpack(ar, val, vinfo);
-    pack_unpack_end(ar, val, vinfo);
-}
-
 template<class ArchiveT>
-void pup_var(ArchiveT *ar, string &val, const pack_var_info &vinfo)
+void pack_unpack(ArchiveT *ar, string &val, const pack_var_info &vinfo)
 {
     sizet size = val.buf.size;
     pup_var(ar, size, {"size"});
@@ -97,6 +90,14 @@ void pup_var(ArchiveT *ar, string &val, const pack_var_info &vinfo)
         str_args(&s, "[%d]", i);
         pup_var(ar, val[i], {str_cstr(s)});
     }
+}
+
+template<class ArchiveT, class T>
+void pup_var(ArchiveT *ar, T &val, const pack_var_info &vinfo)
+{
+    pack_unpack_begin(ar, val, vinfo);
+    pack_unpack(ar, val, vinfo);
+    pack_unpack_end(ar, val, vinfo);
 }
 
 } // namespace nslib
