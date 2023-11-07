@@ -98,7 +98,7 @@ template<class T>
 string makestr(const T &item) {
     string_archive sa{};
     T & no_const = (T &)item;
-    pack_unpack(&sa, no_const, {});
+    pup_var(&sa, no_const, {});
     return sa.txt;
 }
 

@@ -23,8 +23,8 @@ struct json_archive
 // If json_str is null then we will be set to output mode, otherwise input mode
 inline void jsa_init(json_archive *jsa, const char *json_str)
 {
+    jsa->opmode = archive_opmode::UNPACK;
     if (json_str) {
-        jsa->opmode = archive_opmode::UNPACK;
         json_obj *parsed = json_parse(json_str);
         if (!parsed) {
             wlog("Could not parse json_str!");
@@ -33,9 +33,17 @@ inline void jsa_init(json_archive *jsa, const char *json_str)
             arr_emplace_back(&jsa->stack, parsed);
         }
     }
-    else {
-        jsa->opmode = archive_opmode::PACK;
-        arr_emplace_back(&jsa->stack, json_create_object());
+}
+
+// If json_str is null then we will be set to output mode, otherwise input mode
+inline void jsa_init(json_archive *jsa, archive_opmode mode=archive_opmode::PACK, json_obj *root=nullptr)
+{
+    jsa->opmode = mode;
+    if (mode == archive_opmode::PACK && !root) {
+        root = json_create_object();
+    }
+    if (root) {
+        arr_emplace_back(&jsa->stack, root);
     }
 }
 
@@ -75,10 +83,10 @@ void pack_unpack_begin(json_archive *ar, T &, const pack_var_info &vinfo)
     if (ar->opmode == archive_opmode::UNPACK) {
         json_obj *item{};
         if (is_array) {
-            item = json_get_object_item(cur_frame->current, vinfo.name);
+            item = json_get_array_item(cur_frame->current, cur_frame->cur_arr_ind);
         }
         else if (is_obj) {
-            item = json_get_array_item(cur_frame->current, cur_frame->cur_arr_ind);
+            item = json_get_object_item(cur_frame->current, vinfo.name);
         }
 
         if (item && json_is_object(item)) {
@@ -133,19 +141,21 @@ void pack_unpack_helper(json_archive *ar, T &val, const pack_var_info &vinfo, Ch
     if (ar->opmode == archive_opmode::UNPACK) {
         if (is_array) {
             json_obj *item = json_get_array_item(cur_frame->current, cur_frame->cur_arr_ind);
-            if (!check_func(&val, item) && item) {
+            bool passes_check = check_func(&val, item);
+            if (!passes_check && item) {
                 wlog("Expected item at ind %d to be a string but it is %d instead", cur_frame->cur_arr_ind, item->type);
             }
-            else {
+            else if (!passes_check) {
                 wlog("Array ind %d null in parent json item %s", cur_frame->cur_arr_ind, cur_frame->current->string);
             }
         }
         else if (is_obj) {
             json_obj *item = json_get_object_item(cur_frame->current, vinfo.name);
-            if (!check_func(&val, item) && item) {
+            bool passes_check = check_func(&val, item);
+            if (!passes_check && item) {
                 wlog("Expected item %s to be a string but it is %d instead", item->string, item->type);
             }
-            else {
+            else if (!passes_check) {
                 wlog("Could not find %s in parent json item %s", vinfo.name, cur_frame->current->string);
             }
         }
@@ -225,11 +235,11 @@ void pack_unpack_begin(json_archive *ar, T (&val)[N], const pack_var_info &vinfo
 
     if (ar->opmode == archive_opmode::UNPACK) {
         json_obj *item{};
-        if (is_obj) {
-            item = json_get_object_item(cur_frame->current, vinfo.name);
-        }
-        else if (is_array) {
+        if (is_array) {
             item = json_get_array_item(cur_frame->current, cur_frame->cur_arr_ind);
+        }
+        else if (is_obj) {
+            item = json_get_object_item(cur_frame->current, vinfo.name);
         }
 
         if (item && json_is_array(item)) {

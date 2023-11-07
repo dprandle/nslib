@@ -39,20 +39,20 @@ int app_init(platform_ctxt *ctxt, app_data *app)
     test.id = rid("dangman");
     fancy_struct fs;
     vec4 bla{4,3,2,1};
-    vec4 bla_arr[5];
-    vec4 bla_arr_2[5][5];
+    vec4 v4_arr5[5];
+    vec4 v4arr_of_arr[5][5];
     for (int i = 0; i < 5; ++i) {
-        bla_arr[i] = {i*1.0f, i*2.0f, i*3.0f, i*4.0f};
+        v4_arr5[i] = {i*1.5f, i*2.2f, i*3.5f, i*4.2f};
         for (int j = 0; j < 5; ++j) {
-            bla_arr_2[i][j] = {i + j*1.0f, i + 2.0f*j, i + 3.0f*j, i + 4.0f*j };
+            v4arr_of_arr[i][j] = {i + j*1.4f, i + 2.8f*j, i + 3.3f*j, i + 4.2f*j };
         }
     }
     
     binary_fixed_buffer_archive<1000> ba{};
     pup_var(&ba, test, {"test"});
     pup_var(&ba, bla, {"bla"});
-    pup_var(&ba, bla_arr, {"bla_arr"});
-    pup_var(&ba, bla_arr_2, {"bla_arr_2"});
+    pup_var(&ba, v4_arr5, {"v4_arr5"});
+    pup_var(&ba, v4arr_of_arr, {"v4arr_of_arr"});
     pup_var(&ba, fs, {"fancy_struc"});
     
     
@@ -80,9 +80,9 @@ int app_init(platform_ctxt *ctxt, app_data *app)
         str_clear(&fs.strarr[i]);
     }
     for (int i = 0; i < 5; ++i) {
-        bla_arr[i] = {};
+        v4_arr5[i] = {};
         for (int j = 0; j < 5; ++j) {
-            bla_arr_2[i][j] = {};
+            v4arr_of_arr[i][j] = {};
         }
     }
     
@@ -90,24 +90,24 @@ int app_init(platform_ctxt *ctxt, app_data *app)
     
     pup_var(&ba, test, {"test"});
     pup_var(&ba, bla, {"bla"});
-    pup_var(&ba, bla_arr, {"bla_arr"});
-    pup_var(&ba, bla_arr_2, {"bla_arr_2"});
-    pup_var(&ba, fs, {"bla_arr"});
+    pup_var(&ba, v4_arr5, {"v4_arr5"});
+    pup_var(&ba, v4arr_of_arr, {"v4arr_of_arr"});
+    pup_var(&ba, fs, {"v4_arr5"});
 
     ilog("test: \n%s", makecstr(test));
     ilog("bla: \n%s", makecstr(bla));
-    ilog("bla_arr: \n%s", makecstr(bla_arr));
-    ilog("bla_arr_2: \n%s", makecstr(bla_arr_2));
+    ilog("v4_arr5: \n%s", makecstr(v4_arr5));
+    ilog("v4arr_of_arr: \n%s", makecstr(v4arr_of_arr));
     ilog("fancy_strc: \n%s", makecstr(fs));
 
     string simpl_str_test = "simple_test";
     json_archive ja{};
-    jsa_init(&ja, nullptr);
+    jsa_init(&ja);
 
     pup_var(&ja, simpl_str_test, {"str_test"});
     pup_var(&ja, bla, {"bla"});
-    pup_var(&ja, bla_arr, {"bla_arr"});
-    pup_var(&ja, bla_arr_2, {"bla_arr_2"});
+    pup_var(&ja, v4_arr5, {"v4_arr5"});
+    pup_var(&ja, v4arr_of_arr, {"v4arr_of_arr"});
     pup_var(&ja, fs, {"fancy_struc"});
     string js_str = jsa_to_json_string(&ja);
     platform_write_file("check_me_out.json", str_cstr(js_str), 1, str_len(js_str));
@@ -123,9 +123,9 @@ int app_init(platform_ctxt *ctxt, app_data *app)
         str_clear(&fs.strarr[i]);
     }
     for (int i = 0; i < 5; ++i) {
-        bla_arr[i] = {};
+        v4_arr5[i] = {};
         for (int j = 0; j < 5; ++j) {
-            bla_arr_2[i][j] = {};
+            v4arr_of_arr[i][j] = {};
         }
     }
 
@@ -133,15 +133,15 @@ int app_init(platform_ctxt *ctxt, app_data *app)
     jsa_init(&ja_in, str_cstr(js_str));
     pup_var(&ja_in, simpl_str_test, {"str_test"});
     pup_var(&ja_in, bla, {"bla"});
-    pup_var(&ja_in, bla_arr, {"bla_arr"});
-    pup_var(&ja_in, bla_arr_2, {"bla_arr_2"});
+    pup_var(&ja_in, v4_arr5, {"v4_arr5"});
+    pup_var(&ja_in, v4arr_of_arr, {"v4arr_of_arr"});
     pup_var(&ja_in, fs, {"fancy_struc"});
 
     ilog("test2: \n%s", makecstr(test));
-    ilog("bla2: \n%s", makecstr(bla));
-    ilog("bla_arr2: \n%s", makecstr(bla_arr));
-    ilog("bla_arr_22: \n%s", makecstr(bla_arr_2));
-    ilog("fancy_strc2: \n%s", makecstr(fs));
+    ilog("bla: \n%s", makecstr(bla));
+    ilog("v4_arr5: \n%s", makecstr(v4_arr5));
+    ilog("v4arr_of_arr: \n%s", makecstr(v4arr_of_arr));
+    ilog("fancy_strc: \n%s", makecstr(fs));
     
     return err_code::PLATFORM_NO_ERROR;
 }

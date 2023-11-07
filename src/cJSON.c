@@ -1542,7 +1542,7 @@ static json_bool print_object(const json_obj *const item, printbuffer *const out
     unsigned char *output_pointer = NULL;
     size_t length = 0;
     json_obj *current_item = item->child;
-    int tab_len = 2;
+    int tab_len = 4;
 
     if (output_buffer == NULL) {
         return false;
