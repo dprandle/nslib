@@ -49,6 +49,13 @@ struct vector2
     };
 };
 
+pup_func_tt(vector2)
+{
+    pup_member(x);
+    pup_member(y);
+}    
+
+
 // Enable type trait
 template<class U>
 struct is_vec<vector2<U>>

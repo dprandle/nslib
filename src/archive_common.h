@@ -92,6 +92,14 @@ void pack_unpack(ArchiveT *ar, string &val, const pack_var_info &vinfo)
     }
 }
 
+template<class ArchiveT, class T, sizet N>
+void pack_unpack(ArchiveT *ar, static_array<T, N> &val, const pack_var_info &vinfo)
+{
+    pup_var(ar, val.data, {"data"});
+    pup_var(ar, val.size, {"size"});
+}
+
+
 template<class ArchiveT, class T>
 void pup_var(ArchiveT *ar, T &val, const pack_var_info &vinfo)
 {

@@ -9,7 +9,7 @@
 
 #include <iostream>
 
-#define DO_DEBUG_PRINT false
+#define DO_DEBUG_PRINT true
 
 namespace nslib
 {
@@ -147,9 +147,10 @@ intern void *mem_free_list_alloc(mem_arena *arena, sizet size, sizet alignment)
     arena->peak = std::max(arena->peak, arena->used);
 
 #if DO_DEBUG_PRINT
-    dlog("@H:%p @D:%p S:%d AP:%d P:%d M:%d R:%d",
+    dlog("@H:%p @D:%p RS:%d S:%d AP:%d P:%d M:%d R:%d",
          (void *)header_addr,
          (void *)data_addr,
+         size,
          required_size,
          alignment_padding,
          padding,
@@ -193,8 +194,9 @@ intern void mem_free_list_free(mem_arena *arena, void *ptr)
 
     // Merge contiguous nodes
     coalescence(&arena->mfl, it_prev, free_node);
+    assert(arena->used <= arena->total_size);
 #if DO_DEBUG_PRINT
-    dlog("ptr:%p H:%p S:%d M:%d", ptr, (void *)free_node, free_node->data.block_size, arena->used);
+    dlog("ptr:%p H:%p S:%d M:%u", ptr, (void *)free_node, free_node->data.block_size, arena->used);
 #endif
 }
 

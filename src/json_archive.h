@@ -36,7 +36,7 @@ inline void jsa_init(json_archive *jsa, const char *json_str)
 }
 
 // If json_str is null then we will be set to output mode, otherwise input mode
-inline void jsa_init(json_archive *jsa, archive_opmode mode=archive_opmode::PACK, json_obj *root=nullptr)
+inline void jsa_init(json_archive *jsa, archive_opmode mode = archive_opmode::PACK, json_obj *root = nullptr)
 {
     jsa->opmode = mode;
     if (mode == archive_opmode::PACK && !root) {
@@ -53,6 +53,7 @@ inline string jsa_to_json_string(json_archive *jsa)
     if (jsa->stack.size > 0) {
         // Get the json string - this allocates
         char *src = json_print(arr_front(&jsa->stack)->current);
+        wlog("JSON before STR;\n%s", src);
 
         // Copy the string in to the ret string
         ret = src;
@@ -101,6 +102,7 @@ void pack_unpack_begin(json_archive *ar, T &, const pack_var_info &vinfo)
     }
     else {
         auto new_item = json_create_object();
+        tlog("Adding item (name:%s) of type %d to %s (name:%s)", vinfo.name, new_item->type, (is_array) ? "array" : "obj", cur_frame->current->string);
         if (is_array) {
             assert(json_add_item_to_array(cur_frame->current, new_item));
         }
@@ -162,6 +164,7 @@ void pack_unpack_helper(json_archive *ar, T &val, const pack_var_info &vinfo, Ch
     }
     else {
         json_obj *item = create_func(&val);
+        tlog("Adding item (name:%s) of type %d to %s (name:%s)", vinfo.name, item->type, (is_array) ? "array" : "obj", cur_frame->current->string);
         if (is_array) {
             assert(json_add_item_to_array(cur_frame->current, item));
         }
@@ -254,6 +257,7 @@ void pack_unpack_begin(json_archive *ar, T (&val)[N], const pack_var_info &vinfo
     }
     else {
         auto new_item = json_create_array();
+        tlog("Adding item (name:%s) of type %d to %s (name:%s)", vinfo.name, new_item->type, (is_array) ? "array" : "obj", cur_frame->current->string);
         if (is_array) {
             assert(json_add_item_to_array(cur_frame->current, new_item));
         }
