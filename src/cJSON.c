@@ -62,12 +62,12 @@
 #ifdef true
 #undef true
 #endif
-#define true ((cJSON_bool)1)
+#define true ((json_bool)1)
 
 #ifdef false
 #undef false
 #endif
-#define false ((cJSON_bool)0)
+#define false ((json_bool)0)
 
 /* define isnan and isinf for ANSI C, if in C99 or above, isnan and isinf has been defined in math.h */
 #ifndef isinf
@@ -91,14 +91,14 @@ typedef struct {
 } error;
 static error global_error = { NULL, 0 };
 
-CJSON_PUBLIC(const char *) cJSON_GetErrorPtr(void)
+CJSON_PUBLIC(const char *) json_get_error_ptr(void)
 {
     return (const char*) (global_error.json + global_error.position);
 }
 
-CJSON_PUBLIC(char *) cJSON_GetStringValue(const cJSON * const item)
+CJSON_PUBLIC(char *) json_get_string_value(const json_obj * const item)
 {
-    if (!cJSON_IsString(item))
+    if (!json_is_string(item))
     {
         return NULL;
     }
@@ -106,9 +106,9 @@ CJSON_PUBLIC(char *) cJSON_GetStringValue(const cJSON * const item)
     return item->valuestring;
 }
 
-CJSON_PUBLIC(double) cJSON_GetNumberValue(const cJSON * const item)
+CJSON_PUBLIC(double) json_get_number_value(const json_obj * const item)
 {
-    if (!cJSON_IsNumber(item))
+    if (!json_is_number(item))
     {
         return (double) NAN;
     }
@@ -121,7 +121,7 @@ CJSON_PUBLIC(double) cJSON_GetNumberValue(const cJSON * const item)
     #error cJSON.h and cJSON.c have different versions. Make sure that both have the same.
 #endif
 
-CJSON_PUBLIC(const char*) cJSON_Version(void)
+CJSON_PUBLIC(const char*) json_version(void)
 {
     static char version[15];
     sprintf(version, "%i.%i.%i", CJSON_VERSION_MAJOR, CJSON_VERSION_MINOR, CJSON_VERSION_PATCH);
@@ -185,7 +185,7 @@ static void * CJSON_CDECL internal_realloc(void *pointer, size_t size)
 
 static internal_hooks global_hooks = { internal_malloc, internal_free, internal_realloc };
 
-static unsigned char* cJSON_strdup(const unsigned char* string, const internal_hooks * const hooks)
+static unsigned char* json_strdup(const unsigned char* string, const internal_hooks * const hooks)
 {
     size_t length = 0;
     unsigned char *copy = NULL;
@@ -206,7 +206,7 @@ static unsigned char* cJSON_strdup(const unsigned char* string, const internal_h
     return copy;
 }
 
-CJSON_PUBLIC(void) cJSON_InitHooks(cJSON_Hooks* hooks)
+CJSON_PUBLIC(void) json_init_hooks(json_hooks* hooks)
 {
     if (hooks == NULL)
     {
@@ -238,33 +238,33 @@ CJSON_PUBLIC(void) cJSON_InitHooks(cJSON_Hooks* hooks)
 }
 
 /* Internal constructor. */
-static cJSON *cJSON_New_Item(const internal_hooks * const hooks)
+static json_obj *json_New_Item(const internal_hooks * const hooks)
 {
-    cJSON* node = (cJSON*)hooks->allocate(sizeof(cJSON));
+    json_obj* node = (json_obj*)hooks->allocate(sizeof(json_obj));
     if (node)
     {
-        memset(node, '\0', sizeof(cJSON));
+        memset(node, '\0', sizeof(json_obj));
     }
 
     return node;
 }
 
 /* Delete a cJSON structure. */
-CJSON_PUBLIC(void) cJSON_Delete(cJSON *item)
+CJSON_PUBLIC(void) json_delete(json_obj *item)
 {
-    cJSON *next = NULL;
+    json_obj *next = NULL;
     while (item != NULL)
     {
         next = item->next;
-        if (!(item->type & cJSON_IsReference) && (item->child != NULL))
+        if (!(item->type & JSON_IS_REFERENCE) && (item->child != NULL))
         {
-            cJSON_Delete(item->child);
+            json_delete(item->child);
         }
-        if (!(item->type & cJSON_IsReference) && (item->valuestring != NULL))
+        if (!(item->type & JSON_IS_REFERENCE) && (item->valuestring != NULL))
         {
             global_hooks.deallocate(item->valuestring);
         }
-        if (!(item->type & cJSON_StringIsConst) && (item->string != NULL))
+        if (!(item->type & JSON_STRING_IS_CONST) && (item->string != NULL))
         {
             global_hooks.deallocate(item->string);
         }
@@ -302,7 +302,7 @@ typedef struct
 #define buffer_at_offset(buffer) ((buffer)->content + (buffer)->offset)
 
 /* Parse the input text to generate a number, and populate the result into item. */
-static cJSON_bool parse_number(cJSON * const item, parse_buffer * const input_buffer)
+static json_bool parse_number(json_obj * const item, parse_buffer * const input_buffer)
 {
     double number = 0;
     unsigned char *after_end = NULL;
@@ -372,14 +372,14 @@ loop_end:
         item->valueint = (int)number;
     }
 
-    item->type = cJSON_Number;
+    item->type = JSON_NUMBER;
 
     input_buffer->offset += (size_t)(after_end - number_c_string);
     return true;
 }
 
-/* don't ask me, but the original cJSON_SetNumberValue returns an integer or double */
-CJSON_PUBLIC(double) cJSON_SetNumberHelper(cJSON *object, double number)
+/* don't ask me, but the original json_SetNumberValue returns an integer or double */
+CJSON_PUBLIC(double) json_set_number_helper(json_obj *object, double number)
 {
     if (number >= INT_MAX)
     {
@@ -397,11 +397,11 @@ CJSON_PUBLIC(double) cJSON_SetNumberHelper(cJSON *object, double number)
     return object->valuedouble = number;
 }
 
-CJSON_PUBLIC(char*) cJSON_SetValuestring(cJSON *object, const char *valuestring)
+CJSON_PUBLIC(char*) json_set_valuestring(json_obj *object, const char *valuestring)
 {
     char *copy = NULL;
-    /* if object's type is not cJSON_String or is cJSON_IsReference, it should not set valuestring */
-    if (!(object->type & cJSON_String) || (object->type & cJSON_IsReference))
+    /* if object's type is not JSON_STRING or is JSON_IS_REFERENCE, it should not set valuestring */
+    if (!(object->type & JSON_STRING) || (object->type & JSON_IS_REFERENCE))
     {
         return NULL;
     }
@@ -410,14 +410,14 @@ CJSON_PUBLIC(char*) cJSON_SetValuestring(cJSON *object, const char *valuestring)
         strcpy(object->valuestring, valuestring);
         return object->valuestring;
     }
-    copy = (char*) cJSON_strdup((const unsigned char*)valuestring, &global_hooks);
+    copy = (char*) json_strdup((const unsigned char*)valuestring, &global_hooks);
     if (copy == NULL)
     {
         return NULL;
     }
     if (object->valuestring != NULL)
     {
-        cJSON_free(object->valuestring);
+        json_free(object->valuestring);
     }
     object->valuestring = copy;
 
@@ -430,8 +430,8 @@ typedef struct
     size_t length;
     size_t offset;
     size_t depth; /* current nesting depth (for formatted printing) */
-    cJSON_bool noalloc;
-    cJSON_bool format; /* is this print a formatted print */
+    json_bool noalloc;
+    json_bool format; /* is this print a formatted print */
     internal_hooks hooks;
 } printbuffer;
 
@@ -535,14 +535,14 @@ static void update_offset(printbuffer * const buffer)
 }
 
 /* securely comparison of floating-point variables */
-static cJSON_bool compare_double(double a, double b)
+static json_bool compare_double(double a, double b)
 {
     double maxVal = fabs(a) > fabs(b) ? fabs(a) : fabs(b);
     return (fabs(a - b) <= maxVal * DBL_EPSILON);
 }
 
 /* Render the number nicely from the given item into a string. */
-static cJSON_bool print_number(const cJSON * const item, printbuffer * const output_buffer)
+static json_bool print_number(const json_obj * const item, printbuffer * const output_buffer)
 {
     unsigned char *output_pointer = NULL;
     double d = item->valuedouble;
@@ -770,7 +770,7 @@ fail:
 }
 
 /* Parse the input text into an unescaped cinput, and populate item. */
-static cJSON_bool parse_string(cJSON * const item, parse_buffer * const input_buffer)
+static json_bool parse_string(json_obj * const item, parse_buffer * const input_buffer)
 {
     const unsigned char *input_pointer = buffer_at_offset(input_buffer) + 1;
     const unsigned char *input_end = buffer_at_offset(input_buffer) + 1;
@@ -876,7 +876,7 @@ static cJSON_bool parse_string(cJSON * const item, parse_buffer * const input_bu
     /* zero terminate the output */
     *output_pointer = '\0';
 
-    item->type = cJSON_String;
+    item->type = JSON_STRING;
     item->valuestring = (char*)output;
 
     input_buffer->offset = (size_t) (input_end - input_buffer->content);
@@ -899,7 +899,7 @@ fail:
 }
 
 /* Render the cstring provided to an escaped version that can be printed. */
-static cJSON_bool print_string_ptr(const unsigned char * const input, printbuffer * const output_buffer)
+static json_bool print_string_ptr(const unsigned char * const input, printbuffer * const output_buffer)
 {
     const unsigned char *input_pointer = NULL;
     unsigned char *output = NULL;
@@ -1021,18 +1021,18 @@ static cJSON_bool print_string_ptr(const unsigned char * const input, printbuffe
 }
 
 /* Invoke print_string_ptr (which is useful) on an item. */
-static cJSON_bool print_string(const cJSON * const item, printbuffer * const p)
+static json_bool print_string(const json_obj * const item, printbuffer * const p)
 {
     return print_string_ptr((unsigned char*)item->valuestring, p);
 }
 
 /* Predeclare these prototypes. */
-static cJSON_bool parse_value(cJSON * const item, parse_buffer * const input_buffer);
-static cJSON_bool print_value(const cJSON * const item, printbuffer * const output_buffer);
-static cJSON_bool parse_array(cJSON * const item, parse_buffer * const input_buffer);
-static cJSON_bool print_array(const cJSON * const item, printbuffer * const output_buffer);
-static cJSON_bool parse_object(cJSON * const item, parse_buffer * const input_buffer);
-static cJSON_bool print_object(const cJSON * const item, printbuffer * const output_buffer);
+static json_bool parse_value(json_obj * const item, parse_buffer * const input_buffer);
+static json_bool print_value(const json_obj * const item, printbuffer * const output_buffer);
+static json_bool parse_array(json_obj * const item, parse_buffer * const input_buffer);
+static json_bool print_array(const json_obj * const item, printbuffer * const output_buffer);
+static json_bool parse_object(json_obj * const item, parse_buffer * const input_buffer);
+static json_bool print_object(const json_obj * const item, printbuffer * const output_buffer);
 
 /* Utility to jump whitespace and cr/lf */
 static parse_buffer *buffer_skip_whitespace(parse_buffer * const buffer)
@@ -1076,7 +1076,7 @@ static parse_buffer *skip_utf8_bom(parse_buffer * const buffer)
     return buffer;
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_ParseWithOpts(const char *value, const char **return_parse_end, cJSON_bool require_null_terminated)
+CJSON_PUBLIC(json_obj *) json_parse_with_opts(const char *value, const char **return_parse_end, json_bool require_null_terminated)
 {
     size_t buffer_length;
 
@@ -1088,14 +1088,14 @@ CJSON_PUBLIC(cJSON *) cJSON_ParseWithOpts(const char *value, const char **return
     /* Adding null character size due to require_null_terminated. */
     buffer_length = strlen(value) + sizeof("");
 
-    return cJSON_ParseWithLengthOpts(value, buffer_length, return_parse_end, require_null_terminated);
+    return json_parse_with_length_opts(value, buffer_length, return_parse_end, require_null_terminated);
 }
 
 /* Parse an object - create a new root, and populate. */
-CJSON_PUBLIC(cJSON *) cJSON_ParseWithLengthOpts(const char *value, size_t buffer_length, const char **return_parse_end, cJSON_bool require_null_terminated)
+CJSON_PUBLIC(json_obj *) json_parse_with_length_opts(const char *value, size_t buffer_length, const char **return_parse_end, json_bool require_null_terminated)
 {
     parse_buffer buffer = { 0, 0, 0, 0, { 0, 0, 0 } };
-    cJSON *item = NULL;
+    json_obj *item = NULL;
 
     /* reset error position */
     global_error.json = NULL;
@@ -1111,7 +1111,7 @@ CJSON_PUBLIC(cJSON *) cJSON_ParseWithLengthOpts(const char *value, size_t buffer
     buffer.offset = 0;
     buffer.hooks = global_hooks;
 
-    item = cJSON_New_Item(&global_hooks);
+    item = json_New_Item(&global_hooks);
     if (item == NULL) /* memory fail */
     {
         goto fail;
@@ -1142,7 +1142,7 @@ CJSON_PUBLIC(cJSON *) cJSON_ParseWithLengthOpts(const char *value, size_t buffer
 fail:
     if (item != NULL)
     {
-        cJSON_Delete(item);
+        json_delete(item);
     }
 
     if (value != NULL)
@@ -1171,20 +1171,20 @@ fail:
     return NULL;
 }
 
-/* Default options for cJSON_Parse */
-CJSON_PUBLIC(cJSON *) cJSON_Parse(const char *value)
+/* Default options for json_Parse */
+CJSON_PUBLIC(json_obj *) json_parse(const char *value)
 {
-    return cJSON_ParseWithOpts(value, 0, 0);
+    return json_parse_with_opts(value, 0, 0);
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_ParseWithLength(const char *value, size_t buffer_length)
+CJSON_PUBLIC(json_obj *) json_parse_with_length(const char *value, size_t buffer_length)
 {
-    return cJSON_ParseWithLengthOpts(value, buffer_length, 0, 0);
+    return json_parse_with_length_opts(value, buffer_length, 0, 0);
 }
 
 #define cjson_min(a, b) (((a) < (b)) ? (a) : (b))
 
-static unsigned char *print(const cJSON * const item, cJSON_bool format, const internal_hooks * const hooks)
+static unsigned char *print(const json_obj * const item, json_bool format, const internal_hooks * const hooks)
 {
     static const size_t default_buffer_size = 256;
     printbuffer buffer[1];
@@ -1249,17 +1249,17 @@ fail:
 }
 
 /* Render a cJSON item/entity/structure to text. */
-CJSON_PUBLIC(char *) cJSON_Print(const cJSON *item)
+CJSON_PUBLIC(char *) json_print(const json_obj *item)
 {
     return (char*)print(item, true, &global_hooks);
 }
 
-CJSON_PUBLIC(char *) cJSON_PrintUnformatted(const cJSON *item)
+CJSON_PUBLIC(char *) json_print_unformatted(const json_obj *item)
 {
     return (char*)print(item, false, &global_hooks);
 }
 
-CJSON_PUBLIC(char *) cJSON_PrintBuffered(const cJSON *item, int prebuffer, cJSON_bool fmt)
+CJSON_PUBLIC(char *) json_print_buffered(const json_obj *item, int prebuffer, json_bool fmt)
 {
     printbuffer p = { 0, 0, 0, 0, 0, 0, { 0, 0, 0 } };
 
@@ -1289,7 +1289,7 @@ CJSON_PUBLIC(char *) cJSON_PrintBuffered(const cJSON *item, int prebuffer, cJSON
     return (char*)p.buffer;
 }
 
-CJSON_PUBLIC(cJSON_bool) cJSON_PrintPreallocated(cJSON *item, char *buffer, const int length, const cJSON_bool format)
+CJSON_PUBLIC(json_bool) json_print_preallocated(json_obj *item, char *buffer, const int length, const json_bool format)
 {
     printbuffer p = { 0, 0, 0, 0, 0, 0, { 0, 0, 0 } };
 
@@ -1309,7 +1309,7 @@ CJSON_PUBLIC(cJSON_bool) cJSON_PrintPreallocated(cJSON *item, char *buffer, cons
 }
 
 /* Parser core - when encountering text, process appropriately. */
-static cJSON_bool parse_value(cJSON * const item, parse_buffer * const input_buffer)
+static json_bool parse_value(json_obj * const item, parse_buffer * const input_buffer)
 {
     if ((input_buffer == NULL) || (input_buffer->content == NULL))
     {
@@ -1320,21 +1320,21 @@ static cJSON_bool parse_value(cJSON * const item, parse_buffer * const input_buf
     /* null */
     if (can_read(input_buffer, 4) && (strncmp((const char*)buffer_at_offset(input_buffer), "null", 4) == 0))
     {
-        item->type = cJSON_NULL;
+        item->type = JSON_NULL;
         input_buffer->offset += 4;
         return true;
     }
     /* false */
     if (can_read(input_buffer, 5) && (strncmp((const char*)buffer_at_offset(input_buffer), "false", 5) == 0))
     {
-        item->type = cJSON_False;
+        item->type = JSON_FALSE;
         input_buffer->offset += 5;
         return true;
     }
     /* true */
     if (can_read(input_buffer, 4) && (strncmp((const char*)buffer_at_offset(input_buffer), "true", 4) == 0))
     {
-        item->type = cJSON_True;
+        item->type = JSON_TRUE;
         item->valueint = 1;
         input_buffer->offset += 4;
         return true;
@@ -1364,7 +1364,7 @@ static cJSON_bool parse_value(cJSON * const item, parse_buffer * const input_buf
 }
 
 /* Render a value to text. */
-static cJSON_bool print_value(const cJSON * const item, printbuffer * const output_buffer)
+static json_bool print_value(const json_obj * const item, printbuffer * const output_buffer)
 {
     unsigned char *output = NULL;
 
@@ -1375,7 +1375,7 @@ static cJSON_bool print_value(const cJSON * const item, printbuffer * const outp
 
     switch ((item->type) & 0xFF)
     {
-        case cJSON_NULL:
+        case JSON_NULL:
             output = ensure(output_buffer, 5);
             if (output == NULL)
             {
@@ -1384,7 +1384,7 @@ static cJSON_bool print_value(const cJSON * const item, printbuffer * const outp
             strcpy((char*)output, "null");
             return true;
 
-        case cJSON_False:
+        case JSON_FALSE:
             output = ensure(output_buffer, 6);
             if (output == NULL)
             {
@@ -1393,7 +1393,7 @@ static cJSON_bool print_value(const cJSON * const item, printbuffer * const outp
             strcpy((char*)output, "false");
             return true;
 
-        case cJSON_True:
+        case JSON_TRUE:
             output = ensure(output_buffer, 5);
             if (output == NULL)
             {
@@ -1402,10 +1402,10 @@ static cJSON_bool print_value(const cJSON * const item, printbuffer * const outp
             strcpy((char*)output, "true");
             return true;
 
-        case cJSON_Number:
+        case JSON_NUMBER:
             return print_number(item, output_buffer);
 
-        case cJSON_Raw:
+        case JSON_RAW:
         {
             size_t raw_length = 0;
             if (item->valuestring == NULL)
@@ -1423,13 +1423,13 @@ static cJSON_bool print_value(const cJSON * const item, printbuffer * const outp
             return true;
         }
 
-        case cJSON_String:
+        case JSON_STRING:
             return print_string(item, output_buffer);
 
-        case cJSON_Array:
+        case JSON_ARRAY:
             return print_array(item, output_buffer);
 
-        case cJSON_Object:
+        case JSON_OBJECT:
             return print_object(item, output_buffer);
 
         default:
@@ -1438,10 +1438,10 @@ static cJSON_bool print_value(const cJSON * const item, printbuffer * const outp
 }
 
 /* Build an array from input text. */
-static cJSON_bool parse_array(cJSON * const item, parse_buffer * const input_buffer)
+static json_bool parse_array(json_obj * const item, parse_buffer * const input_buffer)
 {
-    cJSON *head = NULL; /* head of the linked list */
-    cJSON *current_item = NULL;
+    json_obj *head = NULL; /* head of the linked list */
+    json_obj *current_item = NULL;
 
     if (input_buffer->depth >= CJSON_NESTING_LIMIT)
     {
@@ -1476,7 +1476,7 @@ static cJSON_bool parse_array(cJSON * const item, parse_buffer * const input_buf
     do
     {
         /* allocate next item */
-        cJSON *new_item = cJSON_New_Item(&(input_buffer->hooks));
+        json_obj *new_item = json_New_Item(&(input_buffer->hooks));
         if (new_item == NULL)
         {
             goto fail; /* allocation failure */
@@ -1519,7 +1519,7 @@ success:
         head->prev = current_item;
     }
 
-    item->type = cJSON_Array;
+    item->type = JSON_ARRAY;
     item->child = head;
 
     input_buffer->offset++;
@@ -1529,18 +1529,18 @@ success:
 fail:
     if (head != NULL)
     {
-        cJSON_Delete(head);
+        json_delete(head);
     }
 
     return false;
 }
 
 /* Render an array to text */
-static cJSON_bool print_array(const cJSON * const item, printbuffer * const output_buffer)
+static json_bool print_array(const json_obj * const item, printbuffer * const output_buffer)
 {
     unsigned char *output_pointer = NULL;
     size_t length = 0;
-    cJSON *current_element = item->child;
+    json_obj *current_element = item->child;
 
     if (output_buffer == NULL)
     {
@@ -1598,10 +1598,10 @@ static cJSON_bool print_array(const cJSON * const item, printbuffer * const outp
 }
 
 /* Build an object from the text. */
-static cJSON_bool parse_object(cJSON * const item, parse_buffer * const input_buffer)
+static json_bool parse_object(json_obj * const item, parse_buffer * const input_buffer)
 {
-    cJSON *head = NULL; /* linked list head */
-    cJSON *current_item = NULL;
+    json_obj *head = NULL; /* linked list head */
+    json_obj *current_item = NULL;
 
     if (input_buffer->depth >= CJSON_NESTING_LIMIT)
     {
@@ -1634,7 +1634,7 @@ static cJSON_bool parse_object(cJSON * const item, parse_buffer * const input_bu
     do
     {
         /* allocate next item */
-        cJSON *new_item = cJSON_New_Item(&(input_buffer->hooks));
+        json_obj *new_item = json_New_Item(&(input_buffer->hooks));
         if (new_item == NULL)
         {
             goto fail; /* allocation failure */
@@ -1695,7 +1695,7 @@ success:
         head->prev = current_item;
     }
 
-    item->type = cJSON_Object;
+    item->type = JSON_OBJECT;
     item->child = head;
 
     input_buffer->offset++;
@@ -1704,18 +1704,18 @@ success:
 fail:
     if (head != NULL)
     {
-        cJSON_Delete(head);
+        json_delete(head);
     }
 
     return false;
 }
 
 /* Render an object to text. */
-static cJSON_bool print_object(const cJSON * const item, printbuffer * const output_buffer)
+static json_bool print_object(const json_obj * const item, printbuffer * const output_buffer)
 {
     unsigned char *output_pointer = NULL;
     size_t length = 0;
-    cJSON *current_item = item->child;
+    json_obj *current_item = item->child;
 
     if (output_buffer == NULL)
     {
@@ -1825,9 +1825,9 @@ static cJSON_bool print_object(const cJSON * const item, printbuffer * const out
 }
 
 /* Get Array size/item / object item. */
-CJSON_PUBLIC(int) cJSON_GetArraySize(const cJSON *array)
+CJSON_PUBLIC(int) json_get_array_size(const json_obj *array)
 {
-    cJSON *child = NULL;
+    json_obj *child = NULL;
     size_t size = 0;
 
     if (array == NULL)
@@ -1848,9 +1848,9 @@ CJSON_PUBLIC(int) cJSON_GetArraySize(const cJSON *array)
     return (int)size;
 }
 
-static cJSON* get_array_item(const cJSON *array, size_t index)
+static json_obj* get_array_item(const json_obj *array, size_t index)
 {
-    cJSON *current_child = NULL;
+    json_obj *current_child = NULL;
 
     if (array == NULL)
     {
@@ -1867,7 +1867,7 @@ static cJSON* get_array_item(const cJSON *array, size_t index)
     return current_child;
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_GetArrayItem(const cJSON *array, int index)
+CJSON_PUBLIC(json_obj *) json_get_array_item(const json_obj *array, int index)
 {
     if (index < 0)
     {
@@ -1877,9 +1877,9 @@ CJSON_PUBLIC(cJSON *) cJSON_GetArrayItem(const cJSON *array, int index)
     return get_array_item(array, (size_t)index);
 }
 
-static cJSON *get_object_item(const cJSON * const object, const char * const name, const cJSON_bool case_sensitive)
+static json_obj *get_object_item(const json_obj * const object, const char * const name, const json_bool case_sensitive)
 {
-    cJSON *current_element = NULL;
+    json_obj *current_element = NULL;
 
     if ((object == NULL) || (name == NULL))
     {
@@ -1909,53 +1909,53 @@ static cJSON *get_object_item(const cJSON * const object, const char * const nam
     return current_element;
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_GetObjectItem(const cJSON * const object, const char * const string)
+CJSON_PUBLIC(json_obj *) json_get_object_item(const json_obj * const object, const char * const string)
 {
     return get_object_item(object, string, false);
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_GetObjectItemCaseSensitive(const cJSON * const object, const char * const string)
+CJSON_PUBLIC(json_obj *) json_get_object_item_case_sensitive(const json_obj * const object, const char * const string)
 {
     return get_object_item(object, string, true);
 }
 
-CJSON_PUBLIC(cJSON_bool) cJSON_HasObjectItem(const cJSON *object, const char *string)
+CJSON_PUBLIC(json_bool) json_has_object_item(const json_obj *object, const char *string)
 {
-    return cJSON_GetObjectItem(object, string) ? 1 : 0;
+    return json_get_object_item(object, string) ? 1 : 0;
 }
 
 /* Utility for array list handling. */
-static void suffix_object(cJSON *prev, cJSON *item)
+static void suffix_object(json_obj *prev, json_obj *item)
 {
     prev->next = item;
     item->prev = prev;
 }
 
 /* Utility for handling references. */
-static cJSON *create_reference(const cJSON *item, const internal_hooks * const hooks)
+static json_obj *create_reference(const json_obj *item, const internal_hooks * const hooks)
 {
-    cJSON *reference = NULL;
+    json_obj *reference = NULL;
     if (item == NULL)
     {
         return NULL;
     }
 
-    reference = cJSON_New_Item(hooks);
+    reference = json_New_Item(hooks);
     if (reference == NULL)
     {
         return NULL;
     }
 
-    memcpy(reference, item, sizeof(cJSON));
+    memcpy(reference, item, sizeof(json_obj));
     reference->string = NULL;
-    reference->type |= cJSON_IsReference;
+    reference->type |= JSON_IS_REFERENCE;
     reference->next = reference->prev = NULL;
     return reference;
 }
 
-static cJSON_bool add_item_to_array(cJSON *array, cJSON *item)
+static json_bool add_item_to_array(json_obj *array, json_obj *item)
 {
-    cJSON *child = NULL;
+    json_obj *child = NULL;
 
     if ((item == NULL) || (array == NULL) || (array == item))
     {
@@ -1987,7 +1987,7 @@ static cJSON_bool add_item_to_array(cJSON *array, cJSON *item)
 }
 
 /* Add item to array/object. */
-CJSON_PUBLIC(cJSON_bool) cJSON_AddItemToArray(cJSON *array, cJSON *item)
+CJSON_PUBLIC(json_bool) json_add_item_to_array(json_obj *array, json_obj *item)
 {
     return add_item_to_array(array, item);
 }
@@ -2008,10 +2008,10 @@ static void* cast_away_const(const void* string)
 #endif
 
 
-static cJSON_bool add_item_to_object(cJSON * const object, const char * const string, cJSON * const item, const internal_hooks * const hooks, const cJSON_bool constant_key)
+static json_bool add_item_to_object(json_obj * const object, const char * const string, json_obj * const item, const internal_hooks * const hooks, const json_bool constant_key)
 {
     char *new_key = NULL;
-    int new_type = cJSON_Invalid;
+    int new_type = JSON_INVALID;
 
     if ((object == NULL) || (string == NULL) || (item == NULL) || (object == item))
     {
@@ -2021,20 +2021,20 @@ static cJSON_bool add_item_to_object(cJSON * const object, const char * const st
     if (constant_key)
     {
         new_key = (char*)cast_away_const(string);
-        new_type = item->type | cJSON_StringIsConst;
+        new_type = item->type | JSON_STRING_IS_CONST;
     }
     else
     {
-        new_key = (char*)cJSON_strdup((const unsigned char*)string, hooks);
+        new_key = (char*)json_strdup((const unsigned char*)string, hooks);
         if (new_key == NULL)
         {
             return false;
         }
 
-        new_type = item->type & ~cJSON_StringIsConst;
+        new_type = item->type & ~JSON_STRING_IS_CONST;
     }
 
-    if (!(item->type & cJSON_StringIsConst) && (item->string != NULL))
+    if (!(item->type & JSON_STRING_IS_CONST) && (item->string != NULL))
     {
         hooks->deallocate(item->string);
     }
@@ -2045,18 +2045,18 @@ static cJSON_bool add_item_to_object(cJSON * const object, const char * const st
     return add_item_to_array(object, item);
 }
 
-CJSON_PUBLIC(cJSON_bool) cJSON_AddItemToObject(cJSON *object, const char *string, cJSON *item)
+CJSON_PUBLIC(json_bool) json_add_item_to_object(json_obj *object, const char *string, json_obj *item)
 {
     return add_item_to_object(object, string, item, &global_hooks, false);
 }
 
 /* Add an item to an object with constant string as key */
-CJSON_PUBLIC(cJSON_bool) cJSON_AddItemToObjectCS(cJSON *object, const char *string, cJSON *item)
+CJSON_PUBLIC(json_bool) json_add_item_to_object_cs(json_obj *object, const char *string, json_obj *item)
 {
     return add_item_to_object(object, string, item, &global_hooks, true);
 }
 
-CJSON_PUBLIC(cJSON_bool) cJSON_AddItemReferenceToArray(cJSON *array, cJSON *item)
+CJSON_PUBLIC(json_bool) json_add_item_reference_to_array(json_obj *array, json_obj *item)
 {
     if (array == NULL)
     {
@@ -2066,7 +2066,7 @@ CJSON_PUBLIC(cJSON_bool) cJSON_AddItemReferenceToArray(cJSON *array, cJSON *item
     return add_item_to_array(array, create_reference(item, &global_hooks));
 }
 
-CJSON_PUBLIC(cJSON_bool) cJSON_AddItemReferenceToObject(cJSON *object, const char *string, cJSON *item)
+CJSON_PUBLIC(json_bool) json_add_item_reference_to_object(json_obj *object, const char *string, json_obj *item)
 {
     if ((object == NULL) || (string == NULL))
     {
@@ -2076,115 +2076,115 @@ CJSON_PUBLIC(cJSON_bool) cJSON_AddItemReferenceToObject(cJSON *object, const cha
     return add_item_to_object(object, string, create_reference(item, &global_hooks), &global_hooks, false);
 }
 
-CJSON_PUBLIC(cJSON*) cJSON_AddNullToObject(cJSON * const object, const char * const name)
+CJSON_PUBLIC(json_obj*) json_add_null_to_object(json_obj * const object, const char * const name)
 {
-    cJSON *null = cJSON_CreateNull();
+    json_obj *null = json_create_null();
     if (add_item_to_object(object, name, null, &global_hooks, false))
     {
         return null;
     }
 
-    cJSON_Delete(null);
+    json_delete(null);
     return NULL;
 }
 
-CJSON_PUBLIC(cJSON*) cJSON_AddTrueToObject(cJSON * const object, const char * const name)
+CJSON_PUBLIC(json_obj*) json_add_true_to_object(json_obj * const object, const char * const name)
 {
-    cJSON *true_item = cJSON_CreateTrue();
+    json_obj *true_item = json_create_true();
     if (add_item_to_object(object, name, true_item, &global_hooks, false))
     {
         return true_item;
     }
 
-    cJSON_Delete(true_item);
+    json_delete(true_item);
     return NULL;
 }
 
-CJSON_PUBLIC(cJSON*) cJSON_AddFalseToObject(cJSON * const object, const char * const name)
+CJSON_PUBLIC(json_obj*) json_add_false_to_object(json_obj * const object, const char * const name)
 {
-    cJSON *false_item = cJSON_CreateFalse();
+    json_obj *false_item = json_create_false();
     if (add_item_to_object(object, name, false_item, &global_hooks, false))
     {
         return false_item;
     }
 
-    cJSON_Delete(false_item);
+    json_delete(false_item);
     return NULL;
 }
 
-CJSON_PUBLIC(cJSON*) cJSON_AddBoolToObject(cJSON * const object, const char * const name, const cJSON_bool boolean)
+CJSON_PUBLIC(json_obj*) json_add_bool_to_object(json_obj * const object, const char * const name, const json_bool boolean)
 {
-    cJSON *bool_item = cJSON_CreateBool(boolean);
+    json_obj *bool_item = json_create_bool(boolean);
     if (add_item_to_object(object, name, bool_item, &global_hooks, false))
     {
         return bool_item;
     }
 
-    cJSON_Delete(bool_item);
+    json_delete(bool_item);
     return NULL;
 }
 
-CJSON_PUBLIC(cJSON*) cJSON_AddNumberToObject(cJSON * const object, const char * const name, const double number)
+CJSON_PUBLIC(json_obj*) json_add_number_to_object(json_obj * const object, const char * const name, const double number)
 {
-    cJSON *number_item = cJSON_CreateNumber(number);
+    json_obj *number_item = json_create_number(number);
     if (add_item_to_object(object, name, number_item, &global_hooks, false))
     {
         return number_item;
     }
 
-    cJSON_Delete(number_item);
+    json_delete(number_item);
     return NULL;
 }
 
-CJSON_PUBLIC(cJSON*) cJSON_AddStringToObject(cJSON * const object, const char * const name, const char * const string)
+CJSON_PUBLIC(json_obj*) json_add_string_to_object(json_obj * const object, const char * const name, const char * const string)
 {
-    cJSON *string_item = cJSON_CreateString(string);
+    json_obj *string_item = json_create_string(string);
     if (add_item_to_object(object, name, string_item, &global_hooks, false))
     {
         return string_item;
     }
 
-    cJSON_Delete(string_item);
+    json_delete(string_item);
     return NULL;
 }
 
-CJSON_PUBLIC(cJSON*) cJSON_AddRawToObject(cJSON * const object, const char * const name, const char * const raw)
+CJSON_PUBLIC(json_obj*) json_add_raw_to_object(json_obj * const object, const char * const name, const char * const raw)
 {
-    cJSON *raw_item = cJSON_CreateRaw(raw);
+    json_obj *raw_item = json_create_raw(raw);
     if (add_item_to_object(object, name, raw_item, &global_hooks, false))
     {
         return raw_item;
     }
 
-    cJSON_Delete(raw_item);
+    json_delete(raw_item);
     return NULL;
 }
 
-CJSON_PUBLIC(cJSON*) cJSON_AddObjectToObject(cJSON * const object, const char * const name)
+CJSON_PUBLIC(json_obj*) json_add_object_to_object(json_obj * const object, const char * const name)
 {
-    cJSON *object_item = cJSON_CreateObject();
+    json_obj *object_item = json_create_object();
     if (add_item_to_object(object, name, object_item, &global_hooks, false))
     {
         return object_item;
     }
 
-    cJSON_Delete(object_item);
+    json_delete(object_item);
     return NULL;
 }
 
-CJSON_PUBLIC(cJSON*) cJSON_AddArrayToObject(cJSON * const object, const char * const name)
+CJSON_PUBLIC(json_obj*) json_add_array_to_object(json_obj * const object, const char * const name)
 {
-    cJSON *array = cJSON_CreateArray();
+    json_obj *array = json_create_array();
     if (add_item_to_object(object, name, array, &global_hooks, false))
     {
         return array;
     }
 
-    cJSON_Delete(array);
+    json_delete(array);
     return NULL;
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_DetachItemViaPointer(cJSON *parent, cJSON * const item)
+CJSON_PUBLIC(json_obj *) json_detach_item_via_pointer(json_obj *parent, json_obj * const item)
 {
     if ((parent == NULL) || (item == NULL))
     {
@@ -2220,49 +2220,49 @@ CJSON_PUBLIC(cJSON *) cJSON_DetachItemViaPointer(cJSON *parent, cJSON * const it
     return item;
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_DetachItemFromArray(cJSON *array, int which)
+CJSON_PUBLIC(json_obj *) json_detach_item_from_array(json_obj *array, int which)
 {
     if (which < 0)
     {
         return NULL;
     }
 
-    return cJSON_DetachItemViaPointer(array, get_array_item(array, (size_t)which));
+    return json_detach_item_via_pointer(array, get_array_item(array, (size_t)which));
 }
 
-CJSON_PUBLIC(void) cJSON_DeleteItemFromArray(cJSON *array, int which)
+CJSON_PUBLIC(void) json_delete_item_from_array(json_obj *array, int which)
 {
-    cJSON_Delete(cJSON_DetachItemFromArray(array, which));
+    json_delete(json_detach_item_from_array(array, which));
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_DetachItemFromObject(cJSON *object, const char *string)
+CJSON_PUBLIC(json_obj *) json_detach_item_from_object(json_obj *object, const char *string)
 {
-    cJSON *to_detach = cJSON_GetObjectItem(object, string);
+    json_obj *to_detach = json_get_object_item(object, string);
 
-    return cJSON_DetachItemViaPointer(object, to_detach);
+    return json_detach_item_via_pointer(object, to_detach);
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_DetachItemFromObjectCaseSensitive(cJSON *object, const char *string)
+CJSON_PUBLIC(json_obj *) json_detach_item_from_object_case_sensitive(json_obj *object, const char *string)
 {
-    cJSON *to_detach = cJSON_GetObjectItemCaseSensitive(object, string);
+    json_obj *to_detach = json_get_object_item_case_sensitive(object, string);
 
-    return cJSON_DetachItemViaPointer(object, to_detach);
+    return json_detach_item_via_pointer(object, to_detach);
 }
 
-CJSON_PUBLIC(void) cJSON_DeleteItemFromObject(cJSON *object, const char *string)
+CJSON_PUBLIC(void) json_delete_item_from_object(json_obj *object, const char *string)
 {
-    cJSON_Delete(cJSON_DetachItemFromObject(object, string));
+    json_delete(json_detach_item_from_object(object, string));
 }
 
-CJSON_PUBLIC(void) cJSON_DeleteItemFromObjectCaseSensitive(cJSON *object, const char *string)
+CJSON_PUBLIC(void) json_delete_item_from_object_case_sensitive(json_obj *object, const char *string)
 {
-    cJSON_Delete(cJSON_DetachItemFromObjectCaseSensitive(object, string));
+    json_delete(json_detach_item_from_object_case_sensitive(object, string));
 }
 
 /* Replace array/object items with new ones. */
-CJSON_PUBLIC(cJSON_bool) cJSON_InsertItemInArray(cJSON *array, int which, cJSON *newitem)
+CJSON_PUBLIC(json_bool) json_insert_item_in_array(json_obj *array, int which, json_obj *newitem)
 {
-    cJSON *after_inserted = NULL;
+    json_obj *after_inserted = NULL;
 
     if (which < 0)
     {
@@ -2289,7 +2289,7 @@ CJSON_PUBLIC(cJSON_bool) cJSON_InsertItemInArray(cJSON *array, int which, cJSON 
     return true;
 }
 
-CJSON_PUBLIC(cJSON_bool) cJSON_ReplaceItemViaPointer(cJSON * const parent, cJSON * const item, cJSON * replacement)
+CJSON_PUBLIC(json_bool) json_replace_item_via_pointer(json_obj * const parent, json_obj * const item, json_obj * replacement)
 {
     if ((parent == NULL) || (parent->child == NULL) || (replacement == NULL) || (item == NULL))
     {
@@ -2333,22 +2333,22 @@ CJSON_PUBLIC(cJSON_bool) cJSON_ReplaceItemViaPointer(cJSON * const parent, cJSON
 
     item->next = NULL;
     item->prev = NULL;
-    cJSON_Delete(item);
+    json_delete(item);
 
     return true;
 }
 
-CJSON_PUBLIC(cJSON_bool) cJSON_ReplaceItemInArray(cJSON *array, int which, cJSON *newitem)
+CJSON_PUBLIC(json_bool) json_replace_item_in_array(json_obj *array, int which, json_obj *newitem)
 {
     if (which < 0)
     {
         return false;
     }
 
-    return cJSON_ReplaceItemViaPointer(array, get_array_item(array, (size_t)which), newitem);
+    return json_replace_item_via_pointer(array, get_array_item(array, (size_t)which), newitem);
 }
 
-static cJSON_bool replace_item_in_object(cJSON *object, const char *string, cJSON *replacement, cJSON_bool case_sensitive)
+static json_bool replace_item_in_object(json_obj *object, const char *string, json_obj *replacement, json_bool case_sensitive)
 {
     if ((replacement == NULL) || (string == NULL))
     {
@@ -2356,82 +2356,82 @@ static cJSON_bool replace_item_in_object(cJSON *object, const char *string, cJSO
     }
 
     /* replace the name in the replacement */
-    if (!(replacement->type & cJSON_StringIsConst) && (replacement->string != NULL))
+    if (!(replacement->type & JSON_STRING_IS_CONST) && (replacement->string != NULL))
     {
-        cJSON_free(replacement->string);
+        json_free(replacement->string);
     }
-    replacement->string = (char*)cJSON_strdup((const unsigned char*)string, &global_hooks);
+    replacement->string = (char*)json_strdup((const unsigned char*)string, &global_hooks);
     if (replacement->string == NULL)
     {
         return false;
     }
 
-    replacement->type &= ~cJSON_StringIsConst;
+    replacement->type &= ~JSON_STRING_IS_CONST;
 
-    return cJSON_ReplaceItemViaPointer(object, get_object_item(object, string, case_sensitive), replacement);
+    return json_replace_item_via_pointer(object, get_object_item(object, string, case_sensitive), replacement);
 }
 
-CJSON_PUBLIC(cJSON_bool) cJSON_ReplaceItemInObject(cJSON *object, const char *string, cJSON *newitem)
+CJSON_PUBLIC(json_bool) json_replace_item_in_object(json_obj *object, const char *string, json_obj *newitem)
 {
     return replace_item_in_object(object, string, newitem, false);
 }
 
-CJSON_PUBLIC(cJSON_bool) cJSON_ReplaceItemInObjectCaseSensitive(cJSON *object, const char *string, cJSON *newitem)
+CJSON_PUBLIC(json_bool) json_replace_item_in_object_case_sensitive(json_obj *object, const char *string, json_obj *newitem)
 {
     return replace_item_in_object(object, string, newitem, true);
 }
 
 /* Create basic types: */
-CJSON_PUBLIC(cJSON *) cJSON_CreateNull(void)
+CJSON_PUBLIC(json_obj *) json_create_null(void)
 {
-    cJSON *item = cJSON_New_Item(&global_hooks);
+    json_obj *item = json_New_Item(&global_hooks);
     if(item)
     {
-        item->type = cJSON_NULL;
+        item->type = JSON_NULL;
     }
 
     return item;
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_CreateTrue(void)
+CJSON_PUBLIC(json_obj *) json_create_true(void)
 {
-    cJSON *item = cJSON_New_Item(&global_hooks);
+    json_obj *item = json_New_Item(&global_hooks);
     if(item)
     {
-        item->type = cJSON_True;
+        item->type = JSON_TRUE;
     }
 
     return item;
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_CreateFalse(void)
+CJSON_PUBLIC(json_obj *) json_create_false(void)
 {
-    cJSON *item = cJSON_New_Item(&global_hooks);
+    json_obj *item = json_New_Item(&global_hooks);
     if(item)
     {
-        item->type = cJSON_False;
+        item->type = JSON_FALSE;
     }
 
     return item;
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_CreateBool(cJSON_bool boolean)
+CJSON_PUBLIC(json_obj *) json_create_bool(json_bool boolean)
 {
-    cJSON *item = cJSON_New_Item(&global_hooks);
+    json_obj *item = json_New_Item(&global_hooks);
     if(item)
     {
-        item->type = boolean ? cJSON_True : cJSON_False;
+        item->type = boolean ? JSON_TRUE : JSON_FALSE;
     }
 
     return item;
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_CreateNumber(double num)
+CJSON_PUBLIC(json_obj *) json_create_number(double num)
 {
-    cJSON *item = cJSON_New_Item(&global_hooks);
+    json_obj *item = json_New_Item(&global_hooks);
     if(item)
     {
-        item->type = cJSON_Number;
+        item->type = JSON_NUMBER;
         item->valuedouble = num;
 
         /* use saturation in case of overflow */
@@ -2452,16 +2452,16 @@ CJSON_PUBLIC(cJSON *) cJSON_CreateNumber(double num)
     return item;
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_CreateString(const char *string)
+CJSON_PUBLIC(json_obj *) json_create_string(const char *string)
 {
-    cJSON *item = cJSON_New_Item(&global_hooks);
+    json_obj *item = json_New_Item(&global_hooks);
     if(item)
     {
-        item->type = cJSON_String;
-        item->valuestring = (char*)cJSON_strdup((const unsigned char*)string, &global_hooks);
+        item->type = JSON_STRING;
+        item->valuestring = (char*)json_strdup((const unsigned char*)string, &global_hooks);
         if(!item->valuestring)
         {
-            cJSON_Delete(item);
+            json_delete(item);
             return NULL;
         }
     }
@@ -2469,49 +2469,49 @@ CJSON_PUBLIC(cJSON *) cJSON_CreateString(const char *string)
     return item;
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_CreateStringReference(const char *string)
+CJSON_PUBLIC(json_obj *) json_create_string_reference(const char *string)
 {
-    cJSON *item = cJSON_New_Item(&global_hooks);
+    json_obj *item = json_New_Item(&global_hooks);
     if (item != NULL)
     {
-        item->type = cJSON_String | cJSON_IsReference;
+        item->type = JSON_STRING | JSON_IS_REFERENCE;
         item->valuestring = (char*)cast_away_const(string);
     }
 
     return item;
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_CreateObjectReference(const cJSON *child)
+CJSON_PUBLIC(json_obj *) json_create_object_reference(const json_obj *child)
 {
-    cJSON *item = cJSON_New_Item(&global_hooks);
+    json_obj *item = json_New_Item(&global_hooks);
     if (item != NULL) {
-        item->type = cJSON_Object | cJSON_IsReference;
-        item->child = (cJSON*)cast_away_const(child);
+        item->type = JSON_OBJECT | JSON_IS_REFERENCE;
+        item->child = (json_obj*)cast_away_const(child);
     }
 
     return item;
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_CreateArrayReference(const cJSON *child) {
-    cJSON *item = cJSON_New_Item(&global_hooks);
+CJSON_PUBLIC(json_obj *) json_create_array_reference(const json_obj *child) {
+    json_obj *item = json_New_Item(&global_hooks);
     if (item != NULL) {
-        item->type = cJSON_Array | cJSON_IsReference;
-        item->child = (cJSON*)cast_away_const(child);
+        item->type = JSON_ARRAY | JSON_IS_REFERENCE;
+        item->child = (json_obj*)cast_away_const(child);
     }
 
     return item;
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_CreateRaw(const char *raw)
+CJSON_PUBLIC(json_obj *) json_create_raw(const char *raw)
 {
-    cJSON *item = cJSON_New_Item(&global_hooks);
+    json_obj *item = json_New_Item(&global_hooks);
     if(item)
     {
-        item->type = cJSON_Raw;
-        item->valuestring = (char*)cJSON_strdup((const unsigned char*)raw, &global_hooks);
+        item->type = JSON_RAW;
+        item->valuestring = (char*)json_strdup((const unsigned char*)raw, &global_hooks);
         if(!item->valuestring)
         {
-            cJSON_Delete(item);
+            json_delete(item);
             return NULL;
         }
     }
@@ -2519,49 +2519,49 @@ CJSON_PUBLIC(cJSON *) cJSON_CreateRaw(const char *raw)
     return item;
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_CreateArray(void)
+CJSON_PUBLIC(json_obj *) json_create_array(void)
 {
-    cJSON *item = cJSON_New_Item(&global_hooks);
+    json_obj *item = json_New_Item(&global_hooks);
     if(item)
     {
-        item->type=cJSON_Array;
+        item->type=JSON_ARRAY;
     }
 
     return item;
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_CreateObject(void)
+CJSON_PUBLIC(json_obj *) json_create_object(void)
 {
-    cJSON *item = cJSON_New_Item(&global_hooks);
+    json_obj *item = json_New_Item(&global_hooks);
     if (item)
     {
-        item->type = cJSON_Object;
+        item->type = JSON_OBJECT;
     }
 
     return item;
 }
 
 /* Create Arrays: */
-CJSON_PUBLIC(cJSON *) cJSON_CreateIntArray(const int *numbers, int count)
+CJSON_PUBLIC(json_obj *) json_create_int_array(const int *numbers, int count)
 {
     size_t i = 0;
-    cJSON *n = NULL;
-    cJSON *p = NULL;
-    cJSON *a = NULL;
+    json_obj *n = NULL;
+    json_obj *p = NULL;
+    json_obj *a = NULL;
 
     if ((count < 0) || (numbers == NULL))
     {
         return NULL;
     }
 
-    a = cJSON_CreateArray();
+    a = json_create_array();
 
     for(i = 0; a && (i < (size_t)count); i++)
     {
-        n = cJSON_CreateNumber(numbers[i]);
+        n = json_create_number(numbers[i]);
         if (!n)
         {
-            cJSON_Delete(a);
+            json_delete(a);
             return NULL;
         }
         if(!i)
@@ -2582,26 +2582,26 @@ CJSON_PUBLIC(cJSON *) cJSON_CreateIntArray(const int *numbers, int count)
     return a;
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_CreateFloatArray(const float *numbers, int count)
+CJSON_PUBLIC(json_obj *) json_create_float_array(const float *numbers, int count)
 {
     size_t i = 0;
-    cJSON *n = NULL;
-    cJSON *p = NULL;
-    cJSON *a = NULL;
+    json_obj *n = NULL;
+    json_obj *p = NULL;
+    json_obj *a = NULL;
 
     if ((count < 0) || (numbers == NULL))
     {
         return NULL;
     }
 
-    a = cJSON_CreateArray();
+    a = json_create_array();
 
     for(i = 0; a && (i < (size_t)count); i++)
     {
-        n = cJSON_CreateNumber((double)numbers[i]);
+        n = json_create_number((double)numbers[i]);
         if(!n)
         {
-            cJSON_Delete(a);
+            json_delete(a);
             return NULL;
         }
         if(!i)
@@ -2622,26 +2622,26 @@ CJSON_PUBLIC(cJSON *) cJSON_CreateFloatArray(const float *numbers, int count)
     return a;
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_CreateDoubleArray(const double *numbers, int count)
+CJSON_PUBLIC(json_obj *) json_create_double_array(const double *numbers, int count)
 {
     size_t i = 0;
-    cJSON *n = NULL;
-    cJSON *p = NULL;
-    cJSON *a = NULL;
+    json_obj *n = NULL;
+    json_obj *p = NULL;
+    json_obj *a = NULL;
 
     if ((count < 0) || (numbers == NULL))
     {
         return NULL;
     }
 
-    a = cJSON_CreateArray();
+    a = json_create_array();
 
     for(i = 0; a && (i < (size_t)count); i++)
     {
-        n = cJSON_CreateNumber(numbers[i]);
+        n = json_create_number(numbers[i]);
         if(!n)
         {
-            cJSON_Delete(a);
+            json_delete(a);
             return NULL;
         }
         if(!i)
@@ -2662,26 +2662,26 @@ CJSON_PUBLIC(cJSON *) cJSON_CreateDoubleArray(const double *numbers, int count)
     return a;
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_CreateStringArray(const char *const *strings, int count)
+CJSON_PUBLIC(json_obj *) json_create_string_array(const char *const *strings, int count)
 {
     size_t i = 0;
-    cJSON *n = NULL;
-    cJSON *p = NULL;
-    cJSON *a = NULL;
+    json_obj *n = NULL;
+    json_obj *p = NULL;
+    json_obj *a = NULL;
 
     if ((count < 0) || (strings == NULL))
     {
         return NULL;
     }
 
-    a = cJSON_CreateArray();
+    a = json_create_array();
 
     for (i = 0; a && (i < (size_t)count); i++)
     {
-        n = cJSON_CreateString(strings[i]);
+        n = json_create_string(strings[i]);
         if(!n)
         {
-            cJSON_Delete(a);
+            json_delete(a);
             return NULL;
         }
         if(!i)
@@ -2703,12 +2703,12 @@ CJSON_PUBLIC(cJSON *) cJSON_CreateStringArray(const char *const *strings, int co
 }
 
 /* Duplication */
-CJSON_PUBLIC(cJSON *) cJSON_Duplicate(const cJSON *item, cJSON_bool recurse)
+CJSON_PUBLIC(json_obj *) json_duplicate(const json_obj *item, json_bool recurse)
 {
-    cJSON *newitem = NULL;
-    cJSON *child = NULL;
-    cJSON *next = NULL;
-    cJSON *newchild = NULL;
+    json_obj *newitem = NULL;
+    json_obj *child = NULL;
+    json_obj *next = NULL;
+    json_obj *newchild = NULL;
 
     /* Bail on bad ptr */
     if (!item)
@@ -2716,18 +2716,18 @@ CJSON_PUBLIC(cJSON *) cJSON_Duplicate(const cJSON *item, cJSON_bool recurse)
         goto fail;
     }
     /* Create new item */
-    newitem = cJSON_New_Item(&global_hooks);
+    newitem = json_New_Item(&global_hooks);
     if (!newitem)
     {
         goto fail;
     }
     /* Copy over all vars */
-    newitem->type = item->type & (~cJSON_IsReference);
+    newitem->type = item->type & (~JSON_IS_REFERENCE);
     newitem->valueint = item->valueint;
     newitem->valuedouble = item->valuedouble;
     if (item->valuestring)
     {
-        newitem->valuestring = (char*)cJSON_strdup((unsigned char*)item->valuestring, &global_hooks);
+        newitem->valuestring = (char*)json_strdup((unsigned char*)item->valuestring, &global_hooks);
         if (!newitem->valuestring)
         {
             goto fail;
@@ -2735,7 +2735,7 @@ CJSON_PUBLIC(cJSON *) cJSON_Duplicate(const cJSON *item, cJSON_bool recurse)
     }
     if (item->string)
     {
-        newitem->string = (item->type&cJSON_StringIsConst) ? item->string : (char*)cJSON_strdup((unsigned char*)item->string, &global_hooks);
+        newitem->string = (item->type&JSON_STRING_IS_CONST) ? item->string : (char*)json_strdup((unsigned char*)item->string, &global_hooks);
         if (!newitem->string)
         {
             goto fail;
@@ -2750,7 +2750,7 @@ CJSON_PUBLIC(cJSON *) cJSON_Duplicate(const cJSON *item, cJSON_bool recurse)
     child = item->child;
     while (child != NULL)
     {
-        newchild = cJSON_Duplicate(child, true); /* Duplicate (with recurse) each item in the ->next chain */
+        newchild = json_duplicate(child, true); /* Duplicate (with recurse) each item in the ->next chain */
         if (!newchild)
         {
             goto fail;
@@ -2780,7 +2780,7 @@ CJSON_PUBLIC(cJSON *) cJSON_Duplicate(const cJSON *item, cJSON_bool recurse)
 fail:
     if (newitem != NULL)
     {
-        cJSON_Delete(newitem);
+        json_delete(newitem);
     }
 
     return NULL;
@@ -2835,7 +2835,7 @@ static void minify_string(char **input, char **output) {
     }
 }
 
-CJSON_PUBLIC(void) cJSON_Minify(char *json)
+CJSON_PUBLIC(void) json_minify(char *json)
 {
     char *into = json;
 
@@ -2883,107 +2883,107 @@ CJSON_PUBLIC(void) cJSON_Minify(char *json)
     *into = '\0';
 }
 
-CJSON_PUBLIC(cJSON_bool) cJSON_IsInvalid(const cJSON * const item)
+CJSON_PUBLIC(json_bool) json_is_invalid(const json_obj * const item)
 {
     if (item == NULL)
     {
         return false;
     }
 
-    return (item->type & 0xFF) == cJSON_Invalid;
+    return (item->type & 0xFF) == JSON_INVALID;
 }
 
-CJSON_PUBLIC(cJSON_bool) cJSON_IsFalse(const cJSON * const item)
+CJSON_PUBLIC(json_bool) json_is_false(const json_obj * const item)
 {
     if (item == NULL)
     {
         return false;
     }
 
-    return (item->type & 0xFF) == cJSON_False;
+    return (item->type & 0xFF) == JSON_FALSE;
 }
 
-CJSON_PUBLIC(cJSON_bool) cJSON_IsTrue(const cJSON * const item)
+CJSON_PUBLIC(json_bool) json_is_true(const json_obj * const item)
 {
     if (item == NULL)
     {
         return false;
     }
 
-    return (item->type & 0xff) == cJSON_True;
+    return (item->type & 0xff) == JSON_TRUE;
 }
 
 
-CJSON_PUBLIC(cJSON_bool) cJSON_IsBool(const cJSON * const item)
+CJSON_PUBLIC(json_bool) json_is_bool(const json_obj * const item)
 {
     if (item == NULL)
     {
         return false;
     }
 
-    return (item->type & (cJSON_True | cJSON_False)) != 0;
+    return (item->type & (JSON_TRUE | JSON_FALSE)) != 0;
 }
-CJSON_PUBLIC(cJSON_bool) cJSON_IsNull(const cJSON * const item)
+CJSON_PUBLIC(json_bool) json_is_null(const json_obj * const item)
 {
     if (item == NULL)
     {
         return false;
     }
 
-    return (item->type & 0xFF) == cJSON_NULL;
+    return (item->type & 0xFF) == JSON_NULL;
 }
 
-CJSON_PUBLIC(cJSON_bool) cJSON_IsNumber(const cJSON * const item)
+CJSON_PUBLIC(json_bool) json_is_number(const json_obj * const item)
 {
     if (item == NULL)
     {
         return false;
     }
 
-    return (item->type & 0xFF) == cJSON_Number;
+    return (item->type & 0xFF) == JSON_NUMBER;
 }
 
-CJSON_PUBLIC(cJSON_bool) cJSON_IsString(const cJSON * const item)
+CJSON_PUBLIC(json_bool) json_is_string(const json_obj * const item)
 {
     if (item == NULL)
     {
         return false;
     }
 
-    return (item->type & 0xFF) == cJSON_String;
+    return (item->type & 0xFF) == JSON_STRING;
 }
 
-CJSON_PUBLIC(cJSON_bool) cJSON_IsArray(const cJSON * const item)
+CJSON_PUBLIC(json_bool) json_is_array(const json_obj * const item)
 {
     if (item == NULL)
     {
         return false;
     }
 
-    return (item->type & 0xFF) == cJSON_Array;
+    return (item->type & 0xFF) == JSON_ARRAY;
 }
 
-CJSON_PUBLIC(cJSON_bool) cJSON_IsObject(const cJSON * const item)
+CJSON_PUBLIC(json_bool) json_is_object(const json_obj * const item)
 {
     if (item == NULL)
     {
         return false;
     }
 
-    return (item->type & 0xFF) == cJSON_Object;
+    return (item->type & 0xFF) == JSON_OBJECT;
 }
 
-CJSON_PUBLIC(cJSON_bool) cJSON_IsRaw(const cJSON * const item)
+CJSON_PUBLIC(json_bool) json_is_raw(const json_obj * const item)
 {
     if (item == NULL)
     {
         return false;
     }
 
-    return (item->type & 0xFF) == cJSON_Raw;
+    return (item->type & 0xFF) == JSON_RAW;
 }
 
-CJSON_PUBLIC(cJSON_bool) cJSON_Compare(const cJSON * const a, const cJSON * const b, const cJSON_bool case_sensitive)
+CJSON_PUBLIC(json_bool) json_compare(const json_obj * const a, const json_obj * const b, const json_bool case_sensitive)
 {
     if ((a == NULL) || (b == NULL) || ((a->type & 0xFF) != (b->type & 0xFF)))
     {
@@ -2993,14 +2993,14 @@ CJSON_PUBLIC(cJSON_bool) cJSON_Compare(const cJSON * const a, const cJSON * cons
     /* check if type is valid */
     switch (a->type & 0xFF)
     {
-        case cJSON_False:
-        case cJSON_True:
-        case cJSON_NULL:
-        case cJSON_Number:
-        case cJSON_String:
-        case cJSON_Raw:
-        case cJSON_Array:
-        case cJSON_Object:
+        case JSON_FALSE:
+        case JSON_TRUE:
+        case JSON_NULL:
+        case JSON_NUMBER:
+        case JSON_STRING:
+        case JSON_RAW:
+        case JSON_ARRAY:
+        case JSON_OBJECT:
             break;
 
         default:
@@ -3016,20 +3016,20 @@ CJSON_PUBLIC(cJSON_bool) cJSON_Compare(const cJSON * const a, const cJSON * cons
     switch (a->type & 0xFF)
     {
         /* in these cases and equal type is enough */
-        case cJSON_False:
-        case cJSON_True:
-        case cJSON_NULL:
+        case JSON_FALSE:
+        case JSON_TRUE:
+        case JSON_NULL:
             return true;
 
-        case cJSON_Number:
+        case JSON_NUMBER:
             if (compare_double(a->valuedouble, b->valuedouble))
             {
                 return true;
             }
             return false;
 
-        case cJSON_String:
-        case cJSON_Raw:
+        case JSON_STRING:
+        case JSON_RAW:
             if ((a->valuestring == NULL) || (b->valuestring == NULL))
             {
                 return false;
@@ -3041,14 +3041,14 @@ CJSON_PUBLIC(cJSON_bool) cJSON_Compare(const cJSON * const a, const cJSON * cons
 
             return false;
 
-        case cJSON_Array:
+        case JSON_ARRAY:
         {
-            cJSON *a_element = a->child;
-            cJSON *b_element = b->child;
+            json_obj *a_element = a->child;
+            json_obj *b_element = b->child;
 
             for (; (a_element != NULL) && (b_element != NULL);)
             {
-                if (!cJSON_Compare(a_element, b_element, case_sensitive))
+                if (!json_compare(a_element, b_element, case_sensitive))
                 {
                     return false;
                 }
@@ -3065,11 +3065,11 @@ CJSON_PUBLIC(cJSON_bool) cJSON_Compare(const cJSON * const a, const cJSON * cons
             return true;
         }
 
-        case cJSON_Object:
+        case JSON_OBJECT:
         {
-            cJSON *a_element = NULL;
-            cJSON *b_element = NULL;
-            cJSON_ArrayForEach(a_element, a)
+            json_obj *a_element = NULL;
+            json_obj *b_element = NULL;
+            json_ArrayForEach(a_element, a)
             {
                 /* TODO This has O(n^2) runtime, which is horrible! */
                 b_element = get_object_item(b, a_element->string, case_sensitive);
@@ -3078,7 +3078,7 @@ CJSON_PUBLIC(cJSON_bool) cJSON_Compare(const cJSON * const a, const cJSON * cons
                     return false;
                 }
 
-                if (!cJSON_Compare(a_element, b_element, case_sensitive))
+                if (!json_compare(a_element, b_element, case_sensitive))
                 {
                     return false;
                 }
@@ -3086,7 +3086,7 @@ CJSON_PUBLIC(cJSON_bool) cJSON_Compare(const cJSON * const a, const cJSON * cons
 
             /* doing this twice, once on a and b to prevent true comparison if a subset of b
              * TODO: Do this the proper way, this is just a fix for now */
-            cJSON_ArrayForEach(b_element, b)
+            json_ArrayForEach(b_element, b)
             {
                 a_element = get_object_item(a, b_element->string, case_sensitive);
                 if (a_element == NULL)
@@ -3094,7 +3094,7 @@ CJSON_PUBLIC(cJSON_bool) cJSON_Compare(const cJSON * const a, const cJSON * cons
                     return false;
                 }
 
-                if (!cJSON_Compare(b_element, a_element, case_sensitive))
+                if (!json_compare(b_element, a_element, case_sensitive))
                 {
                     return false;
                 }
@@ -3108,12 +3108,12 @@ CJSON_PUBLIC(cJSON_bool) cJSON_Compare(const cJSON * const a, const cJSON * cons
     }
 }
 
-CJSON_PUBLIC(void *) cJSON_malloc(size_t size)
+CJSON_PUBLIC(void *) json_malloc(size_t size)
 {
     return global_hooks.allocate(size);
 }
 
-CJSON_PUBLIC(void) cJSON_free(void *object)
+CJSON_PUBLIC(void) json_free(void *object)
 {
     global_hooks.deallocate(object);
 }

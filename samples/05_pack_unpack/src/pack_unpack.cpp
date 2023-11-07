@@ -71,7 +71,6 @@ int app_init(platform_ctxt *ctxt, app_data *app)
     if (err.code != err_code::FILE_NO_ERROR) {
         wlog("File read error: %s", err.str);
     }
-    
 
     test = {};
     bla = {};
@@ -80,7 +79,13 @@ int app_init(platform_ctxt *ctxt, app_data *app)
     for (int i = 0; i < 5; ++i) {
         str_clear(&fs.strarr[i]);
     }
-    memset(bla_arr, 0, sizeof(vec4)*5);
+    for (int i = 0; i < 5; ++i) {
+        bla_arr[i] = {};
+        for (int j = 0; j < 5; ++j) {
+            bla_arr_2[i][j] = {};
+        }
+    }
+    
     
     
     pup_var(&ba, test, {"test"});
@@ -89,19 +94,54 @@ int app_init(platform_ctxt *ctxt, app_data *app)
     pup_var(&ba, bla_arr_2, {"bla_arr_2"});
     pup_var(&ba, fs, {"bla_arr"});
 
-    string_archive sa{};
     ilog("test: \n%s", makecstr(test));
     ilog("bla: \n%s", makecstr(bla));
     ilog("bla_arr: \n%s", makecstr(bla_arr));
     ilog("bla_arr_2: \n%s", makecstr(bla_arr_2));
     ilog("fancy_strc: \n%s", makecstr(fs));
 
+    string simpl_str_test = "simple_test";
     json_archive ja{};
-    pup_var(&ja, test, {"test"});
+    jsa_init(&ja, nullptr);
+
+    pup_var(&ja, simpl_str_test, {"str_test"});
     pup_var(&ja, bla, {"bla"});
     pup_var(&ja, bla_arr, {"bla_arr"});
     pup_var(&ja, bla_arr_2, {"bla_arr_2"});
     pup_var(&ja, fs, {"fancy_struc"});
+    string js_str = jsa_to_json_string(&ja);
+    platform_write_file("check_me_out.json", str_cstr(js_str), 1, str_len(js_str));
+    ilog("JSON:\n%s", str_cstr(js_str));
+    jsa_terminate(&ja);
+
+    str_clear(&simpl_str_test);
+    test = {};
+    bla = {};
+    str_clear(&fs.str1);
+    str_clear(&fs.str2);
+    for (int i = 0; i < 5; ++i) {
+        str_clear(&fs.strarr[i]);
+    }
+    for (int i = 0; i < 5; ++i) {
+        bla_arr[i] = {};
+        for (int j = 0; j < 5; ++j) {
+            bla_arr_2[i][j] = {};
+        }
+    }
+
+    json_archive ja_in{};
+    jsa_init(&ja_in, str_cstr(js_str));
+    pup_var(&ja_in, simpl_str_test, {"str_test"});
+    pup_var(&ja_in, bla, {"bla"});
+    pup_var(&ja_in, bla_arr, {"bla_arr"});
+    pup_var(&ja_in, bla_arr_2, {"bla_arr_2"});
+    pup_var(&ja_in, fs, {"fancy_struc"});
+
+    ilog("test2: \n%s", makecstr(test));
+    ilog("bla2: \n%s", makecstr(bla));
+    ilog("bla_arr2: \n%s", makecstr(bla_arr));
+    ilog("bla_arr_22: \n%s", makecstr(bla_arr_2));
+    ilog("fancy_strc2: \n%s", makecstr(fs));
     
     return err_code::PLATFORM_NO_ERROR;
 }

@@ -145,10 +145,10 @@ intern void init_mem_arenas(const platform_memory_init_info *info, platform_memo
     mem_set_global_frame_lin_arena(&mem->frame_linear);
 
     // Set up our json alloc and free funcs
-    cJSON_Hooks hooks;
+    json_hooks hooks;
     hooks.malloc_fn = mem_alloc;
     hooks.free_fn = mem_free;
-    cJSON_InitHooks(&hooks);
+    json_init_hooks(&hooks);
 }
 
 intern void terminate_mem_arenas(platform_memory *mem)

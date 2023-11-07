@@ -100,7 +100,7 @@ void pack_unpack(ArchiveT *ar, T (&val)[N], const pack_var_info &vinfo)
         size = N;
 
     for (int i = 0; i < size; ++i) {
-        pup_var(ar, val[i], vinfo);
+        pup_var(ar, val[i], {});
     }
 }
 
