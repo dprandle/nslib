@@ -2876,7 +2876,7 @@ CJSON_PUBLIC(json_bool) json_compare(const json_obj *const a, const json_obj *co
     case JSON_OBJECT: {
         json_obj *a_element = NULL;
         json_obj *b_element = NULL;
-        json_ArrayForEach(a_element, a)
+        json_array_for_each(a_element, a)
         {
             /* TODO This has O(n^2) runtime, which is horrible! */
             b_element = get_object_item(b, a_element->string, case_sensitive);
@@ -2891,7 +2891,7 @@ CJSON_PUBLIC(json_bool) json_compare(const json_obj *const a, const json_obj *co
 
         /* doing this twice, once on a and b to prevent true comparison if a subset of b
          * TODO: Do this the proper way, this is just a fix for now */
-        json_ArrayForEach(b_element, b)
+        json_array_for_each(b_element, b)
         {
             a_element = get_object_item(a, b_element->string, case_sensitive);
             if (a_element == NULL) {

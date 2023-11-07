@@ -280,14 +280,14 @@ CJSON_PUBLIC(double) json_set_number_helper(json_obj *object, double number);
 CJSON_PUBLIC(char*) json_set_valuestring(json_obj *object, const char *valuestring);
 
 /* If the object is not a boolean type this does nothing and returns JSON_INVALID else it returns the new type*/
-#define json_SetBoolValue(object, boolValue) ( \
-    (object != NULL && ((object)->type & (json_False|json_True))) ? \
-    (object)->type=((object)->type &(~(json_False|json_True)))|((boolValue)?json_True:json_False) : \
+#define json_set_bool_value(object, bool_value) ( \
+    (object != NULL && ((object)->type & (json_false|json_true))) ? \
+    (object)->type=((object)->type &(~(json_false|json_true)))|((bool_value)?json_true:json_false) : \
     JSON_INVALID\
 )
 
 /* Macro for iterating over an array or object */
-#define json_ArrayForEach(element, array) for(element = (array != NULL) ? (array)->child : NULL; element != NULL; element = element->next)
+#define json_array_for_each(element, array) for(element = (array != NULL) ? (array)->child : NULL; element != NULL; element = element->next)
 
 /* malloc/free objects using the malloc/free functions that have been set with json_InitHooks */
 CJSON_PUBLIC(void *) json_malloc(size_t size);

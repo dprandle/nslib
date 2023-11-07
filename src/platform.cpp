@@ -202,7 +202,7 @@ int platform_init(const platform_init_info *settings, platform_ctxt *ctxt)
     glfwGetMonitorContentScale(mon, &scale.x, &scale.y);
     ilog("Monitor scale is {%f %f}", scale.x, scale.y);
 
-    log_set_level(LOG_TRACE);
+    log_set_level(settings->default_log_level);
     init_mem_arenas(&settings->mem, &ctxt->arenas);
     return err_code::PLATFORM_NO_ERROR;
 }

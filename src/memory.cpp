@@ -9,7 +9,7 @@
 
 #include <iostream>
 
-#define DO_DEBUG_PRINT true
+#define DO_DEBUG_PRINT false
 
 namespace nslib
 {

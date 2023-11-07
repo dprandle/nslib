@@ -47,13 +47,18 @@ inline void jsa_init(json_archive *jsa, archive_opmode mode = archive_opmode::PA
     }
 }
 
-inline string jsa_to_json_string(json_archive *jsa)
+inline string jsa_to_json_string(json_archive *jsa, bool pretty_format)
 {
     string ret{};
     if (jsa->stack.size > 0) {
         // Get the json string - this allocates
-        char *src = json_print(arr_front(&jsa->stack)->current);
-        wlog("JSON before STR;\n%s", src);
+        char *src{};
+        if (pretty_format) {
+            src = json_print(arr_front(&jsa->stack)->current);
+        }
+        else {
+            src = json_print_unformatted(arr_front(&jsa->stack)->current);
+        }
 
         // Copy the string in to the ret string
         ret = src;
@@ -109,7 +114,7 @@ void pack_unpack_begin(json_archive *ar, T &, const pack_var_info &vinfo)
         else if (is_obj) {
             assert(json_add_item_to_object(cur_frame->current, vinfo.name, new_item));
         }
-        arr_emplace_back(&ar->stack, new_item);
+        arr_emplace_back(&ar->stack, new_item, 0);
     }
 }
 
@@ -264,7 +269,7 @@ void pack_unpack_begin(json_archive *ar, T (&val)[N], const pack_var_info &vinfo
         else if (is_obj) {
             assert(json_add_item_to_object(cur_frame->current, vinfo.name, new_item));
         }
-        arr_emplace_back(&ar->stack, new_item);
+        arr_emplace_back(&ar->stack, new_item, 0);
     }
 }
 
@@ -277,11 +282,10 @@ void pack_unpack_end(json_archive *ar, T (&val)[N], const pack_var_info &vinfo)
 template<class T, sizet N>
 void pack_unpack(json_archive *ar, T (&val)[N], const pack_var_info &vinfo)
 {
-    jsa_stack_frame *cur_frame = arr_back(&ar->stack);
-    assert(cur_frame);
+    sizet frame_ind = ar->stack.size - 1;
     for (sizet i = 0; i < N; ++i) {
         pup_var(ar, val[i], {});
-        ++cur_frame->cur_arr_ind;
+        ++ar->stack[frame_ind].cur_arr_ind;
     }
 }
 

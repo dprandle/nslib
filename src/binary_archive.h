@@ -26,7 +26,7 @@ struct is_binary_archive<binary_buffer_archive>
 };
 
 template<sizet N>
-struct binary_fixed_buffer_archive
+struct static_binary_buffer_archive
 {
     static constexpr sizet size = N;
     archive_opmode opmode;
@@ -36,7 +36,7 @@ struct binary_fixed_buffer_archive
 
 // Enable type trait
 template<sizet N>
-struct is_binary_archive<binary_fixed_buffer_archive<N>>
+struct is_binary_archive<static_binary_buffer_archive<N>>
 {
     static constexpr bool value = true;
 };
@@ -46,12 +46,12 @@ concept binary_archive_type = is_binary_archive<T>::value;
 
 template<binary_archive_type ArchiveT, class T>
 void pack_unpack_begin(ArchiveT *, T &, const pack_var_info &vinfo) {
-    dlog("Pack binary archive %s begin", vinfo.name);
+    tlog("Pack binary archive %s begin", vinfo.name);
 }
 
 template<binary_archive_type ArchiveT, class T>
 void pack_unpack_end(ArchiveT *, T &, const pack_var_info &vinfo) {
-    dlog("Pack binary archive %s end", vinfo.name);
+    tlog("Pack binary archive %s end", vinfo.name);
 }
 
 template<binary_archive_type ArchiveT, arithmetic_type T>
@@ -109,7 +109,7 @@ sizet packed_sizeof()
 {
     constexpr sizet max_size = sizeof(T);
     static T inst{};
-    static binary_fixed_buffer_archive<max_size> buf{};
+    static static_binary_buffer_archive<max_size> buf{};
     pack_unpack(buf, inst, {});
     sizet ret = buf.cur_offset;
     buf.cur_offset = 0;

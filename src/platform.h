@@ -66,6 +66,7 @@ struct platform_init_info
     char **argv{};
     platform_window_init_info wind;
     platform_memory_init_info mem;
+    int default_log_level{LOG_TRACE};
 };
 
 enum platform_input_event_type
