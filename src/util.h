@@ -16,8 +16,8 @@ struct pair
         };
         struct
         {
-            F key;
-            S value;
+            F key{};
+            S value{};
         };
     };
 };

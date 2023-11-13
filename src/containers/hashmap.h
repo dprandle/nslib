@@ -264,7 +264,7 @@ void pack_unpack(ArchiveT *ar, hashmap<K, T> &val, const pack_var_info &vinfo)
     sizet i{0};
     if (ar->opmode == archive_opmode::UNPACK) {
         while (i < sz) {
-            typename hashmap<K,T>::value_type item{};
+            typename hashmap<K,T>::value_type item{K{},T{}};
             pup_var(ar, item, {to_cstr("{%d}", i), {pack_va_flags::PACK_PAIR_KEY_VAL}});
             hashmap_set(&val, item);
             ++i;
