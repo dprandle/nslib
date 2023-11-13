@@ -19,11 +19,11 @@ struct rid
 
 pup_func(rid)
 {
-//    pup_member(str);
+    pup_member(str);
     pup_member(id);
 }
 
-string makestr(const rid &rid);
+string to_str(const rid &rid);
 
 inline u64 hash_type(const rid &id, u64, u64)
 {

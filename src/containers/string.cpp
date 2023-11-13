@@ -238,31 +238,52 @@ u64 hash_type(const string &key, u64 seed0, u64 seed1)
     return hash_type(str_cstr(&key), seed0, seed1);
 }
 
-string makestr(char c)
+void from_str(void** i, const string &str)
+{
+    str_scanf(str, "%p", i);
+}
+
+void from_str(i64* i, const string &str)
+{
+    str_scanf(str, "%ld", i);
+    
+}
+
+void from_str(u64* i, const string &str)
+{
+    str_scanf(str, "%lu", i);
+}
+
+void from_str(char* c, const string &str)
+{
+    str_scanf(str, "%c", c);
+}
+
+string to_str(char c)
 {
     string ret;
-    str_args(&ret, "%c", c);
+    str_printf(&ret, "%c", c);
     return ret;
 }
 
-string makestr(u64 i)
+string to_str(u64 i)
 {
     string ret;
-    str_args(&ret, "%lu", i);
+    str_printf(&ret, "%lu", i);
     return ret;
 }
 
-string makestr(i64 i)
+string to_str(i64 i)
 {
     string ret;
-    str_args(&ret, "%ld", i);
+    str_printf(&ret, "%ld", i);
     return ret;
 }
 
-string makestr(void* i)
+string to_str(void* i)
 {
     string ret;
-    str_args(&ret, "%p", i);
+    str_printf(&ret, "%p", i);
     return ret;
 }
 

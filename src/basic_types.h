@@ -63,11 +63,4 @@ using small_str = char[SMALL_STR_LEN];
 
 inline constexpr const sizet npos = LONG_MAX;
 
-template<class F, class S>
-struct pair
-{
-    F first;
-    S second;
-};
-
 } // namespace nslib

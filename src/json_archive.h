@@ -1,9 +1,11 @@
 #pragma once
 
 #include "archive_common.h"
-#include <type_traits>
+
 #include "cJSON.h"
 #include "containers/string.h"
+#include "containers/hashset.h"
+#include "containers/hashmap.h"
 
 namespace nslib
 {
@@ -21,62 +23,29 @@ struct json_archive
 };
 
 // If json_str is null then we will be set to output mode, otherwise input mode
-inline void jsa_init(json_archive *jsa, const char *json_str)
-{
-    jsa->opmode = archive_opmode::UNPACK;
-    if (json_str) {
-        json_obj *parsed = json_parse(json_str);
-        if (!parsed) {
-            wlog("Could not parse json_str!");
-        }
-        else {
-            arr_emplace_back(&jsa->stack, parsed);
-        }
-    }
-}
+void jsa_init(json_archive *jsa, const char *json_str);
 
 // If json_str is null then we will be set to output mode, otherwise input mode
-inline void jsa_init(json_archive *jsa, archive_opmode mode = archive_opmode::PACK, json_obj *root = nullptr)
-{
-    jsa->opmode = mode;
-    if (mode == archive_opmode::PACK && !root) {
-        root = json_create_object();
-    }
-    if (root) {
-        arr_emplace_back(&jsa->stack, root);
-    }
-}
+void jsa_init(json_archive *jsa, archive_opmode mode = archive_opmode::PACK, json_obj *root = nullptr);
 
-inline string jsa_to_json_string(json_archive *jsa, bool pretty_format)
-{
-    string ret{};
-    if (jsa->stack.size > 0) {
-        // Get the json string - this allocates
-        char *src{};
-        if (pretty_format) {
-            src = json_print(arr_front(&jsa->stack)->current);
-        }
-        else {
-            src = json_print_unformatted(arr_front(&jsa->stack)->current);
-        }
+void jsa_terminate(json_archive *jsa);
 
-        // Copy the string in to the ret string
-        ret = src;
+string jsa_to_json_string(json_archive *jsa, bool pretty_format);
 
-        // Free the allocation
-        json_free(src);
-    }
-    return ret;
-}
+// Special packing/unpacking for bool - the end and begin arithmetic functions are fine though
+void pack_unpack(json_archive *ar, bool &val, const pack_var_info &vinfo);
 
-inline void jsa_terminate(json_archive *jsa)
-{
-    while (arr_begin(&jsa->stack) != arr_end(&jsa->stack)) {
-        json_delete(arr_back(&jsa->stack)->current);
-        arr_pop_back(&jsa->stack);
-    }
-}
+// Strings
+void pack_unpack_begin(json_archive *ar, string &, const pack_var_info &vinfo);
+void pack_unpack_end(json_archive *ar, string &, const pack_var_info &vinfo);
+void pack_unpack(json_archive *ar, string &val, const pack_var_info &vinfo);
 
+// Special packing/unpacking for 64bit
+void pack_unpack(json_archive *ar, u64 &val, const pack_var_info &vinfo);
+void pack_unpack(json_archive *ar, i64 &val, const pack_var_info &vinfo);
+
+
+// All types default to appear as objects
 template<class T>
 void pack_unpack_begin(json_archive *ar, T &, const pack_var_info &vinfo)
 {
@@ -124,6 +93,7 @@ void pack_unpack_end(json_archive *ar, T &, const pack_var_info &vinfo)
     arr_pop_back(&ar->stack);
 }
 
+// Arithmetic types
 template<arithmetic_type T>
 void pack_unpack_begin(json_archive *ar, T &, const pack_var_info &vinfo)
 {
@@ -194,44 +164,7 @@ void pack_unpack(json_archive *ar, T &val, const pack_var_info &vinfo)
     pack_unpack_helper(ar, val, vinfo, check_func, create_func);
 }
 
-inline void pack_unpack(json_archive *ar, bool &val, const pack_var_info &vinfo)
-{
-    auto create_func = [](const bool *val) -> json_obj * { return json_create_bool(*val); };
-
-    auto check_func = [](bool *val, json_obj *item) -> bool {
-        if (item && json_is_bool(item)) {
-            *val = json_is_true(item);
-            return true;
-        }
-        return false;
-    };
-    pack_unpack_helper(ar, val, vinfo, check_func, create_func);
-}
-
-inline void pack_unpack_begin(json_archive *ar, string &, const pack_var_info &vinfo)
-{
-    // Do nothing
-}
-
-inline void pack_unpack_end(json_archive *ar, string &, const pack_var_info &vinfo)
-{
-    // Do nothing
-}
-
-inline void pack_unpack(json_archive *ar, string &val, const pack_var_info &vinfo)
-{
-    auto create_func = [](const string *val) -> json_obj * { return json_create_string(str_cstr(val)); };
-
-    auto check_func = [](string *val, json_obj *item) -> bool {
-        if (item && json_is_string(item)) {
-            *val = item->valuestring;
-            return true;
-        }
-        return false;
-    };
-    pack_unpack_helper(ar, val, vinfo, check_func, create_func);
-}
-
+// Static arrays
 template<class T, sizet N>
 void pack_unpack_begin(json_archive *ar, T (&val)[N], const pack_var_info &vinfo)
 {
@@ -282,11 +215,256 @@ void pack_unpack_end(json_archive *ar, T (&val)[N], const pack_var_info &vinfo)
 template<class T, sizet N>
 void pack_unpack(json_archive *ar, T (&val)[N], const pack_var_info &vinfo)
 {
+    sizet size{};
+    if (test_flags(vinfo.meta.flags, pack_va_flags::FIXED_ARRAY_CUSTOM_SIZE))
+        size = *((sizet *)vinfo.meta.data);
+    else
+        size = N;
+    
     sizet frame_ind = ar->stack.size - 1;
-    for (sizet i = 0; i < N; ++i) {
+    for (sizet i = 0; i < size; ++i) {
         pup_var(ar, val[i], {});
         ++ar->stack[frame_ind].cur_arr_ind;
     }
 }
+
+// Static arrays
+template<class T, sizet N>
+void pack_unpack_begin(json_archive *ar, static_array<T, N> &val, const pack_var_info &vinfo)
+{
+    jsa_stack_frame *cur_frame = arr_back(&ar->stack);
+    assert(cur_frame);
+    bool is_array = json_is_array(cur_frame->current);
+    bool is_obj = json_is_object(cur_frame->current);
+    assert(is_array || is_obj);
+
+    if (ar->opmode == archive_opmode::UNPACK) {
+        json_obj *item{};
+        if (is_array) {
+            item = json_get_array_item(cur_frame->current, cur_frame->cur_arr_ind);
+        }
+        else if (is_obj) {
+            item = json_get_object_item(cur_frame->current, vinfo.name);
+        }
+
+        if (item && json_is_array(item)) {
+            val.size = json_get_array_size(item);
+            arr_emplace_back(&ar->stack, item);
+        }
+        else if (item) {
+            wlog("Found %s in object %s but it is not an array (it is %d)", vinfo.name, cur_frame->current->string, item->type);
+        }
+        else {
+            wlog("Unable to find %s in object %s", vinfo.name, cur_frame->current->string);
+        }
+    }
+    else {
+        auto new_item = json_create_array();
+        tlog("Adding item (name:%s) of type %d to %s (name:%s)", vinfo.name, new_item->type, (is_array) ? "array" : "obj", cur_frame->current->string);
+        if (is_array) {
+            assert(json_add_item_to_array(cur_frame->current, new_item));
+        }
+        else if (is_obj) {
+            assert(json_add_item_to_object(cur_frame->current, vinfo.name, new_item));
+        }
+        arr_emplace_back(&ar->stack, new_item, 0);
+    }
+}
+
+template<class T, sizet N>
+void pack_unpack_end(json_archive *ar, static_array<T, N> &val, const pack_var_info &vinfo)
+{
+    arr_pop_back(&ar->stack);
+}
+
+template<class T, sizet N>
+void pack_unpack(json_archive *ar, static_array<T, N> &val, const pack_var_info &vinfo)
+{
+    pack_unpack(ar, val.data, {"data", {pack_va_flags::FIXED_ARRAY_CUSTOM_SIZE, &val.size}});
+}
+
+// Dynamic arrays
+template<class T>
+void pack_unpack_begin(json_archive *ar, array<T> &val, const pack_var_info &vinfo)
+{
+    jsa_stack_frame *cur_frame = arr_back(&ar->stack);
+    assert(cur_frame);
+    bool is_array = json_is_array(cur_frame->current);
+    bool is_obj = json_is_object(cur_frame->current);
+    assert(is_array || is_obj);
+
+    if (ar->opmode == archive_opmode::UNPACK) {
+        json_obj *item{};
+        if (is_array) {
+            item = json_get_array_item(cur_frame->current, cur_frame->cur_arr_ind);
+        }
+        else if (is_obj) {
+            item = json_get_object_item(cur_frame->current, vinfo.name);
+        }
+
+        if (item && json_is_array(item)) {
+            arr_resize(&val, json_get_array_size(item));
+            arr_emplace_back(&ar->stack, item);
+        }
+        else if (item) {
+            wlog("Found %s in object %s but it is not an array (it is %d)", vinfo.name, cur_frame->current->string, item->type);
+        }
+        else {
+            wlog("Unable to find %s in object %s", vinfo.name, cur_frame->current->string);
+        }
+    }
+    else {
+        auto new_item = json_create_array();
+        tlog("Adding item (name:%s) of type %d to %s (name:%s)", vinfo.name, new_item->type, (is_array) ? "array" : "obj", cur_frame->current->string);
+        if (is_array) {
+            assert(json_add_item_to_array(cur_frame->current, new_item));
+        }
+        else if (is_obj) {
+            assert(json_add_item_to_object(cur_frame->current, vinfo.name, new_item));
+        }
+        arr_emplace_back(&ar->stack, new_item, 0);
+    }
+}
+
+template<class T>
+void pack_unpack_end(json_archive *ar, array<T> &val, const pack_var_info &vinfo)
+{
+    arr_pop_back(&ar->stack);
+}
+
+template<class T>
+void pack_unpack(json_archive *ar, array<T> &val, const pack_var_info &vinfo)
+{
+    sizet frame_ind = ar->stack.size - 1;
+    for (int i = 0; i < val.size; ++i) {
+        pup_var(ar, val[i], {});
+        ++ar->stack[frame_ind].cur_arr_ind;
+    }
+}
+
+// Hashset - same as dynamic array in json representation
+// Dynamic arrays
+template<class T>
+void pack_unpack_begin(json_archive *ar, hashset<T> &val, const pack_var_info &vinfo)
+{
+    jsa_stack_frame *cur_frame = arr_back(&ar->stack);
+    assert(cur_frame);
+    bool is_array = json_is_array(cur_frame->current);
+    bool is_obj = json_is_object(cur_frame->current);
+    assert(is_array || is_obj);
+
+    if (ar->opmode == archive_opmode::UNPACK) {
+        json_obj *item{};
+        if (is_array) {
+            item = json_get_array_item(cur_frame->current, cur_frame->cur_arr_ind);
+        }
+        else if (is_obj) {
+            item = json_get_object_item(cur_frame->current, vinfo.name);
+        }
+
+        if (item && json_is_array(item)) {
+            arr_emplace_back(&ar->stack, item);
+        }
+        else if (item) {
+            wlog("Found %s in object %s but it is not an array (it is %d)", vinfo.name, cur_frame->current->string, item->type);
+        }
+        else {
+            wlog("Unable to find %s in object %s", vinfo.name, cur_frame->current->string);
+        }
+    }
+    else {
+        auto new_item = json_create_array();
+        tlog("Adding item (name:%s) of type %d to %s (name:%s)", vinfo.name, new_item->type, (is_array) ? "set" : "obj", cur_frame->current->string);
+        if (is_array) {
+            assert(json_add_item_to_array(cur_frame->current, new_item));
+        }
+        else if (is_obj) {
+            assert(json_add_item_to_object(cur_frame->current, vinfo.name, new_item));
+        }
+        arr_emplace_back(&ar->stack, new_item, 0);
+    }
+}
+
+template<class T>
+void pack_unpack_end(json_archive *ar, hashset<T> &val, const pack_var_info &vinfo)
+{
+    arr_pop_back(&ar->stack);
+}
+
+template<class T>
+void pack_unpack(json_archive *ar, hashset<T> &val, const pack_var_info &vinfo)
+{
+    if (ar->opmode == archive_opmode::UNPACK) {
+        jsa_stack_frame *cur_frame = arr_back(&ar->stack);
+        assert(cur_frame);
+        sizet frame_ind = ar->stack.size - 1;
+        sizet count = json_get_array_size(cur_frame->current);
+        for (int i = 0; i < count; ++i) {
+            T item;
+            pup_var(ar, item, {});
+            hashset_set(&val, item);
+            ++ar->stack[frame_ind].cur_arr_ind;
+        }
+    }
+    else {
+        sizet i{};
+        while (auto iter = hashset_iter(&val, &i)) {
+            pup_var(ar, *iter, {});
+        }
+    }
+}
+
+// Hashmaps can use the default begin/end functions as they will just be json objects with each member var name as a key
+// and member var value as a value. We have special cases for string convertable 
+template<class T>
+void pack_unpack(json_archive *ar, hashmap<string, T> &val, const pack_var_info &vinfo)
+{
+    if (ar->opmode == archive_opmode::UNPACK) {
+        jsa_stack_frame *cur_frame = arr_back(&ar->stack);
+        assert(cur_frame);
+        auto obj = cur_frame->current->child;
+        while (obj) {
+            pup_var(ar, val[obj->string], {obj->string});
+            obj = obj->next;
+        }
+    }
+    else {
+        sizet i{};
+        auto iter = hashmap_iter(&val,&i);
+        while (iter) {
+            pup_var(ar, iter->second, {str_cstr(iter->first)});
+            iter = hashmap_iter(&val, &i);
+        }
+    }
+}
+
+// Hashmaps can use the default begin/end functions as they will just be json objects with each member var name as a key
+// and member var value as a value. We have special cases for string convertable 
+template<integral K, class T>
+void pack_unpack(json_archive *ar, hashmap<K, T> &val, const pack_var_info &vinfo)
+{
+    if (ar->opmode == archive_opmode::UNPACK) {
+        jsa_stack_frame *cur_frame = arr_back(&ar->stack);
+        assert(cur_frame);
+        auto obj = cur_frame->current->child;
+        while (obj) {
+            K key{};
+            from_str(&key, obj->string);
+            pup_var(ar, val[key], {obj->string});
+            obj = obj->next;
+        }
+    }
+    else {
+        sizet i{};
+        auto iter = hashmap_iter(&val,&i);
+        while (iter) {
+            K key{iter->key};
+            string s = to_str((u64)key);
+            pup_var(ar, iter->value, {str_cstr(s)});
+            iter = hashmap_iter(&val, &i);
+        }
+    }
+}
+
 
 } // namespace nslib

@@ -2,6 +2,7 @@
 #include "platform.h"
 #include "logging.h"
 #include "robj_common.h"
+#include "string_archive.h"
 #include "containers/string.h"
 #include "containers/hashmap.h"
 #include "containers/hashset.h"
@@ -24,9 +25,9 @@ bool operator==(const custom_type_0 &lhs, const custom_type_0 &rhs) {
     return (lhs.id == rhs.id && lhs.val1 == rhs.val1);
 }
 
-string makestr(const custom_type_0 &item) {
+string to_str(const custom_type_0 &item) {
     string ret;
-    str_args(&ret, "val1:%d str:%s", item.val1, makecstr(item.id));
+    str_printf(&ret, "val1:%d str:%s", item.val1, to_cstr(item.id));
     return ret;
 }
 
@@ -43,9 +44,9 @@ bool operator==(const custom_type_1 &lhs, const custom_type_1 &rhs) {
     return (lhs.str == rhs.str && lhs.val1 == rhs.val1);
 }
 
-string makestr(const custom_type_1 &item) {
+string to_str(const custom_type_1 &item) {
     string ret;
-    str_args(&ret, "val1:%d str:%s", item.val1, str_cstr(&item.str));
+    str_printf(&ret, "val1:%d str:%s", item.val1, str_cstr(&item.str));
     return ret;
 }
 
@@ -54,9 +55,9 @@ struct custom_type_2 {
     int val2;
 };
 
-string makestr(const custom_type_2 &item) {
+string to_str(const custom_type_2 &item) {
     string ret;
-    str_args(&ret, "val1:%d val2:%d", item.val1, item.val2);
+    str_printf(&ret, "val1:%d val2:%d", item.val1, item.val2);
     return ret;
 }
 
@@ -100,7 +101,7 @@ void test_arrays()
     
     auto iter = arr_begin(&rids);
     while (iter != arr_end(&rids)) {
-        output += makestr(*iter);
+        output += to_str(*iter);
         ++iter;
     }
     ilog("Output: %s", str_cstr(&output));
@@ -154,12 +155,12 @@ void test_hashmaps()
     hashset_set(&hs4, custom_type_1{3, "key3"});
     hashset_set(&hs4, custom_type_1{4, "key4"});
 
-    ilog("HM1 %s", makecstr(hm1));
-    ilog("HM2 %s", makecstr(hm2));
-    ilog("HS1 %s", makecstr(hs1));
-    ilog("HS2 %s", makecstr(hs2));
-    ilog("HS3 %s", makecstr(hs3));
-    ilog("HS4 %s", makecstr(hs4));
+    ilog("HM1 %s", to_cstr(hm1));
+    ilog("HM2 %s", to_cstr(hm2));
+    ilog("HS1 %s", to_cstr(hs1));
+    ilog("HS2 %s", to_cstr(hs2));
+    ilog("HS3 %s", to_cstr(hs3));
+    ilog("HS4 %s", to_cstr(hs4));
 }
 
 

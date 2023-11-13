@@ -1,15 +1,16 @@
 #pragma once
 
 #include "archive_common.h"
-#include <type_traits>
 #include "containers/string.h"
+#include "containers/hashmap.h"
+#include "containers/hashset.h"
 
 namespace nslib
 {
 
 struct string_archive
 {
-    const archive_opmode opmode = archive_opmode::UNPACK;
+    const archive_opmode opmode = archive_opmode::PACK;
     
     string txt;
     string cur_indent;
@@ -24,6 +25,7 @@ inline void handle_varname(string *txt, const char *vname)
     }
 }
 
+// All other types should appear as objects
 template<class T>
 void pack_unpack_begin(string_archive *ar, T &, const pack_var_info &vinfo) {
     ar->txt += ar->cur_indent;
@@ -38,6 +40,7 @@ void pack_unpack_end(string_archive *ar, T &, const pack_var_info &vinfo) {
     ar->txt += ar->cur_indent + "}\n";
 }
 
+// Arithmetic types
 template<arithmetic_type T>
 void pack_unpack_begin(string_archive *ar, T &, const pack_var_info &vinfo) {
     ar->txt += ar->cur_indent;
@@ -52,9 +55,10 @@ void pack_unpack_end(string_archive *ar, T &, const pack_var_info &vinfo) {
 template<arithmetic_type T>
 void pack_unpack(string_archive *ar, T &val, const pack_var_info &vinfo)
 {
-    ar->txt += makestr(val);
+    ar->txt += to_str(val);
 }
 
+// Strings
 inline void pack_unpack_begin(string_archive *ar, string &, const pack_var_info &vinfo) {
     ar->txt += ar->cur_indent;
     handle_varname(&ar->txt, vinfo.name);
@@ -69,9 +73,9 @@ inline void pack_unpack(string_archive *ar, string &val, const pack_var_info &vi
     ar->txt += val;
 }
 
-//Special function for fixed size arrays of non arithmetic type (we call pack_unpack on each item)
+// Static arrays (actual ones)
 template<class T, sizet N>
-void pack_unpack_begin(string_archive *ar, T (&val)[N], const pack_var_info &vinfo)
+void pack_unpack_begin(string_archive *ar, T (&)[N], const pack_var_info &vinfo)
 {
     ar->txt += ar->cur_indent;
     handle_varname(&ar->txt, vinfo.name);
@@ -80,7 +84,7 @@ void pack_unpack_begin(string_archive *ar, T (&val)[N], const pack_var_info &vin
 }
 
 template<class T, sizet N>
-void pack_unpack_end(string_archive *ar, T (&val)[N], const pack_var_info &vinfo)
+void pack_unpack_end(string_archive *ar, T (&)[N], const pack_var_info &vinfo)
 {
     str_resize(&ar->cur_indent, str_len(ar->cur_indent) - ar->indent_per_level);
     ar->txt += ar->cur_indent + "]\n";
@@ -89,13 +93,100 @@ void pack_unpack_end(string_archive *ar, T (&val)[N], const pack_var_info &vinfo
 template<class T, sizet N>
 void pack_unpack(string_archive *ar, T (&val)[N], const pack_var_info &vinfo)
 {
-    for (sizet i = 0; i < N; ++i) {
+    sizet size{};
+    if (test_flags(vinfo.meta.flags, pack_va_flags::FIXED_ARRAY_CUSTOM_SIZE))
+        size = *((sizet *)vinfo.meta.data);
+    else
+        size = N;
+    for (sizet i = 0; i < size; ++i) {
         pup_var(ar, val[i], {});
     }
 }
 
+// Static arrays - reuse actual static array code above but passing in the size
+template<class T, sizet N>
+void pack_unpack(string_archive *ar, static_array<T, N> &val, const pack_var_info &vinfo)
+{
+    pup_var(ar, val.data, {"data", {pack_va_flags::FIXED_ARRAY_CUSTOM_SIZE, &val.size}});
+}
+
+// Dynamic Arrays
 template<class T>
-string makestr(const T &item) {
+void pack_unpack_begin(string_archive *ar, array<T> &, const pack_var_info &vinfo)
+{
+    ar->txt += ar->cur_indent;
+    handle_varname(&ar->txt, vinfo.name);
+    ar->txt += "[\n";
+    str_resize(&ar->cur_indent, str_len(ar->cur_indent) + ar->indent_per_level, ' ');
+}
+
+template<class T>
+void pack_unpack_end(string_archive *ar, array<T> &, const pack_var_info &vinfo)
+{
+    str_resize(&ar->cur_indent, str_len(ar->cur_indent) - ar->indent_per_level);
+    ar->txt += ar->cur_indent + "]\n";
+}
+
+template<class T>
+void pack_unpack(string_archive *ar, array<T> &val, const pack_var_info &vinfo)
+{
+    for (int i = 0; i < val.size; ++i) {
+        pup_var(ar, val[i], {});
+    }
+}
+
+// Hashset
+template<class T>
+void pack_unpack_begin(string_archive *ar, hashset<T> &, const pack_var_info &vinfo)
+{
+    ar->txt += ar->cur_indent;
+    handle_varname(&ar->txt, vinfo.name);
+    ar->txt += "[\n";
+    str_resize(&ar->cur_indent, str_len(ar->cur_indent) + ar->indent_per_level, ' ');
+}
+
+template<class T>
+void pack_unpack_end(string_archive *ar, hashset<T> &, const pack_var_info &vinfo)
+{
+    str_resize(&ar->cur_indent, str_len(ar->cur_indent) - ar->indent_per_level);
+    ar->txt += ar->cur_indent + "]\n";
+}
+
+template<class T>
+void pack_unpack(string_archive *ar, hashset<T> &val, const pack_var_info &vinfo)
+{
+    sizet i{};
+    while (auto iter = hashset_iter(&val, &i)) {
+        pup_var(ar, *iter, {});
+    }
+}
+
+// Hashmap with string key
+template<class T>
+void pack_unpack(string_archive *ar, hashmap<string, T> &val, const pack_var_info &vinfo)
+{
+    sizet i{};
+    auto iter = hashmap_iter(&val, &i);
+    while (iter) {
+        pup_var(ar, iter->second, {str_cstr(iter->first)});
+        iter = hashmap_iter(&val, &i);
+    }
+}
+
+// Hashmap with integral key type
+template<integral K, class T>
+void pack_unpack(string_archive *ar, hashmap<K, T> &val, const pack_var_info &vinfo)
+{
+    sizet i{};
+    auto iter = hashmap_iter(&val, &i);
+    while (iter) {
+        pup_var(ar, iter->second, {to_cstr(iter->first)});
+        iter = hashmap_iter(&val, &i);
+    }
+}
+
+template<class T>
+string to_str(const T &item) {
     string_archive sa{};
     T & no_const = (T &)item;
     pup_var(&sa, no_const, {});

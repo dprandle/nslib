@@ -1,5 +1,9 @@
 #pragma once
 #include "archive_common.h"
+#include "containers/hashmap.h"
+#include "containers/hashset.h"
+
+
 #include <type_traits>
 
 namespace nslib
@@ -89,13 +93,13 @@ void pack_unpack(ArchiveT *ar, T (&val)[N], const pack_var_info &vinfo)
     ar->cur_offset += sz;
 }
 
-// Special function for fixed size arrays of non arithmetic type (we call pack_)
+// Special function for fixed size arrays of non arithmetic type (we call pup_var on each_)
 template<binary_archive_type ArchiveT, class T, sizet N>
 void pack_unpack(ArchiveT *ar, T (&val)[N], const pack_var_info &vinfo)
 {
     sizet size = 0;
     if (test_flags(vinfo.meta.flags, pack_va_flags::FIXED_ARRAY_CUSTOM_SIZE))
-        size = *((u32 *)vinfo.meta.data);
+        size = *((sizet *)vinfo.meta.data);
     else
         size = N;
 

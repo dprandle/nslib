@@ -6,13 +6,13 @@
 namespace nslib
 {
 
-#define makecstr(p) str_cstr(makestr(p))
+#define to_cstr(...) str_cstr(to_str(__VA_ARGS__))
 struct string
 {
     using iterator = char *;
     using const_iterator = const char *;
 
-    static constexpr sizet SMALL_STR_SIZE = 19;
+    static constexpr sizet SMALL_STR_SIZE = 24;
     char sos[SMALL_STR_SIZE]{};
     array<char> buf{};
 
@@ -100,7 +100,7 @@ string *str_append(string *str, const string &to_append);
 string *str_append(string *str, const char *to_append);
 
 template<class... Args>
-string *str_args(string *dest, const char *format_txt, Args &&...args)
+string *str_printf(string *dest, const char *format_txt, Args &&...args)
 {
     sizet needed_space = snprintf(nullptr, 0, format_txt, std::forward<Args>(args)...);
     sizet sz = str_len(*dest);
@@ -109,34 +109,94 @@ string *str_args(string *dest, const char *format_txt, Args &&...args)
     return dest;
 }
 
+template<class... Args>
+void str_scanf(const string &src, const char *format_txt, Args &&...args)
+{
+    sscanf(str_cstr(src), format_txt, std::forward<Args>(args)...);
+}
+
+template<class... Args>
+string to_str(const char *format_txt, Args &&...args)
+{
+    string ret{};
+    sizet needed_space = snprintf(nullptr, 0, format_txt, std::forward<Args>(args)...);
+    sizet sz = str_len(ret);
+    str_resize(&ret, sz + needed_space);
+    snprintf(str_data(&ret)+sz, needed_space+1, format_txt, args...);
+    return ret;
+}
+
 u64 hash_type(const string &key, u64 seed0, u64 seed1);
 
 template<signed_integral T>
-string makestr(T n) {
+string to_str(T n) {
     string ret;
-    str_args(&ret, "%d", n);
+    str_printf(&ret, "%d", n);
     return ret;
 }
 
 template<unsigned_integral T>
-string makestr(T n) {
+string to_str(T n) {
     string ret;
-    str_args(&ret, "%u", n);
+    str_printf(&ret, "%u", n);
     return ret;
 }
 
 template<floating_pt T>
-string makestr(T n) {
+string to_str(T n) {
     string ret;
-    str_args(&ret, "%f", n);
+    str_printf(&ret, "%f", n);
     return ret;
 }
 
-inline const string& makestr(const string &str) {return str;}
+template<signed_integral T>
+void from_str(T *n, const string &str) {
+    str_scanf(str, "%d", n);
+}
 
-string makestr(void* i);
-string makestr(i64 i);
-string makestr(u64 i);
-string makestr(char c);
+template<unsigned_integral T>
+void from_str(T *n, const string &str) {
+    str_scanf(str, "%u", n);
+}
+
+template<floating_pt T>
+void from_str(T *n, const string &str) {
+    str_scanf(str, "%f", n);
+}
+
+inline const string& to_str(const string &str) {return str;}
+
+string to_str(void *i);
+string to_str(i64 i);
+string to_str(u64 i);
+string to_str(char c);
+
+void from_str(void** i, const string &str);
+void from_str(i64* i, const string &str);
+void from_str(u64* i, const string &str);
+void from_str(char* c, const string &str);
+
+template<class ArchiveT>
+void pack_unpack(ArchiveT *ar, string &val, const pack_var_info &vinfo)
+{
+    sizet size = val.buf.size;
+    pup_var(ar, size, {"size"});
+    str_resize(&val, size);
+    for (sizet i = 0; i < size; ++i) {
+        pup_var(ar, val[i], {to_cstr("[%d]", i)});
+    }
+}
+
+// We have to put our array func here rather than in array because of the to_cstr call
+template<class ArchiveT, class T>
+void pack_unpack(ArchiveT *ar, array<T> &val, const pack_var_info &vinfo)
+{
+    pup_var(ar, val.size, {"size"});
+    arr_resize(&val, val.size);
+    for (int i = 0; i < val.size; ++i) {
+        pup_var(ar, val[i], {to_cstr("[%d]",i)});
+    }
+}
+
 
 } // namespace nslib

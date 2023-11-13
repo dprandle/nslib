@@ -1,8 +1,9 @@
 #pragma once
 
 #include <utility>
+#include <new>
 
-#include "../basic_types.h"
+#include "../archive_common.h"
 #include "../memory.h"
 
 namespace nslib
@@ -355,5 +356,12 @@ sizet arr_index_of(T *bufobj, typename T::value_type *item)
 }
 
 using byte_array = array<u8>;
+
+template<class ArchiveT, class T, sizet N>
+void pack_unpack(ArchiveT *ar, static_array<T, N> &val, const pack_var_info &vinfo)
+{
+    pup_var(ar, val.size, {"size"});
+    pup_var(ar, val.data, {"data", {pack_va_flags::FIXED_ARRAY_CUSTOM_SIZE, &val.size}});
+}
 
 } // namespace nslib

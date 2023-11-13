@@ -120,6 +120,14 @@ T *hashset_insert(hashset<T> *hs, const T &value)
 }
 
 template<class T>
+sizet hashset_count(hashset<T> *hs)
+{
+    assert(hs);
+    return ihashmap_count(hs->hm);
+}
+
+
+template<class T>
 T *hashset_clear(hashset<T> *hs, bool update_cap)
 {
     assert(hs->hm);
@@ -195,11 +203,35 @@ void hashset_init(hashset<T> *hs)
                                          hs);
 }
 
+template<class ArchiveT, class T>
+void pack_unpack(ArchiveT *ar, hashset<T> &val, const pack_var_info &vinfo)
+{
+    sizet cnt = hashset_count(&val);
+    pup_var(ar, cnt, {"count"});
+    sizet i{0};
+    if (ar->opmode == archive_opmode::UNPACK) {
+        while (i < cnt) {
+            T item{};
+            pup_var(ar, item, {to_cstr("[%d]", i)});
+            hashset_set(&val, item);
+            ++i;
+        }
+    }
+    else {
+        sizet bucket_i{0};
+        while (auto iter = hashset_iter(&val, &bucket_i)) {
+            pup_var(ar, *iter, {to_cstr("[%d]", i)});
+            ++i;
+        }
+    }
+}
+
+
 template<class T>
-string makestr(const hashset<T> &hs) {
+string to_str(const hashset<T> &hs) {
     string ret("\nhashset {");
     auto for_each = [&ret](const T *item) {
-        ret += "\n" + makestr(*item);
+        ret += "\n" + to_str(*item);
         return true;
     };
     hashset_for_each(&hs, for_each);

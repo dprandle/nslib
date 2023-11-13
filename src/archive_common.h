@@ -2,10 +2,6 @@
 #include <cstring>
 
 #include "logging.h"
-#include "containers/string.h"
-#include "containers/array.h"
-#include "containers/hashmap.h"
-#include "containers/hashset.h"
 
 #include "basic_types.h"
 #include "basic_type_traits.h"
@@ -36,8 +32,10 @@ namespace pack_va_flags
 {
 enum : u64
 {
-    FIXED_ARRAY_CUSTOM_SIZE = 1 // Specify that there is a custom sizet specified by the void* to pack/unpack the array
-                                // to
+    // Specify that there is a custom sizet specified by the void* to pack/unpack the array to
+    FIXED_ARRAY_CUSTOM_SIZE = 1,
+    // If set, pairs should be packed/unpacked with var name key,val rather than first/second
+    PACK_PAIR_KEY_VAL = 2
 };
 }
 
@@ -78,27 +76,6 @@ void pack_unpack_end(ArchiveT *, T &, const pack_var_info &vinfo)
 {
     dlog("Pack %s end", vinfo.name);
 }
-
-template<class ArchiveT>
-void pack_unpack(ArchiveT *ar, string &val, const pack_var_info &vinfo)
-{
-    sizet size = val.buf.size;
-    pup_var(ar, size, {"size"});
-    str_resize(&val, size);
-    for (sizet i = 0; i < size; ++i) {
-        string s;
-        str_args(&s, "[%d]", i);
-        pup_var(ar, val[i], {str_cstr(s)});
-    }
-}
-
-template<class ArchiveT, class T, sizet N>
-void pack_unpack(ArchiveT *ar, static_array<T, N> &val, const pack_var_info &vinfo)
-{
-    pup_var(ar, val.data, {"data"});
-    pup_var(ar, val.size, {"size"});
-}
-
 
 template<class ArchiveT, class T>
 void pup_var(ArchiveT *ar, T &val, const pack_var_info &vinfo)
