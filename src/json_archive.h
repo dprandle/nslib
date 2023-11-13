@@ -6,6 +6,7 @@
 #include "containers/string.h"
 #include "containers/hashset.h"
 #include "containers/hashmap.h"
+#include "robj_common.h"
 
 namespace nslib
 {
@@ -31,6 +32,11 @@ void jsa_init(json_archive *jsa, archive_opmode mode = archive_opmode::PACK, jso
 void jsa_terminate(json_archive *jsa);
 
 string jsa_to_json_string(json_archive *jsa, bool pretty_format);
+
+inline void pack_unpack_begin(json_archive *ar, rid &id, const pack_var_info &vinfo) {}
+
+inline void pack_unpack_end(json_archive *ar, rid &id, const pack_var_info &vinfo) {}
+
 
 // Special packing/unpacking for bool - the end and begin arithmetic functions are fine though
 void pack_unpack(json_archive *ar, bool &val, const pack_var_info &vinfo);
@@ -437,6 +443,31 @@ void pack_unpack(json_archive *ar, hashmap<string, T> &val, const pack_var_info 
         }
     }
 }
+
+// Hashmaps can use the default begin/end functions as they will just be json objects with each member var name as a key
+// and member var value as a value. We have special cases for string convertable 
+template<class T>
+void pack_unpack(json_archive *ar, hashmap<rid, T> &val, const pack_var_info &vinfo)
+{
+    if (ar->opmode == archive_opmode::UNPACK) {
+        jsa_stack_frame *cur_frame = arr_back(&ar->stack);
+        assert(cur_frame);
+        auto obj = cur_frame->current->child;
+        while (obj) {
+            pup_var(ar, val[rid(obj->string)], {obj->string});
+            obj = obj->next;
+        }
+    }
+    else {
+        sizet i{};
+        auto iter = hashmap_iter(&val,&i);
+        while (iter) {
+            pup_var(ar, iter->second, {str_cstr(iter->first.str)});
+            iter = hashmap_iter(&val, &i);
+        }
+    }
+}
+
 
 // Hashmaps can use the default begin/end functions as they will just be json objects with each member var name as a key
 // and member var value as a value. We have special cases for string convertable 

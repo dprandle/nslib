@@ -1,5 +1,4 @@
 #include "archive_common.h"
-#include "basic_types.h"
 #include "hashfuncs.h"
 #include "containers/string.h"
 
@@ -8,8 +7,7 @@ namespace nslib
 {
 struct rid
 {
-    rid()
-    {}
+    rid(){}
     explicit rid(const string &str);
     explicit rid(const char *str);
 
@@ -19,8 +17,10 @@ struct rid
 
 pup_func(rid)
 {
-    pup_member(str);
-    pup_member(id);
+    pup_member_info(str, vinfo);
+    if (ar->opmode == archive_opmode::UNPACK) {
+        val.id = hash_type(val.str, 0, 0);
+    }
 }
 
 string to_str(const rid &rid);

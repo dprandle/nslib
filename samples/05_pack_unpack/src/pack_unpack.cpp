@@ -1,9 +1,9 @@
-#include "platform.h"
-#include "string_archive.h"
 #include "json_archive.h"
+#include "string_archive.h"
 #include "binary_archive.h"
-#include "robj_common.h"
+#include "platform.h"
 #include "math/vector4.h"
+#include "robj_common.h"
 
 using namespace nslib;
 
@@ -250,32 +250,32 @@ int app_init(platform_ctxt *ctxt, app_data *app)
     seed_data(&data);
     ilog("data_to_pup json in: \n%s", to_cstr(data));
 
-    // static_binary_buffer_archive<10000> ba{};
-    // ilog("Packing to static binary buffer archive");
-    // pup_var(&ba, data, {"data_to_pup"});
-    // platform_file_err_desc err;
-    // ilog("Saving binary data to data.bin");
-    // platform_write_file("data.bin", ba.data, 1, ba.cur_offset, 0, &err);
-    // if (err.code != err_code::FILE_NO_ERROR) {
-    //     wlog("File write error: %s", err.str);
-    // }
+    static_binary_buffer_archive<10000> ba{};
+    ilog("Packing to static binary buffer archive");
+    pup_var(&ba, data, {"data_to_pup"});
+    platform_file_err_desc err;
+    ilog("Saving binary data to data.bin");
+    platform_write_file("data.bin", ba.data, 1, ba.cur_offset, 0, &err);
+    if (err.code != err_code::FILE_NO_ERROR) {
+        wlog("File write error: %s", err.str);
+    }
 
-    // ilog("Clearing static binary buffer archive and setting to unpack mode");
-    // err = {};
-    // ba = {};
-    // ba.opmode = archive_opmode::UNPACK;
-    // clear_data(&data);
+    ilog("Clearing static binary buffer archive and setting to unpack mode");
+    err = {};
+    ba = {};
+    ba.opmode = archive_opmode::UNPACK;
+    clear_data(&data);
 
-    // ilog("Reading in binary data to static binary buffer archive");
-    // sizet read_ind = platform_read_file("data.bin", ba.data, 1, ba.size, 0, &err);
-    // if (err.code != err_code::FILE_NO_ERROR) {
-    //     wlog("File read error: %s", err.str);
-    // }
+    ilog("Reading in binary data to static binary buffer archive");
+    sizet read_ind = platform_read_file("data.bin", ba.data, 1, ba.size, 0, &err);
+    if (err.code != err_code::FILE_NO_ERROR) {
+        wlog("File read error: %s", err.str);
+    }
 
-    // ilog("Unpacking binary buffer archive to data_to_pup");
-    // pup_var(&ba, data, {"data_to_pup"});
+    ilog("Unpacking binary buffer archive to data_to_pup");
+    pup_var(&ba, data, {"data_to_pup"});
     
-    // ilog("data_to_pup after unpacking: \n%s", to_cstr(data));
+    ilog("data_to_pup after unpacking: \n%s", to_cstr(data));
     
     json_archive ja{};
     jsa_init(&ja);

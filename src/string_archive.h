@@ -4,6 +4,7 @@
 #include "containers/string.h"
 #include "containers/hashmap.h"
 #include "containers/hashset.h"
+#include "robj_common.h"
 
 namespace nslib
 {
@@ -17,13 +18,7 @@ struct string_archive
     i8 indent_per_level{4};
 };
 
-inline void handle_varname(string *txt, const char *vname)
-{
-    if (vname) {
-        str_append(txt, vname);
-        str_append(txt, ": ");
-    }
-}
+void handle_varname(string *txt, const char *vname);
 
 // All other types should appear as objects
 template<class T>
@@ -59,19 +54,13 @@ void pack_unpack(string_archive *ar, T &val, const pack_var_info &vinfo)
 }
 
 // Strings
-inline void pack_unpack_begin(string_archive *ar, string &, const pack_var_info &vinfo) {
-    ar->txt += ar->cur_indent;
-    handle_varname(&ar->txt, vinfo.name);
-}
+void pack_unpack_begin(string_archive *ar, string &, const pack_var_info &vinfo);
+void pack_unpack_end(string_archive *ar, string &, const pack_var_info &vinfo);
+void pack_unpack(string_archive *ar, string &val, const pack_var_info &vinfo);
 
-inline void pack_unpack_end(string_archive *ar, string &, const pack_var_info &vinfo) {
-    ar->txt += ";\n";
-}
-
-inline void pack_unpack(string_archive *ar, string &val, const pack_var_info &vinfo)
-{
-    ar->txt += val;
-}
+// Make rids not register as their own object (we only pup the str member)
+inline void pack_unpack_begin(string_archive *ar, rid &id, const pack_var_info &vinfo) {}
+inline void pack_unpack_end(string_archive *ar, rid &id, const pack_var_info &vinfo) {}
 
 // Static arrays (actual ones)
 template<class T, sizet N>
@@ -166,10 +155,18 @@ template<class T>
 void pack_unpack(string_archive *ar, hashmap<string, T> &val, const pack_var_info &vinfo)
 {
     sizet i{};
-    auto iter = hashmap_iter(&val, &i);
-    while (iter) {
+    while (auto iter = hashmap_iter(&val, &i)) {
         pup_var(ar, iter->second, {str_cstr(iter->first)});
-        iter = hashmap_iter(&val, &i);
+    }
+}
+
+// Hashmap with rid key
+template<class T>
+void pack_unpack(string_archive *ar, hashmap<rid, T> &val, const pack_var_info &vinfo)
+{
+    sizet i{};
+    while (auto iter = hashmap_iter(&val, &i)) {
+        pup_var(ar, iter->second, {str_cstr(iter->first.str)});
     }
 }
 
@@ -178,10 +175,8 @@ template<integral K, class T>
 void pack_unpack(string_archive *ar, hashmap<K, T> &val, const pack_var_info &vinfo)
 {
     sizet i{};
-    auto iter = hashmap_iter(&val, &i);
-    while (iter) {
+    while (auto iter = hashmap_iter(&val, &i)) {
         pup_var(ar, iter->second, {to_cstr(iter->first)});
-        iter = hashmap_iter(&val, &i);
     }
 }
 
