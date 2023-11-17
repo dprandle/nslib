@@ -8,12 +8,12 @@
 namespace nslib
 {
 
-enum mem_alloc_type
+enum struct mem_alloc_type
 {
-    MEM_ALLOC_FREE_LIST,
-    MEM_ALLOC_POOL,
-    MEM_ALLOC_STACK,
-    MEM_ALLOC_LINEAR
+    FREE_LIST,
+    POOL,
+    STACK,
+    LINEAR
 };
 
 struct free_header

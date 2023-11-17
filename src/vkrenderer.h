@@ -15,7 +15,11 @@ enum vkr
     VKR_NO_PHYSICAL_DEVICES,
     VKR_NO_SUITABLE_PHYSICAL_DEVICE,
     VKR_CREATE_DEVICE_FAIL,
-    VKR_CREATE_SWAPCHAIN_FAIL
+    VKR_CREATE_SWAPCHAIN_FAIL,
+    VKR_CREATE_SHADER_MODULE_FAIL,
+    VKR_CREATE_PIPELINE_LAYOUT_FAIL,
+    VKR_CREATE_RENDER_PASS_FAIL,
+    VKR_CREATE_PIPELINE_FAIL
 };
 }
 
@@ -26,10 +30,10 @@ enum vkr_queue_fam_type
     VKR_QUEUE_FAM_TYPE_COUNT
 };
 
-inline constexpr const u32 MAX_QUEUE_REQUEST_COUNT=32;
+inline constexpr const u32 MAX_QUEUE_REQUEST_COUNT = 32;
 
 const u32 VKR_INVALID = (u32)-1;
-inline constexpr const u32 MEM_ALLOC_TYPE_COUNT = VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE+1;
+inline constexpr const u32 MEM_ALLOC_TYPE_COUNT = VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE + 1;
 
 struct vk_mem_alloc_stats
 {
@@ -45,7 +49,7 @@ struct vk_mem_alloc_stats
 struct mem_arena;
 struct vk_arenas
 {
-    vk_mem_alloc_stats stats[MEM_ALLOC_TYPE_COUNT] {};
+    vk_mem_alloc_stats stats[MEM_ALLOC_TYPE_COUNT]{};
 
     // Should persist through the lifetime of the program - only use free list arena
     mem_arena *persistent_arena{};
@@ -65,8 +69,8 @@ struct vkr_queue_family_info
     u32 available_count{0};
     u32 requested_count{1};
     float priorities[MAX_QUEUE_REQUEST_COUNT] = {1.0f};
-    VkQueue qs[MAX_QUEUE_REQUEST_COUNT] {};
-    
+    VkQueue qs[MAX_QUEUE_REQUEST_COUNT]{};
+
     u32 qoffset{0};
     u32 create_ind{0};
 };
@@ -123,6 +127,7 @@ struct vkr_context
     vk_arenas arenas;
     extension_funcs ext_funcs;
     int log_verbosity;
+    array<VkFramebuffer> framebuffers;
 };
 
 struct version_info
@@ -161,15 +166,26 @@ void vkr_enumerate_instance_extensions(const char *const *enabled_extensions, u3
 // indicated as such
 void vkr_enumerate_validation_layers(const char *const *enabled_layers, u32 enabled_layer_count, vk_arenas *arenas);
 
-void vkr_init_pipeline(const vkr_pipeline_init_info *init_info, const vk_arenas *arenas, vkr_pipeline_info *pipe_info);
-void vkr_terminate_pipeline(const vk_arenas *arenas, vkr_pipeline_info *pipe_info);
+// Create a shader module from bytecode
+int vkr_init_shader_module(VkDevice device, const VkAllocationCallbacks *callbacks, const byte_array *code, VkShaderModule *module);
+void vkr_terminate_shader_module(VkDevice device, VkShaderModule module, const VkAllocationCallbacks *callbacks);
 
-int vkr_init_swapchain(VkDevice device,
-                       VkSurfaceKHR surface,
-                       const vkr_physical_device_info *dev_info,
-                       const VkAllocationCallbacks *alloc_cbs,
-                       void *window,
-                       vkr_swapchain_info *swinfo);
+int vkr_init_pipeline(const vkr_pipeline_init_info *init_info, const vkr_context *vk_ctxt, vkr_pipeline_info *pipe_info);
+void vkr_terminate_pipeline(const vkr_context *vk_ctxt, vkr_pipeline_info *pipe_info);
+
+void vkr_init_framebuffer(VkDevice device,
+                          const VkAllocationCallbacks *alloc_cbs,
+                          VkRenderPass render_pass,
+                          VkImageView image_view,
+                          VkFramebuffer *framebuffer);
+void vkr_terminate_framebuffer(VkDevice device, VkFramebuffer framebuffer, const VkAllocationCallbacks *alloc_cbs);
+
+int vkr_setup_swapchain(VkDevice device,
+                        VkSurfaceKHR surface,
+                        const vkr_physical_device_info *dev_info,
+                        const VkAllocationCallbacks *alloc_cbs,
+                        void *window,
+                        vkr_swapchain_info *swinfo);
 
 void vkr_init_swapchain_info(vkr_swapchain_info *sw_info, mem_arena *arena);
 void vkr_terminate_swapchain_info(vkr_swapchain_info *sw_info);

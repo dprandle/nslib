@@ -21,4 +21,14 @@ string to_str(const rid &rid)
 }
 
 
+void cache_init(robj_cache *cache, i32 rtype, sizet item_size, sizet item_budget, mem_arena *upstream) {
+    cache->arena.mpool.chunk_size = item_size;
+    cache->arena.upstream_allocator = upstream;
+    mem_init_arena(item_budget, mem_alloc_type::POOL, &cache->arena);
+}
+
+void cache_terminate(robj_cache *cache) {
+    mem_terminate_arena(&cache->arena);
+}
+
 } // namespace nslib

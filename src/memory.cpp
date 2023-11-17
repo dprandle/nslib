@@ -288,17 +288,17 @@ void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment)
     }
     if (arena) {
         switch (arena->alloc_type) {
-        case (MEM_ALLOC_FREE_LIST):
+        case (mem_alloc_type::FREE_LIST):
             ret = mem_free_list_alloc(arena, bytes, alignment);
             break;
-        case (MEM_ALLOC_POOL):
+        case (mem_alloc_type::POOL):
             assert(bytes == arena->mpool.chunk_size);
             ret = mem_pool_alloc(arena);
             break;
-        case (MEM_ALLOC_STACK):
+        case (mem_alloc_type::STACK):
             ret = mem_stack_alloc(arena, bytes, alignment);
             break;
-        case (MEM_ALLOC_LINEAR):
+        case (mem_alloc_type::LINEAR):
             ret = mem_linear_alloc(arena, bytes, alignment);
             break;
         }
@@ -314,10 +314,10 @@ void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment)
 
 sizet mem_block_size(void *ptr, mem_arena *arena)
 {
-    if (arena->alloc_type == MEM_ALLOC_FREE_LIST) {
+    if (arena->alloc_type == mem_alloc_type::FREE_LIST) {
         return mem_free_list_block_size(ptr);
     }
-    else if (arena->alloc_type == MEM_ALLOC_POOL) {
+    else if (arena->alloc_type == mem_alloc_type::POOL) {
         return mem_pool_block_size(arena, ptr);
     }
     return 0;
@@ -325,10 +325,10 @@ sizet mem_block_size(void *ptr, mem_arena *arena)
 
 sizet mem_block_user_size(void *ptr, mem_arena *arena)
 {
-    if (arena->alloc_type == MEM_ALLOC_FREE_LIST) {
+    if (arena->alloc_type == mem_alloc_type::FREE_LIST) {
         return mem_free_list_block_size(ptr) - sizeof(alloc_header);
     }
-    else if (arena->alloc_type == MEM_ALLOC_POOL) {
+    else if (arena->alloc_type == mem_alloc_type::POOL) {
         return mem_pool_block_size(arena, ptr);
     }
     return 0;
@@ -388,16 +388,16 @@ void mem_free(void *ptr, mem_arena *arena)
 
     if (arena) {
         switch (arena->alloc_type) {
-        case (MEM_ALLOC_FREE_LIST):
+        case (mem_alloc_type::FREE_LIST):
             mem_free_list_free(arena, ptr);
             break;
-        case (MEM_ALLOC_POOL):
+        case (mem_alloc_type::POOL):
             mem_pool_free(arena, ptr);
             break;
-        case (MEM_ALLOC_STACK):
+        case (mem_alloc_type::STACK):
             mem_stack_free(arena, ptr);
             break;
-        case (MEM_ALLOC_LINEAR):
+        case (mem_alloc_type::LINEAR):
             mem_linear_free(arena, ptr);
             break;
         }
@@ -413,7 +413,7 @@ void mem_reset_arena(mem_arena *arena)
     arena->peak = 0;
 
     switch (arena->alloc_type) {
-    case (MEM_ALLOC_POOL): {
+    case (mem_alloc_type::POOL): {
         // Create a linked-list with all free positions
         sizet nchunks = arena->total_size / arena->mpool.chunk_size;
         for (sizet i = 0; i < nchunks; ++i) {
@@ -421,19 +421,19 @@ void mem_reset_arena(mem_arena *arena)
             ll_push(&arena->mpool.free_list, (mem_node *)address);
         }
     } break;
-    case (MEM_ALLOC_FREE_LIST): {
+    case (mem_alloc_type::FREE_LIST): {
         mem_node *first_node = (mem_node *)arena->start;
         first_node->data.block_size = arena->total_size;
         first_node->next = nullptr;
         arena->mfl.free_list.head = nullptr;
         ll_node<free_header> *dummy = nullptr;
         ll_insert(&arena->mfl.free_list, dummy, first_node);
-        arena->alloc_type = MEM_ALLOC_FREE_LIST;
+        arena->alloc_type = mem_alloc_type::FREE_LIST;
     } break;
-    case (MEM_ALLOC_STACK): {
+    case (mem_alloc_type::STACK): {
         arena->mstack.offset = 0;
     } break;
-    case (MEM_ALLOC_LINEAR): {
+    case (mem_alloc_type::LINEAR): {
         arena->mlin.offset = 0;
     } break;
     }
@@ -449,7 +449,7 @@ void mem_init_arena(sizet total_size, mem_alloc_type mtype, mem_arena *arena)
     assert(arena->total_size != 0);
 
     // If pool allocator total size must be multiple of chunk size, and chunk size must not be zero
-    assert(arena->alloc_type != MEM_ALLOC_POOL || (((arena->total_size % arena->mpool.chunk_size) == 0) && (arena->mpool.chunk_size >= 8)));
+    assert(arena->alloc_type != mem_alloc_type::POOL || (((arena->total_size % arena->mpool.chunk_size) == 0) && (arena->mpool.chunk_size >= 8)));
 
     if (!arena->upstream_allocator)
         arena->start = platform_alloc(arena->total_size);
@@ -470,13 +470,13 @@ void mem_terminate_arena(mem_arena *arena)
 const char *mem_arena_type_str(mem_alloc_type atype)
 {
     switch (atype) {
-    case (MEM_ALLOC_FREE_LIST):
+    case (mem_alloc_type::FREE_LIST):
         return "free list";
-    case (MEM_ALLOC_POOL):
+    case (mem_alloc_type::POOL):
         return "pool";
-    case (MEM_ALLOC_STACK):
+    case (mem_alloc_type::STACK):
         return "stack";
-    case (MEM_ALLOC_LINEAR):
+    case (mem_alloc_type::LINEAR):
         return "linear";
     default:
         return "unknown";
@@ -491,7 +491,7 @@ mem_arena *mem_global_arena()
 void mem_set_global_arena(mem_arena *arena)
 {
     if (arena) {
-        assert(arena->alloc_type == MEM_ALLOC_FREE_LIST);
+        assert(arena->alloc_type == mem_alloc_type::FREE_LIST);
     }
     g_fl_arena = arena;
 }
@@ -504,7 +504,7 @@ mem_arena *mem_global_stack_arena()
 void mem_set_global_stack_arena(mem_arena *arena)
 {
     if (arena) {
-        assert(arena->alloc_type == MEM_ALLOC_STACK);
+        assert(arena->alloc_type == mem_alloc_type::STACK);
     }
     g_stack_arena = arena;
 }
@@ -517,7 +517,7 @@ mem_arena *mem_global_frame_lin_arena()
 void mem_set_global_frame_lin_arena(mem_arena *arena)
 {
     if (arena) {
-        assert(arena->alloc_type == MEM_ALLOC_LINEAR);
+        assert(arena->alloc_type == mem_alloc_type::LINEAR);
     }
     g_frame_linear_arena = arena;
 }
