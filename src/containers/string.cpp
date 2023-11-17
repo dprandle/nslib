@@ -11,21 +11,21 @@ void str_set_capacity(string *str, sizet new_cap)
     sizet dyn_cap = 0;
     sizet prev_sz = str->buf.size;
     sizet prev_cap = str->buf.capacity;
-    
+
     if (new_cap > string::SMALL_STR_SIZE) {
         dyn_cap = new_cap;
     }
     else if (str->buf.data) {
         // If the new capacity is within our small string range and the dynamic buffer is non null, copy the dynamic
         // buffer data to our small string
-        memcpy(str->sos, str->buf.data, (new_cap < prev_sz)?new_cap:prev_sz);
+        memcpy(str->sos, str->buf.data, (new_cap < prev_sz) ? new_cap : prev_sz);
     }
 
     // This will set allocate our dynamic buffer if new cap is over small string amount, otherwise it will free the
     // dynamic buffer mem
     arr_set_capacity(&str->buf, dyn_cap);
     str->buf.capacity = new_cap;
-    str->buf.size = (new_cap < prev_sz)?new_cap:prev_sz;
+    str->buf.size = (new_cap < prev_sz) ? new_cap : prev_sz;
 
     // If we are moving from the small string buffer to a dynamic buffer, copy the small string
     // to the dynamic string buffer
@@ -75,7 +75,7 @@ const char &string::operator[](sizet ind) const
     return str_cstr(this)[ind];
 }
 
-inline char &string::operator[](sizet ind)
+char &string::operator[](sizet ind)
 {
     return str_data(this)[ind];
 }
@@ -87,7 +87,8 @@ string operator+(const string &lhs, const string &rhs)
     return ret;
 }
 
-bool operator==(const string &lhs, const string &rhs) {
+bool operator==(const string &lhs, const string &rhs)
+{
     if (str_len(lhs) != str_len(rhs)) {
         return false;
     }
@@ -175,7 +176,7 @@ string *str_resize(string *str, sizet new_size, char c)
             cap *= 2;
         str_set_capacity(str, cap);
     }
-    
+
     for (int i = str_len(*str); i < new_size; ++i) {
         (*str)[i] = c;
     }
@@ -201,8 +202,8 @@ string *str_reserve(string *str, sizet new_cap)
 string *str_shrink_to_fit(string *str)
 {
     assert(str_len(*str) <= str_capacity(*str));
-    if (str_len(*str)+1 < str_capacity(*str)) {
-        str_set_capacity(str, str_len(*str)+1);
+    if (str_len(*str) + 1 < str_capacity(*str)) {
+        str_set_capacity(str, str_len(*str) + 1);
     }
     return str;
 }
@@ -238,23 +239,82 @@ u64 hash_type(const string &key, u64 seed0, u64 seed1)
     return hash_type(str_cstr(&key), seed0, seed1);
 }
 
-void from_str(void** i, const string &str)
+void from_str(void **i, const string &str)
 {
     str_scanf(str, "%p", i);
 }
 
-void from_str(i64* i, const string &str)
+void from_str(i64 *i, const string &str)
 {
     str_scanf(str, "%ld", i);
-    
 }
 
-void from_str(u64* i, const string &str)
+void from_str(u64 *i, const string &str)
 {
     str_scanf(str, "%lu", i);
 }
 
-void from_str(char* c, const string &str)
+void from_str(i16 *i, const string &str)
+{
+    str_scanf(str, "%hd", i);
+}
+
+void from_str(u16 *i, const string &str)
+{
+    str_scanf(str, "%hu", i);
+}
+
+void from_str(i8 *i, const string &str)
+{
+    str_scanf(str, "%hhi", i);
+}
+
+void from_str(u8 *i, const string &str)
+{
+    str_scanf(str, "%hhu", i);
+}
+
+void from_str(char *c, const string &str)
+{
+    str_scanf(str, "%c", c);
+}
+
+void from_str(void **i, const char *str)
+{
+    str_scanf(str, "%p", i);
+}
+
+void from_str(i64 *i, const char *str)
+{
+    str_scanf(str, "%ld", i);
+}
+
+void from_str(u64 *i, const char *str)
+{
+    str_scanf(str, "%lu", i);
+}
+
+void from_str(i16 *i, const char *str)
+{
+    str_scanf(str, "%hd", i);
+}
+
+void from_str(u16 *i, const char *str)
+{
+    str_scanf(str, "%hu", i);
+}
+
+void from_str(i8 *i, const char *str)
+{
+    str_scanf(str, "%hhi", i);
+}
+
+void from_str(u8 *i, const char *str)
+{
+    str_scanf(str, "%hhu", i);
+}
+
+void from_str(char *c, const char *str)
 {
     str_scanf(str, "%c", c);
 }
@@ -280,13 +340,11 @@ string to_str(i64 i)
     return ret;
 }
 
-string to_str(void* i)
+string to_str(void *i)
 {
     string ret;
     str_printf(&ret, "%p", i);
     return ret;
 }
-
-
 
 } // namespace nslib

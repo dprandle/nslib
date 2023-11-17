@@ -13,7 +13,7 @@ void jsa_init(json_archive *jsa, const char *json_str)
             wlog("Could not parse json_str!");
         }
         else {
-            arr_emplace_back(&jsa->stack, parsed, 0);
+            arr_emplace_back(&jsa->stack, jsa_stack_frame{parsed, 0});
         }
     }
 }
@@ -26,7 +26,7 @@ void jsa_init(json_archive *jsa, archive_opmode mode, json_obj *root)
         root = json_create_object();
     }
     if (root) {
-        arr_emplace_back(&jsa->stack, root, 0);
+        arr_emplace_back(&jsa->stack, jsa_stack_frame{root, 0});
     }
 }
 

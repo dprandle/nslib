@@ -5,21 +5,24 @@
 namespace nslib
 {
 template<class F, class S>
-struct pair
+union pair
 {
-    union
+    struct
     {
-        struct
-        {
-            F first;
-            S second;
-        };
-        struct
-        {
-            F key{};
-            S value{};
-        };
+        F first;
+        S second;
     };
+    struct
+    {
+        F key;
+        S value;
+    };
+
+    ~pair()
+    {
+        first.~F();
+        second.~S();
+    }
 };
 
 pup_func_tt(pair)

@@ -71,7 +71,7 @@ void pack_unpack_begin(json_archive *ar, T &, const pack_var_info &vinfo)
         }
 
         if (item && json_is_object(item)) {
-            arr_emplace_back(&ar->stack, item);
+            arr_emplace_back(&ar->stack, jsa_stack_frame{item, 0});
         }
         else if (item) {
             wlog("Found %s in %s but it wasn't correct type (was %d)", vinfo.name, cur_frame->current->string, item->type);
@@ -89,7 +89,7 @@ void pack_unpack_begin(json_archive *ar, T &, const pack_var_info &vinfo)
         else if (is_obj) {
             assert(json_add_item_to_object(cur_frame->current, vinfo.name, new_item));
         }
-        arr_emplace_back(&ar->stack, new_item, 0);
+        arr_emplace_back(&ar->stack, jsa_stack_frame{new_item, 0});
     }
 }
 
@@ -190,7 +190,7 @@ void pack_unpack_begin(json_archive *ar, T (&val)[N], const pack_var_info &vinfo
         }
 
         if (item && json_is_array(item)) {
-            arr_emplace_back(&ar->stack, item);
+            arr_emplace_back(&ar->stack, jsa_stack_frame{item, 0});
         }
         else if (item) {
             wlog("Found %s in object %s but it is not an array (it is %d)", vinfo.name, cur_frame->current->string, item->type);
@@ -208,7 +208,7 @@ void pack_unpack_begin(json_archive *ar, T (&val)[N], const pack_var_info &vinfo
         else if (is_obj) {
             assert(json_add_item_to_object(cur_frame->current, vinfo.name, new_item));
         }
-        arr_emplace_back(&ar->stack, new_item, 0);
+        arr_emplace_back(&ar->stack, jsa_stack_frame{new_item, 0});
     }
 }
 
@@ -255,7 +255,7 @@ void pack_unpack_begin(json_archive *ar, static_array<T, N> &val, const pack_var
 
         if (item && json_is_array(item)) {
             val.size = json_get_array_size(item);
-            arr_emplace_back(&ar->stack, item);
+            arr_emplace_back(&ar->stack, jsa_stack_frame{item, 0});
         }
         else if (item) {
             wlog("Found %s in object %s but it is not an array (it is %d)", vinfo.name, cur_frame->current->string, item->type);
@@ -273,7 +273,7 @@ void pack_unpack_begin(json_archive *ar, static_array<T, N> &val, const pack_var
         else if (is_obj) {
             assert(json_add_item_to_object(cur_frame->current, vinfo.name, new_item));
         }
-        arr_emplace_back(&ar->stack, new_item, 0);
+        arr_emplace_back(&ar->stack, jsa_stack_frame{new_item, 0});
     }
 }
 
@@ -310,7 +310,7 @@ void pack_unpack_begin(json_archive *ar, array<T> &val, const pack_var_info &vin
 
         if (item && json_is_array(item)) {
             arr_resize(&val, json_get_array_size(item));
-            arr_emplace_back(&ar->stack, item);
+            arr_emplace_back(&ar->stack, jsa_stack_frame{item, 0});
         }
         else if (item) {
             wlog("Found %s in object %s but it is not an array (it is %d)", vinfo.name, cur_frame->current->string, item->type);
@@ -328,7 +328,7 @@ void pack_unpack_begin(json_archive *ar, array<T> &val, const pack_var_info &vin
         else if (is_obj) {
             assert(json_add_item_to_object(cur_frame->current, vinfo.name, new_item));
         }
-        arr_emplace_back(&ar->stack, new_item, 0);
+        arr_emplace_back(&ar->stack, jsa_stack_frame{new_item, 0});
     }
 }
 
@@ -369,7 +369,7 @@ void pack_unpack_begin(json_archive *ar, hashset<T> &val, const pack_var_info &v
         }
 
         if (item && json_is_array(item)) {
-            arr_emplace_back(&ar->stack, item);
+            arr_emplace_back(&ar->stack, jsa_stack_frame{item, 0});
         }
         else if (item) {
             wlog("Found %s in object %s but it is not an array (it is %d)", vinfo.name, cur_frame->current->string, item->type);
@@ -387,7 +387,7 @@ void pack_unpack_begin(json_archive *ar, hashset<T> &val, const pack_var_info &v
         else if (is_obj) {
             assert(json_add_item_to_object(cur_frame->current, vinfo.name, new_item));
         }
-        arr_emplace_back(&ar->stack, new_item, 0);
+        arr_emplace_back(&ar->stack, jsa_stack_frame{new_item, 0});
     }
 }
 

@@ -149,13 +149,13 @@ void seed_data(data_to_pup *data)
     hashset_insert(&data->hs,string("key2"));
     hashset_insert(&data->hs,string("key3"));
 
-    hashset_insert(&data->hs_u64,12000000000000000000u);
-    hashset_insert(&data->hs_u64,13000000000000000000u);
-    hashset_insert(&data->hs_u64,14000000000000000000u);
+    hashset_insert(&data->hs_u64,(u64)12000000000000000000u);
+    hashset_insert(&data->hs_u64,(u64)13000000000000000000u);
+    hashset_insert(&data->hs_u64,(u64)14000000000000000000u);
 
-    hashset_insert(&data->hs_i64,2000000000000000000);
-    hashset_insert(&data->hs_i64,3000000000000000000);
-    hashset_insert(&data->hs_i64,4000000000000000000);
+    hashset_insert(&data->hs_i64,(i64)2000000000000000000);
+    hashset_insert(&data->hs_i64,(i64)3000000000000000000);
+    hashset_insert(&data->hs_i64,(i64)4000000000000000000);
 
     hashset_insert(&data->hs_u32,2000000000u);
     hashset_insert(&data->hs_u32,3000000000u);
@@ -250,32 +250,32 @@ int app_init(platform_ctxt *ctxt, app_data *app)
     seed_data(&data);
     ilog("data_to_pup json in: \n%s", to_cstr(data));
 
-    static_binary_buffer_archive<10000> ba{};
-    ilog("Packing to static binary buffer archive");
-    pup_var(&ba, data, {"data_to_pup"});
-    platform_file_err_desc err;
-    ilog("Saving binary data to data.bin");
-    platform_write_file("data.bin", ba.data, 1, ba.cur_offset, 0, &err);
-    if (err.code != err_code::FILE_NO_ERROR) {
-        wlog("File write error: %s", err.str);
-    }
+    // static_binary_buffer_archive<10000> ba{};
+    // ilog("Packing to static binary buffer archive");
+    // pup_var(&ba, data, {"data_to_pup"});
+    // platform_file_err_desc err;
+    // ilog("Saving binary data to data.bin");
+    // platform_write_file("data.bin", ba.data, 1, ba.cur_offset, 0, &err);
+    // if (err.code != err_code::FILE_NO_ERROR) {
+    //     wlog("File write error: %s", err.str);
+    // }
 
-    ilog("Clearing static binary buffer archive and setting to unpack mode");
-    err = {};
-    ba = {};
-    ba.opmode = archive_opmode::UNPACK;
-    clear_data(&data);
+    // ilog("Clearing static binary buffer archive and setting to unpack mode");
+    // err = {};
+    // ba = {};
+    // ba.opmode = archive_opmode::UNPACK;
+    // clear_data(&data);
 
-    ilog("Reading in binary data to static binary buffer archive");
-    sizet read_ind = platform_read_file("data.bin", ba.data, 1, ba.size, 0, &err);
-    if (err.code != err_code::FILE_NO_ERROR) {
-        wlog("File read error: %s", err.str);
-    }
+    // ilog("Reading in binary data to static binary buffer archive");
+    // sizet read_ind = platform_read_file("data.bin", ba.data, 1, ba.size, 0, &err);
+    // if (err.code != err_code::FILE_NO_ERROR) {
+    //     wlog("File read error: %s", err.str);
+    // }
 
-    ilog("Unpacking binary buffer archive to data_to_pup");
-    pup_var(&ba, data, {"data_to_pup"});
+    // ilog("Unpacking binary buffer archive to data_to_pup");
+    // pup_var(&ba, data, {"data_to_pup"});
     
-    ilog("data_to_pup after unpacking: \n%s", to_cstr(data));
+    // ilog("data_to_pup after unpacking: \n%s", to_cstr(data));
     
     json_archive ja{};
     jsa_init(&ja);
