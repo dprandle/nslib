@@ -4,6 +4,20 @@
 
 namespace nslib
 {
+
+struct version_info
+{
+    int major;
+    int minor;
+    int patch;
+};
+pup_func(version_info)
+{
+    pup_member(major);
+    pup_member(minor);
+    pup_member(patch);
+}    
+
 template<class F, class S>
 union pair
 {

@@ -1,7 +1,8 @@
 #pragma once
 #include <vulkan/vulkan.h>
 #include "containers/array.h"
-#include "math/vector2.h"
+#include "util.h"
+#include "math/vector4.h"
 #include "basic_types.h"
 
 namespace nslib
@@ -17,6 +18,8 @@ enum vkr
     VKR_ENUMERATE_PHYSICAL_DEVICES_FAIL,
     VKR_NO_SUITABLE_PHYSICAL_DEVICE,
     VKR_CREATE_DEVICE_FAIL,
+    VKR_CREATE_SEMAPHORE_FAIL,
+    VKR_CREATE_FENCE_FAIL,
     VKR_CREATE_SWAPCHAIN_FAIL,
     VKR_GET_SWAPCHAIN_IMAGES_FAIL,
     VKR_CREATE_IMAGE_VIEW_FAIL,
@@ -26,7 +29,9 @@ enum vkr
     VKR_CREATE_PIPELINE_FAIL,
     VKR_CREATE_FRAMEBUFFER_FAIL,
     VKR_CREATE_COMMAND_POOL_FAIL,
-    VKR_CREATE_COMMAND_BUFFER_FAIL
+    VKR_CREATE_COMMAND_BUFFER_FAIL,
+    VKR_BEGIN_COMMAND_BUFFER_FAIL,
+    VKR_END_COMMAND_BUFFER_FAIL
 };
 }
 
@@ -65,7 +70,7 @@ struct vk_arenas
     mem_arena *command_arena{};
 };
 
-struct extension_funcs
+struct vkr_debug_extension_funcs
 {
     PFN_vkCreateDebugUtilsMessengerEXT create_debug_utils_messenger{};
     PFN_vkDestroyDebugUtilsMessengerEXT destroy_debug_utils_messenger{};
@@ -106,14 +111,14 @@ struct vkr_pdevice_swapchain_support
     array<VkPresentModeKHR> present_modes{};
 };
 
-struct vkr_physical_device_info
+struct vkr_phys_device
 {
-    VkPhysicalDevice pdevice{};
+    VkPhysicalDevice hndl{};
     vkr_queue_families qfams{};
     vkr_pdevice_swapchain_support swap_support{};
 };
 
-struct vkr_swapchain_info
+struct vkr_swapchain
 {
     array<VkImage> images;
     array<VkImageView> image_views;
@@ -122,10 +127,46 @@ struct vkr_swapchain_info
     VkSwapchainKHR swapchain;
 };
 
-struct vkr_pipeline_info
+struct vkr_rpass_cfg
 {
-    VkPipelineLayout layout;
-    VkPipeline pipeline;
+    
+};
+
+struct vkr_rpass
+{
+    VkRenderPass hndl;
+    vkr_rpass_cfg cfg;
+};
+
+struct vkr_pipeline_cfg
+{
+    byte_array frag_shader_data;
+    byte_array vert_shader_data;
+    const vkr_rpass *rpass;
+};
+
+struct vkr_pipeline
+{
+    vkr_rpass rpass;
+    VkPipelineLayout layout_hndl;
+    VkPipeline hndl;
+};
+
+struct vkr_framebuffer_cfg
+{
+    uvec2 size;
+    u32 layers{1};
+    const vkr_rpass* rpass;
+    const VkImageView *attachments;
+    u32 attachment_count;
+};
+
+struct vkr_framebuffer
+{
+    uvec2 size;
+    u32 layers;
+    vkr_rpass rpass;
+    VkFramebuffer hndl;
 };
 
 struct vkr_queue
@@ -144,39 +185,28 @@ struct vkr_device
 {
     VkDevice hndl;
     vkr_device_queue_fam_info qfams[VKR_QUEUE_FAM_TYPE_COUNT];
-    array<VkRenderPass> render_passes;
-    array<VkFramebuffer> framebuffers;
-    array<vkr_pipeline_info> pipelines;
-    vkr_swapchain_info sw_info;    
+    array<vkr_rpass> render_passes;
+    array<vkr_framebuffer> framebuffers;
+    array<vkr_pipeline> pipelines;
+    vkr_swapchain sw_info;
+
+    VkSemaphore image_avail;
+    VkSemaphore render_finished;
+    VkFence in_flight;
 };
 
 struct vkr_instance
 {
     VkInstance hndl;
     VkDebugUtilsMessengerEXT dbg_messenger;
-    extension_funcs ext_funcs;
+    vkr_debug_extension_funcs ext_funcs;
 
     VkSurfaceKHR surface;
-    vkr_physical_device_info pdev_info;
+    vkr_phys_device pdev_info;
     vkr_device device;
 };
 
-struct vkr_context
-{
-    vkr_instance inst;
-    vk_arenas arenas;
-    int log_verbosity;
-    VkAllocationCallbacks alloc_cbs;
-};
-
-struct version_info
-{
-    int major;
-    int minor;
-    int patch;
-};
-
-struct vkr_init_info
+struct vkr_cfg
 {
     const char *app_name;
     version_info vi;
@@ -197,18 +227,19 @@ struct vkr_init_info
     u32 validation_layer_count;
 };
 
-struct vkr_pipeline_init_info
+struct vkr_context
 {
-    byte_array frag_shader_data;
-    byte_array vert_shader_data;
-    VkRenderPass rpass;
+    vkr_instance inst;
+    vkr_cfg cfg;
+    VkAllocationCallbacks alloc_cbs;
 };
+
 
 const char *vkr_physical_device_type_str(VkPhysicalDeviceType type);
 vkr_queue_families vkr_get_queue_families(const vkr_context *vk, VkPhysicalDevice dev);
 
 // Log out the physical devices and set device to the best one based on very simple scoring (dedicated takes the cake)
-int vkr_select_best_graphics_physical_device(const vkr_context *vk, vkr_physical_device_info *dev_info);
+int vkr_select_best_graphics_physical_device(const vkr_context *vk, vkr_phys_device *dev);
 
 // NOTE: These enumerate functions are meant to be a convenience for not needing to use a tool to decide on which
 // extensions and validation layers you need to use. They also print the layers as part of the init routine for vk
@@ -218,7 +249,7 @@ int vkr_select_best_graphics_physical_device(const vkr_context *vk, vkr_physical
 void vkr_enumerate_instance_extensions(const char *const *enabled_extensions, u32 enabled_extension_count, const vk_arenas *arenas);
 
 // Enumerate (log) the available device extensions
-void vkr_enumerate_device_extensions(VkPhysicalDevice pdevice,
+void vkr_enumerate_device_extensions(const vkr_phys_device *pdevice,
                                      const char *const *enabled_extensions,
                                      u32 enabled_extension_count,
                                      const vk_arenas *arenas);
@@ -228,38 +259,33 @@ void vkr_enumerate_device_extensions(VkPhysicalDevice pdevice,
 void vkr_enumerate_validation_layers(const char *const *enabled_layers, u32 enabled_layer_count, const vk_arenas *arenas);
 
 
-int vkr_add_command_buffer(const vkr_device *device, vkr_command_pool *pool);
+int vkr_add_cmd_buf(const vkr_device *device, vkr_command_pool *pool);
 
-int vkr_init_command_pool(const vkr_context *vk, u32 fam_ind, vkr_command_pool *cpool);
-sizet vkr_add_command_pool(vkr_device_queue_fam_info *qfam, const vkr_command_pool *cpool);
-void vkr_terminate_command_pool(const vkr_context *vk, u32 fam_ind, vkr_command_pool *cpool);
+int vkr_init_cmd_pool(const vkr_context *vk, u32 fam_ind, vkr_command_pool *cpool);
+sizet vkr_add_cmd_pool(vkr_device_queue_fam_info *qfam, const vkr_command_pool *cpool);
+void vkr_terminate_cmd_pool(const vkr_context *vk, u32 fam_ind, vkr_command_pool *cpool);
 
 // Create a shader module from bytecode
 int vkr_init_shader_module(const vkr_context *vk, const byte_array *code, VkShaderModule *module);
 void vkr_terminate_shader_module(const vkr_context *vk, VkShaderModule module);
 
-int vkr_init_render_pass(const vkr_context *vk, VkRenderPass *rpass);
-sizet vkr_add_render_pass(vkr_device *device, VkRenderPass rpass);
-void vkr_terminate_render_pass(const vkr_context *vk, VkRenderPass rpass);
+int vkr_init_render_pass(const vkr_context *vk, vkr_rpass *rpass);
+sizet vkr_add_render_pass(vkr_device *device, const vkr_rpass* rpass);
+void vkr_terminate_render_pass(const vkr_context *vk, const vkr_rpass*rpass);
 
-int vkr_init_pipeline(const vkr_pipeline_init_info *init_info, const vkr_context *vk_ctxt, vkr_pipeline_info *pipe_info);
-sizet vkr_add_pipeline(vkr_device *device, const vkr_pipeline_info *pipeline);
-void vkr_terminate_pipeline(const vkr_context *vk_ctxt, const vkr_pipeline_info *pipe_info);
+int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pipeline *pipe_info);
+sizet vkr_add_pipeline(vkr_device *device, const vkr_pipeline *pipeline);
+void vkr_terminate_pipeline(const vkr_context *vk_ctxt, const vkr_pipeline *pipe_info);
 
-int vkr_init_framebuffer(const vkr_context *vk,
-                         VkRenderPass render_pass,
-                         uvec2 size,
-                         const VkImageView *attachments,
-                         u32 attachment_count,
-                         VkFramebuffer *framebuffer);
-sizet vkr_add_framebuffer(vkr_device *device, VkFramebuffer fb);
-void vkr_terminate_framebuffer(const vkr_context *vk, VkFramebuffer framebuffer);
+int vkr_init_framebuffer(const vkr_context *vk, const vkr_framebuffer_cfg *cfg, vkr_framebuffer *framebuffer);
+sizet vkr_add_framebuffer(vkr_device *device, const vkr_framebuffer* fb);
+void vkr_terminate_framebuffer(const vkr_context *vk, const vkr_framebuffer *fb);
 
 // The device should be created before calling this
 int vkr_init_swapchain(const vkr_context *vk,
                         void *window,
-                        vkr_swapchain_info *sw_info);
-void vkr_terminate_swapchain(const vkr_context *vk, vkr_swapchain_info *sw_info);
+                        vkr_swapchain *sw_info);
+void vkr_terminate_swapchain(const vkr_context *vk, vkr_swapchain *sw_info);
 
 void vkr_init_pdevice_swapchain_support(vkr_pdevice_swapchain_support *ssup, mem_arena *arena);
 void vkr_fill_pdevice_swapchain_support(VkPhysicalDevice pdevice, VkSurfaceKHR surface, vkr_pdevice_swapchain_support *ssup);
@@ -279,11 +305,17 @@ void vkr_terminate_device(const vkr_context *vk,
 int vkr_init_surface(const vkr_context *vk, void *window, VkSurfaceKHR *surface);
 void vkr_terminate_surface(const vkr_context *vk, VkSurfaceKHR surface);
 
-int vkr_init_instance(const vkr_init_info *init_info, const vkr_context *vk, vkr_instance *inst);
+int vkr_init_instance(const vkr_context *vk, vkr_instance *inst);
 void vkr_terminate_instance(const vkr_context *vk, vkr_instance *inst);
 
-int vkr_init(const vkr_init_info *init_info, vkr_context *vk);
+int vkr_init(const vkr_cfg *cfg, vkr_context *vk);
 void vkr_terminate(vkr_context *vk);
+
+int vkr_begin_cmd_buf(const vkr_command_buffer *buf);
+int vkr_end_cmd_buf(const vkr_command_buffer *buf);
+
+void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf, vkr_framebuffer *fb);
+void vkr_cmd_end_rpass(const vkr_command_buffer *cmd_buf);
 
 void vkr_setup_default_rendering(vkr_context *vk);
 
