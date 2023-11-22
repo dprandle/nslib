@@ -2,6 +2,7 @@
 
 #include <utility>
 #include <new>
+#include <algorithm>
 
 #include "../archive_common.h"
 #include "../memory.h"
@@ -147,6 +148,7 @@ void arr_set_capacity(array<T> *arr, sizet new_cap)
     }
     else if (arr->data){
         mem_free(arr->data, arr->arena);
+        arr->data = nullptr;
     }
     arr->capacity = new_cap;
 
@@ -260,14 +262,15 @@ typename T::value_type *arr_front(T *bufobj)
 template<class T>
 typename T::iterator arr_find(T *bufobj, const typename T::value_type &item)
 {
-    auto iter = arr_begin(bufobj);
-    while (iter != arr_end(bufobj)) {
-        if (*iter == item) {
-            return iter;
-        }
-        ++iter;
-    }
-    return iter;
+    return std::find(arr_begin(bufobj), arr_end(bufobj), item);
+    // auto iter = arr_begin(bufobj);
+    // while (iter != arr_end(bufobj)) {
+    //     if (*iter == item) {
+    //         return iter;
+    //     }
+    //     ++iter;
+    // }
+    // return iter;
 }
 
 template<class T, class... Args>
@@ -315,19 +318,18 @@ typename T::iterator arr_erase(T *bufobj, typename T::iterator iter)
 template<class T>
 typename T::iterator arr_erase(T *bufobj, typename T::iterator first, typename T::iterator last)
 {
-    assert(first >= arr_begin(bufobj));
-    assert(last <= arr_end(bufobj));
-
-    // Shift all items after the range over
-    int i = 0;
-    while ((first + i) <= last && (last + i) != arr_end(bufobj)) {
-        *(first + i) = *(last + i);
-        ++i;
-    }
     sizet reduce_size = (last - first);
-    if (last != arr_end(bufobj)) {
-        ++reduce_size;
+    if (reduce_size > bufobj->size || reduce_size == 0) {
+        return last;
     }
+    
+    // Shift all items after the range over to the first item in the range, until we reach to end of the data
+    while (last != arr_end(bufobj)) {
+        *first = *last;
+        ++first;
+        ++last;
+    }
+    
     arr_resize(bufobj, bufobj->size - reduce_size);
     return first;
 }
@@ -335,7 +337,7 @@ typename T::iterator arr_erase(T *bufobj, typename T::iterator first, typename T
 // Remove the item at index by copying the last item in the array to its spot and popping the last item. This does not
 // preserve the order of the array.
 template<class T>
-bool arr_remove(T *bufobj, sizet index)
+bool arr_swap_remove(T *bufobj, sizet index)
 {
     if (index >= bufobj->size)
         return false;
@@ -343,6 +345,33 @@ bool arr_remove(T *bufobj, sizet index)
     bufobj->data[index] = *arr_back(bufobj);
     arr_pop_back(bufobj);
     return true;
+}
+
+// Remove the item at index by copying all items > index to their previous element, and then popping the last item.
+template<class T>
+bool arr_remove(T *bufobj, sizet index)
+{
+    if (index >= bufobj->size)
+        return false;
+
+    // Copy the items back one spot
+    for (sizet i = index+1; i < bufobj->size; ++i) {
+        bufobj->data[i-1] = bufobj->data[i];
+    }
+
+    // Pop the last item
+    arr_pop_back(bufobj);
+    return true;
+}
+
+// Remove the item at index by copying all items > index to their previous element, and then popping the last item.
+template<class T>
+sizet arr_remove(T *bufobj, const typename T::value_type &val)
+{
+    auto iter = std::remove(arr_begin(bufobj), arr_end(bufobj), val);
+    sizet ret = arr_end(bufobj) - iter;
+    arr_resize(bufobj, bufobj->size - ret);
+    return ret;
 }
 
 template<class T>

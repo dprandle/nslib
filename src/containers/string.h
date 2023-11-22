@@ -53,6 +53,11 @@ inline char *str_data(string *str)
     return (str->buf.capacity > string::SMALL_STR_SIZE) ? str->buf.data : str->sos;
 }
 
+inline sizet str_len(const string *str)
+{
+    return str->buf.size;
+}
+
 inline sizet str_len(const string &str)
 {
     return str.buf.size;
@@ -61,6 +66,11 @@ inline sizet str_len(const string &str)
 inline sizet str_capacity(const string &str)
 {
     return str.buf.capacity;
+}
+
+inline sizet str_capacity(const string *str)
+{
+    return str->buf.capacity;
 }
 
 void swap(string *lhs, string *rhs);
@@ -94,6 +104,16 @@ string *str_reserve(string *str, sizet new_cal);
 string *str_shrink_to_fit(string *str);
 
 string *str_push_back(string *str, char c);
+
+string *str_pop_back(string *str);
+
+string::iterator str_erase(string *str, string::iterator iter);
+
+string::iterator str_erase(string *str, string::iterator first, string::iterator last);
+
+bool str_remove(string *str, sizet ind);
+
+sizet str_remove(string *str, char c);
 
 string *str_append(string *str, const string &to_append);
 

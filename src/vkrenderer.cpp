@@ -8,6 +8,8 @@
 #include "logging.h"
 #include "memory.h"
 
+#include "platform.h"
+
 #define PRINT_MEM_DEBUG false
 #define PRINT_MEM_INSTANCE_ONLY true
 
@@ -19,22 +21,6 @@ struct internal_alloc_header
     u32 scope{};
     sizet req_size{};
 };
-
-#if defined(NDEBUG)
-intern const u32 VALIDATION_LAYER_COUNT = 0;
-intern const char **VALIDATION_LAYERS = nullptr;
-#else
-intern const u32 VALIDATION_LAYER_COUNT = 1;
-intern const char *VALIDATION_LAYERS[VALIDATION_LAYER_COUNT] = {"VK_LAYER_KHRONOS_validation"};
-#endif
-
-intern const u32 ADDITIONAL_INST_EXTENSION_COUNT = 2;
-intern const char *ADDITIONAL_INST_EXTENSIONS[ADDITIONAL_INST_EXTENSION_COUNT] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-                                                                                  VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME};
-
-intern const u32 DEVICE_EXTENSION_COUNT = 1;
-intern const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-intern const u32 MAX_EXTENSION_STR_LEN = 128;
 
 intern const char *alloc_scope_str(int scope)
 {
@@ -203,7 +189,7 @@ intern void *vk_realloc(void *user, void *ptr, sizet size, sizet alignment, VkSy
 void vkr_enumerate_device_extensions(VkPhysicalDevice pdevice,
                                      const char *const *enabled_extensions,
                                      u32 enabled_extension_count,
-                                     vk_arenas *arenas)
+                                     const vk_arenas *arenas)
 {
     u32 extension_count{0};
     ilog("Enumerating device extensions...");
@@ -216,7 +202,7 @@ void vkr_enumerate_device_extensions(VkPhysicalDevice pdevice,
     for (u32 i = 0; i < extension_count; ++i) {
         bool ext_enabled{false};
         for (u32 j = 0; j < enabled_extension_count; ++j) {
-            if (strncmp(enabled_extensions[j], ext_array[i].extensionName, MAX_EXTENSION_STR_LEN) == 0) {
+            if (strncmp(enabled_extensions[j], ext_array[i].extensionName, VKR_MAX_EXTENSION_STR_LEN) == 0) {
                 ext_enabled = true;
             }
         }
@@ -224,7 +210,7 @@ void vkr_enumerate_device_extensions(VkPhysicalDevice pdevice,
     }
 }
 
-void vkr_enumerate_instance_extensions(const char *const *enabled_extensions, u32 enabled_extension_count, vk_arenas *arenas)
+void vkr_enumerate_instance_extensions(const char *const *enabled_extensions, u32 enabled_extension_count, const vk_arenas *arenas)
 {
     u32 extension_count{0};
     ilog("Enumerating instance extensions...");
@@ -237,7 +223,7 @@ void vkr_enumerate_instance_extensions(const char *const *enabled_extensions, u3
     for (u32 i = 0; i < extension_count; ++i) {
         bool ext_enabled{false};
         for (u32 j = 0; j < enabled_extension_count; ++j) {
-            if (strncmp(enabled_extensions[j], ext_array[i].extensionName, MAX_EXTENSION_STR_LEN) == 0) {
+            if (strncmp(enabled_extensions[j], ext_array[i].extensionName, VKR_MAX_EXTENSION_STR_LEN) == 0) {
                 ext_enabled = true;
             }
         }
@@ -245,7 +231,7 @@ void vkr_enumerate_instance_extensions(const char *const *enabled_extensions, u3
     }
 }
 
-void vkr_enumerate_validation_layers(const char *const *enabled_layers, u32 enabled_layer_count, vk_arenas *arenas)
+void vkr_enumerate_validation_layers(const char *const *enabled_layers, u32 enabled_layer_count, const vk_arenas *arenas)
 {
     u32 layer_count{0};
     ilog("Enumerating vulkan validation layers...");
@@ -277,7 +263,7 @@ intern VkBool32 VKAPI_PTR debug_message_callback(VkDebugUtilsMessageSeverityFlag
                                                  void *user)
 {
     int cur = log_get_level();
-    log_set_level(((vkr_context *)user)->log_verbosity);
+    log_set_level(*((int *)user));
     if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
         elog("Vk: %s", data->pMessage);
     }
@@ -294,11 +280,11 @@ intern VkBool32 VKAPI_PTR debug_message_callback(VkDebugUtilsMessageSeverityFlag
     return VK_FALSE;
 }
 
-intern void get_extension_funcs(extension_funcs *funcs, VkInstance inst)
+intern void fill_extension_funcs(extension_funcs *funcs, VkInstance hndl)
 {
-    funcs->create_debug_utils_messenger = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(inst, "vkCreateDebugUtilsMessengerEXT");
+    funcs->create_debug_utils_messenger = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(hndl, "vkCreateDebugUtilsMessengerEXT");
     funcs->destroy_debug_utils_messenger =
-        (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(inst, "vkDestroyDebugUtilsMessengerEXT");
+        (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(hndl, "vkDestroyDebugUtilsMessengerEXT");
     assert(funcs->create_debug_utils_messenger);
     assert(funcs->destroy_debug_utils_messenger);
 }
@@ -314,8 +300,9 @@ intern void fill_debug_ext_create_info(VkDebugUtilsMessengerCreateInfoEXT *creat
     create_info->pUserData = user_p;
 }
 
-int vkr_init_instance(const vkr_init_info *init_info, vkr_context *vk)
+int vkr_init_instance(const vkr_init_info *init_info, const vkr_context *vk, vkr_instance *inst)
 {
+    ilog("Trying to create vulkan instance...");
     VkApplicationInfo app_info{};
     app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     app_info.pApplicationName = init_info->app_name;
@@ -332,7 +319,7 @@ int vkr_init_instance(const vkr_init_info *init_info, vkr_context *vk)
     // This is for clarity.. we could just directly pass the enabled extension count
     u32 ext_count{0};
     const char **glfw_ext = glfwGetRequiredInstanceExtensions(&ext_count);
-    auto ext = (char **)mem_alloc((ext_count + ADDITIONAL_INST_EXTENSION_COUNT) * sizeof(char *), vk->arenas.command_arena);
+    auto ext = (char **)mem_alloc((ext_count + init_info->extra_instance_extension_count) * sizeof(char *), vk->arenas.command_arena);
 
     u32 copy_ind = 0;
     for (u32 i = 0; i < ext_count; ++i) {
@@ -340,31 +327,42 @@ int vkr_init_instance(const vkr_init_info *init_info, vkr_context *vk)
         strcpy(ext[copy_ind], glfw_ext[i]);
         ++copy_ind;
     }
-    for (u32 i = 0; i < ADDITIONAL_INST_EXTENSION_COUNT; ++i) {
-        ext[copy_ind] = (char *)mem_alloc(strlen(ADDITIONAL_INST_EXTENSIONS[i]) + 1, vk->arenas.command_arena);
-        strcpy(ext[copy_ind], ADDITIONAL_INST_EXTENSIONS[i]);
+    for (u32 i = 0; i < init_info->extra_instance_extension_count; ++i) {
+        ext[copy_ind] = (char *)mem_alloc(strlen(init_info->extra_instance_extension_names[i]) + 1, vk->arenas.command_arena);
+        strcpy(ext[copy_ind], init_info->extra_instance_extension_names[i]);
         ilog("Got extension %s", ext[copy_ind]);
         ++copy_ind;
     }
 
+    // Setting this as the next struct in create_inf allows us to have debug printing for creation of instance errors
     VkDebugUtilsMessengerCreateInfoEXT dbg_ci{};
-    fill_debug_ext_create_info(&dbg_ci, vk);
+    fill_debug_ext_create_info(&dbg_ci, (void *)&vk->log_verbosity);
+
+    u32 total_exts = ext_count + init_info->extra_instance_extension_count;
+    vkr_enumerate_instance_extensions(ext, total_exts, &vk->arenas);
+    vkr_enumerate_validation_layers(init_info->validation_layer_names, init_info->validation_layer_count, &vk->arenas);
 
     create_inf.pNext = &dbg_ci;
     create_inf.ppEnabledExtensionNames = ext;
-    create_inf.enabledExtensionCount = ext_count + ADDITIONAL_INST_EXTENSION_COUNT;
-    create_inf.ppEnabledLayerNames = VALIDATION_LAYERS;
+    create_inf.enabledExtensionCount = total_exts;
+    create_inf.ppEnabledLayerNames = init_info->validation_layer_names;
+    create_inf.enabledLayerCount = init_info->validation_layer_count;
     create_inf.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-    create_inf.enabledLayerCount = VALIDATION_LAYER_COUNT;
-    vkr_enumerate_instance_extensions(ext, create_inf.enabledExtensionCount, &vk->arenas);
-    vkr_enumerate_validation_layers(VALIDATION_LAYERS, VALIDATION_LAYER_COUNT, &vk->arenas);
 
-    int err = vkCreateInstance(&create_inf, &vk->alloc_cbs, &vk->inst);
+    int err = vkCreateInstance(&create_inf, &vk->alloc_cbs, &inst->hndl);
     if (err == VK_SUCCESS) {
-        get_extension_funcs(&vk->ext_funcs, vk->inst);
-        vk->ext_funcs.create_debug_utils_messenger(vk->inst, &dbg_ci, &vk->alloc_cbs, &vk->dbg_messenger);
+        ilog("Successfully created vulkan instance");
+
+        // Setup debugging callbacks (for logging/printing)
+        fill_extension_funcs(&inst->ext_funcs, vk->inst.hndl);
+        inst->ext_funcs.create_debug_utils_messenger(inst->hndl, &dbg_ci, &vk->alloc_cbs, &inst->dbg_messenger);
+
+        return err_code::VKR_NO_ERROR;
     }
-    return err;
+    else {
+        wlog("Failed to create vulkan instance with err code: %d", err);
+        return err_code::VKR_CREATE_INSTANCE_FAIL;
+    }
 }
 
 const char *vkr_physical_device_type_str(VkPhysicalDeviceType type)
@@ -385,12 +383,6 @@ const char *vkr_physical_device_type_str(VkPhysicalDeviceType type)
     }
 }
 
-struct queue_create_info
-{
-    u32 qoffset;
-    u32 create_ind;
-};
-
 // Check if any other queue families have the same index other than the family passed in at fam_ind. Fam ind is the
 // index into our fam->qinfo array, and index is the actual vulkan queue family index
 intern void fill_queue_offsets_and_create_inds(vkr_queue_families *qfams, u32 fam_ind)
@@ -400,7 +392,7 @@ intern void fill_queue_offsets_and_create_inds(vkr_queue_families *qfams, u32 fa
     for (u32 i = 0; i < fam_ind; ++i) {
         if (qfams->qinfo[i].index == qfams->qinfo[fam_ind].index) {
             found_match = true;
-            qfams->qinfo[fam_ind].qoffset += qfams->qinfo[i].requested_count;
+            // qfams->qinfo[fam_ind].qoffset += qfams->qinfo[i].requested_count;
             qfams->qinfo[fam_ind].create_ind = qfams->qinfo[i].create_ind;
         }
         if (!found_match && qfams->qinfo[i].create_ind >= highest_ind) {
@@ -412,12 +404,12 @@ intern void fill_queue_offsets_and_create_inds(vkr_queue_families *qfams, u32 fa
     }
 }
 
-vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice, VkSurfaceKHR surface, vk_arenas *arenas)
+vkr_queue_families vkr_get_queue_families(const vkr_context *vk, VkPhysicalDevice pdevice)
 {
     u32 count{};
     vkr_queue_families ret{};
     vkGetPhysicalDeviceQueueFamilyProperties(pdevice, &count, nullptr);
-    auto qfams = (VkQueueFamilyProperties *)mem_alloc(sizeof(VkQueueFamilyProperties) * count, arenas->command_arena);
+    auto qfams = (VkQueueFamilyProperties *)mem_alloc(sizeof(VkQueueFamilyProperties) * count, vk->arenas.command_arena);
     vkGetPhysicalDeviceQueueFamilyProperties(pdevice, &count, qfams);
     ilog("%d queue families available for selected device", count);
 
@@ -428,17 +420,24 @@ vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice, VkSurfaceKHR
         bool nothing_set_yet = ret.qinfo[VKR_QUEUE_FAM_TYPE_GFX].available_count == 0;
         if (has_flag && nothing_set_yet) {
             ret.qinfo[VKR_QUEUE_FAM_TYPE_GFX].index = i;
+            if (ret.qinfo[VKR_QUEUE_FAM_TYPE_GFX].requested_count == 0) {
+                ret.qinfo[VKR_QUEUE_FAM_TYPE_GFX].requested_count = qfams[i].queueCount;
+            }
+            ret.qinfo[VKR_QUEUE_FAM_TYPE_GFX].requested_count = qfams[i].queueCount;
             ret.qinfo[VKR_QUEUE_FAM_TYPE_GFX].available_count = qfams[i].queueCount;
-            ilog("Selected queue family at index %d for graphics", i);
+            ilog("Selected queue family at index %d for graphics (%d available)", i, qfams[i].queueCount);
         }
 
         VkBool32 supported{false};
-        vkGetPhysicalDeviceSurfaceSupportKHR(pdevice, i, surface, &supported);
+        vkGetPhysicalDeviceSurfaceSupportKHR(pdevice, i, vk->inst.surface, &supported);
         if (supported && (ret.qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].available_count == 0 ||
                           ret.qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].index == ret.qinfo[VKR_QUEUE_FAM_TYPE_GFX].index)) {
             ret.qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].index = i;
+            if (ret.qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].requested_count == 0) {
+                ret.qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].requested_count = qfams[i].queueCount;
+            }
             ret.qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].available_count = qfams[i].queueCount;
-            ilog("Selected queue family at index %d for presentation", i);
+            ilog("Selected queue family at index %d for presentation (%d available)", i, qfams[i].queueCount);
         }
 
         ilog("Queue family ind %d has %d available queues with %#010x capabilities", i, qfams[i].queueCount, qfams[i].queueFlags);
@@ -446,18 +445,19 @@ vkr_queue_families vkr_get_queue_families(VkPhysicalDevice pdevice, VkSurfaceKHR
     return ret;
 }
 
-int vkr_create_device_and_queues(VkPhysicalDevice pdevice,
-                                 VkAllocationCallbacks *alloc_cbs,
-                                 vkr_queue_families *qfams,
-                                 const char *const *layers,
-                                 u32 layer_count,
-                                 VkDevice *dev)
+int vkr_init_device(const vkr_context *vk,
+                    const char *const *layers,
+                    u32 layer_count,
+                    const char *const *device_extensions,
+                    u32 dev_ext_count,
+                    vkr_device *dev)
 {
-    // Fill in the queue index offsets based on the fam index from vulkan - if our queue fams have the same index then
-    // the queues coming from the later fams need to have an offset index set
+    ilog("Creating vk device and queues");
+    const vkr_queue_families *qfams = &vk->inst.pdev_info.qfams;
+
+    // Get our highest create ind - to determine the size
     u32 highest_ind = 0;
     for (u32 i = 0; i < VKR_QUEUE_FAM_TYPE_COUNT; ++i) {
-        fill_queue_offsets_and_create_inds(qfams, i);
         if (qfams->qinfo[i].create_ind > highest_ind) {
             highest_ind = qfams->qinfo[i].create_ind;
         }
@@ -468,18 +468,20 @@ int vkr_create_device_and_queues(VkPhysicalDevice pdevice,
     VkDeviceQueueCreateInfo qinfo[VKR_QUEUE_FAM_TYPE_COUNT]{};
     float qinfo_f[VKR_QUEUE_FAM_TYPE_COUNT][MAX_QUEUE_REQUEST_COUNT]{};
 
+    u32 offsets[VKR_QUEUE_FAM_TYPE_COUNT]{};
+
     // Here we gather how many queues we want for each queue fam type and populate the queue create infos.
     // Its highly likely that the different queue_fam_types will actually have the same vulkan queue family index -
     // thats fine
     for (int i = 0; i < VKR_QUEUE_FAM_TYPE_COUNT; ++i) {
-        vkr_queue_family_info *cq = &qfams->qinfo[i];
+        const vkr_queue_family_info *cq = &qfams->qinfo[i];
         u32 ind = cq->create_ind;
         qinfo[ind].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 
         // This handles the case when the present and graphics must be in the same queue in the same family which can
         // happen if a gfx card has only 1 queue family with 1 available queue
         int req_offset = std::min((int)cq->available_count - (int)(qinfo[ind].queueCount + cq->requested_count), 0);
-        cq->qoffset += req_offset;
+        offsets[i] += req_offset;
 
         qinfo[ind].queueCount += (cq->requested_count + req_offset);
         qinfo[ind].queueFamilyIndex = cq->index;
@@ -489,7 +491,7 @@ int vkr_create_device_and_queues(VkPhysicalDevice pdevice,
 
     // For now we will leave this blank - but probably enable geometry shaders later
     VkPhysicalDeviceFeatures features{};
-    dlog("Creating %d queues", create_size);
+    ilog("Creating %d queues", create_size);
 
     VkDeviceCreateInfo create_inf{};
     create_inf.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -498,31 +500,36 @@ int vkr_create_device_and_queues(VkPhysicalDevice pdevice,
     create_inf.enabledLayerCount = layer_count;
     create_inf.ppEnabledLayerNames = layers;
     create_inf.pEnabledFeatures = &features;
-    create_inf.enabledExtensionCount = DEVICE_EXTENSION_COUNT;
-    create_inf.ppEnabledExtensionNames = DEVICE_EXTENSIONS;
+    create_inf.ppEnabledExtensionNames = device_extensions;
+    create_inf.enabledExtensionCount = dev_ext_count;
 
-    int result = vkCreateDevice(pdevice, &create_inf, alloc_cbs, dev);
+    int result = vkCreateDevice(vk->inst.pdev_info.pdevice, &create_inf, &vk->alloc_cbs, &dev->hndl);
     if (result != VK_SUCCESS) {
         elog("Device creation failed - vk err:%d", result);
         return err_code::VKR_CREATE_DEVICE_FAIL;
     }
 
     for (int i = 0; i < VKR_QUEUE_FAM_TYPE_COUNT; ++i) {
+        arr_resize(&dev->qfams[i].qs, qfams->qinfo[i].requested_count);
+        dev->qfams[i].fam_ind = qfams->qinfo[i].index;
         for (u32 qind = 0; qind < qfams->qinfo[i].requested_count; ++qind) {
-            u32 adjusted_ind = qind + qfams->qinfo[i].qoffset;
-            vkGetDeviceQueue(*dev, qfams->qinfo[i].index, adjusted_ind, &(qfams->qinfo[i].qs[qind]));
-            ilog("Getting queue %d from queue family %d: %p", adjusted_ind, qfams->qinfo[i].index, qfams->qinfo[i].qs[qind]);
+            u32 adjusted_ind = qind + offsets[i];
+            vkGetDeviceQueue(dev->hndl, qfams->qinfo[i].index, adjusted_ind, &dev->qfams[i].qs[qind].hndl);
+            ilog("Getting queue %d from queue family %d: %p", adjusted_ind, qfams->qinfo[i].index, dev->qfams[i].qs[qind]);
         }
     }
-
+    ilog("Successfully created vk device and queues");
     return err_code::VKR_NO_ERROR;
 }
 
-int vkr_select_best_graphics_physical_device(VkInstance inst, VkSurfaceKHR surface, vkr_physical_device_info *dev_info, vk_arenas *arenas)
+int vkr_select_best_graphics_physical_device(const vkr_context *vk, vkr_physical_device_info *dev_info)
 {
     u32 count{};
-    int ret = vkEnumeratePhysicalDevices(inst, &count, nullptr);
-    assert(ret == VK_SUCCESS);
+    int ret = vkEnumeratePhysicalDevices(vk->inst.hndl, &count, nullptr);
+    if (ret != VK_SUCCESS) {
+        elog("Failed to enumerate physical devices (with nullptr) with code %d", ret);
+        return err_code::VKR_ENUMERATE_PHYSICAL_DEVICES_FAIL;
+    }
     if (count == 0) {
         elog("No physical devices found - cannot continue");
         return err_code::VKR_NO_PHYSICAL_DEVICES;
@@ -534,13 +541,16 @@ int vkr_select_best_graphics_physical_device(VkInstance inst, VkSurfaceKHR surfa
     // These are cached so we don't have to retreive the count again
     int high_score = -1;
 
-    ilog("Found %d physical devices", count);
-    auto pdevices = (VkPhysicalDevice *)mem_alloc(sizeof(VkPhysicalDevice) * count, arenas->command_arena);
-    ret = vkEnumeratePhysicalDevices(inst, &count, pdevices);
-    assert(ret == VK_SUCCESS);
+    ilog("Selecting physical device - found %d physical devices", count);
+    auto pdevices = (VkPhysicalDevice *)mem_alloc(sizeof(VkPhysicalDevice) * count, vk->arenas.command_arena);
+    ret = vkEnumeratePhysicalDevices(vk->inst.hndl, &count, pdevices);
+    if (ret != VK_SUCCESS) {
+        elog("Failed to enumerate physical devices with code %d", ret);
+        return err_code::VKR_ENUMERATE_PHYSICAL_DEVICES_FAIL;
+    }
     for (u32 i = 0; i < count; ++i) {
         int cur_score = 0;
-        vkr_queue_families fams = vkr_get_queue_families(pdevices[i], surface, arenas);
+        vkr_queue_families fams = vkr_get_queue_families(vk, pdevices[i]);
 
         // We dont want to select a device unless we can present with it.
         if (fams.qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].index == VKR_INVALID || fams.qinfo[VKR_QUEUE_FAM_TYPE_GFX].index == VKR_INVALID) {
@@ -549,13 +559,13 @@ int vkr_select_best_graphics_physical_device(VkInstance inst, VkSurfaceKHR surfa
 
         // We need at least one supported format and present mode
         u32 format_count{0};
-        vkGetPhysicalDeviceSurfaceFormatsKHR(pdevices[i], surface, &format_count, nullptr);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(pdevices[i], vk->inst.surface, &format_count, nullptr);
         if (format_count == 0) {
             continue;
         }
 
         u32 present_mode_count{0};
-        vkGetPhysicalDeviceSurfacePresentModesKHR(pdevices[i], surface, &present_mode_count, nullptr);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(pdevices[i], vk->inst.surface, &present_mode_count, nullptr);
         if (present_mode_count == 0) {
             continue;
         }
@@ -600,7 +610,7 @@ int vkr_select_best_graphics_physical_device(VkInstance inst, VkSurfaceKHR surfa
         if (cur_score > high_score) {
             dev_info->pdevice = pdevices[i];
             dev_info->qfams = fams;
-            vkr_fill_pdevice_swapchain_support(dev_info->pdevice, surface, &dev_info->swap_support);
+            vkr_fill_pdevice_swapchain_support(dev_info->pdevice, vk->inst.surface, &dev_info->swap_support);
             high_score = cur_score;
             sel_dev = props;
         }
@@ -610,11 +620,18 @@ int vkr_select_best_graphics_physical_device(VkInstance inst, VkSurfaceKHR surfa
         return err_code::VKR_NO_SUITABLE_PHYSICAL_DEVICE;
     }
 
+    // Fill in the queue index offsets based on the fam index from vulkan - if our queue fams have the same index then
+    // the queues coming from the later fams need to have an offset index set
+    for (u32 i = 0; i < VKR_QUEUE_FAM_TYPE_COUNT; ++i) {
+        fill_queue_offsets_and_create_inds(&dev_info->qfams, i);
+    }
+
     return err_code::VKR_NO_ERROR;
 }
 
 void vkr_fill_pdevice_swapchain_support(VkPhysicalDevice pdevice, VkSurfaceKHR surface, vkr_pdevice_swapchain_support *ssup)
 {
+    ilog("Getting physical device swapchain support");
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pdevice, surface, &ssup->capabilities);
 
     u32 format_count{0};
@@ -628,26 +645,27 @@ void vkr_fill_pdevice_swapchain_support(VkPhysicalDevice pdevice, VkSurfaceKHR s
     vkGetPhysicalDeviceSurfacePresentModesKHR(pdevice, surface, &present_mode_count, ssup->present_modes.data);
 }
 
-int vkr_setup_swapchain(VkDevice device,
-                        VkSurfaceKHR surface,
-                        const vkr_physical_device_info *dev_info,
-                        const VkAllocationCallbacks *alloc_cbs,
+int vkr_init_swapchain(const vkr_context *vk,
                         void *window,
                         vkr_swapchain_info *sw_info)
 {
+    ilog("Setting up swapchain");
+    arr_init(&sw_info->images, vk->arenas.persistent_arena);
+    arr_init(&sw_info->image_views, vk->arenas.persistent_arena);
+    
     // I no like typing too much
-    auto caps = &dev_info->swap_support.capabilities;
-    auto qfams = &dev_info->qfams;
-    auto formats = &dev_info->swap_support.formats;
-    auto pmodes = &dev_info->swap_support.present_modes;
+    auto caps = &vk->inst.pdev_info.swap_support.capabilities;
+    auto qfams = &vk->inst.pdev_info.qfams;
+    auto formats = &vk->inst.pdev_info.swap_support.formats;
+    auto pmodes = &vk->inst.pdev_info.swap_support.present_modes;
 
     VkSwapchainCreateInfoKHR swap_create{};
     swap_create.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    swap_create.surface = surface;
+    swap_create.surface = vk->inst.surface;
     swap_create.imageArrayLayers = 1;
     swap_create.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     swap_create.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    swap_create.preTransform = dev_info->swap_support.capabilities.currentTransform;
+    swap_create.preTransform = vk->inst.pdev_info.swap_support.capabilities.currentTransform;
     swap_create.clipped = VK_TRUE;
     swap_create.oldSwapchain = VK_NULL_HANDLE;
     swap_create.minImageCount = caps->minImageCount + 1;
@@ -701,17 +719,29 @@ int vkr_setup_swapchain(VkDevice device,
     }
 
     // Create this baby boo
-    if (vkCreateSwapchainKHR(device, &swap_create, alloc_cbs, &sw_info->swapchain) != VK_SUCCESS) {
+    if (vkCreateSwapchainKHR(vk->inst.device.hndl, &swap_create, &vk->alloc_cbs, &sw_info->swapchain) != VK_SUCCESS) {
+        arr_terminate(&sw_info->images);
+        arr_terminate(&sw_info->image_views);
         return err_code::VKR_CREATE_SWAPCHAIN_FAIL;
     }
     sw_info->extent = swap_create.imageExtent;
     sw_info->format = swap_create.imageFormat;
     u32 image_count{};
-    VkResult res = vkGetSwapchainImagesKHR(device, sw_info->swapchain, &image_count, nullptr);
-    assert(res == VK_SUCCESS);
+    VkResult res = vkGetSwapchainImagesKHR(vk->inst.device.hndl, sw_info->swapchain, &image_count, nullptr);
+    if (res != VK_SUCCESS) {
+        elog("Failed to get swapchain images count with code %d", res);
+        arr_terminate(&sw_info->images);
+        arr_terminate(&sw_info->image_views);
+        return err_code::VKR_GET_SWAPCHAIN_IMAGES_FAIL;
+    }
+
     arr_resize(&sw_info->images, image_count);
-    res = vkGetSwapchainImagesKHR(device, sw_info->swapchain, &image_count, sw_info->images.data);
-    assert(res == VK_SUCCESS);
+
+    res = vkGetSwapchainImagesKHR(vk->inst.device.hndl, sw_info->swapchain, &image_count, sw_info->images.data);
+    if (res != VK_SUCCESS) {
+        elog("Failed to get swapchain images with code %d", res);
+        return err_code::VKR_GET_SWAPCHAIN_IMAGES_FAIL;
+    }
 
     arr_resize(&sw_info->image_views, image_count);
     for (int i = 0; i < sw_info->images.size; ++i) {
@@ -731,56 +761,154 @@ int vkr_setup_swapchain(VkDevice device,
         iview_create.subresourceRange.levelCount = 1;
         iview_create.subresourceRange.baseArrayLayer = 0;
         iview_create.subresourceRange.layerCount = 1;
-        VkResult res = vkCreateImageView(device, &iview_create, alloc_cbs, &sw_info->image_views[i]);
-        assert(res == VK_SUCCESS);
+        VkResult res = vkCreateImageView(vk->inst.device.hndl, &iview_create, &vk->alloc_cbs, &sw_info->image_views[i]);
+        if (res != VK_SUCCESS) {
+            elog("Failed to create image view at index %d - vk err code %d", i, res);
+            arr_terminate(&sw_info->images);
+            arr_terminate(&sw_info->image_views);
+            return err_code::VKR_CREATE_IMAGE_VIEW_FAIL;
+        }
     }
-
+    ilog("Successfully set up swapchain");
     return err_code::VKR_NO_ERROR;
 }
 
-void vkr_init_swapchain_info(vkr_swapchain_info *sw_info, mem_arena *arena)
+int vkr_add_command_buffer(const vkr_device *device, vkr_command_pool *pool)
 {
-    *sw_info = {};
-    arr_init(&sw_info->images, arena);
-    arr_init(&sw_info->image_views, arena);
+    ilog("Adding command buffer");
+    vkr_command_buffer buf{};
+    VkCommandBufferAllocateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    info.commandPool = pool->hndl;
+    info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    info.commandBufferCount = 1;
+    int err = vkAllocateCommandBuffers(device->hndl, &info, &buf.hndl);
+    if (err != VK_SUCCESS) {
+        wlog("Failed to create command buffer with code %d", err);
+        return err_code::VKR_CREATE_COMMAND_BUFFER_FAIL;
+    }
+    arr_emplace_back(&pool->buffers, buf);
+    ilog("Successfully added command buffer");
+    return err_code::VKR_NO_ERROR;
 }
 
-void vkr_terminate_swapchain_info(vkr_swapchain_info *sw_info)
+int vkr_init_command_pool(const vkr_context *vk, u32 fam_ind, vkr_command_pool *cpool)
 {
-    arr_terminate(&sw_info->images);
-    arr_terminate(&sw_info->image_views);
+    ilog("Initializing command pool");
+    VkCommandPoolCreateInfo pool_info{};
+    pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    pool_info.queueFamilyIndex = fam_ind;
+    int err = vkCreateCommandPool(vk->inst.device.hndl, &pool_info, &vk->alloc_cbs, &cpool->hndl);
+    if (err != VK_SUCCESS) {
+        wlog("Failed creating vulkan command pool with code %d", err);
+        return err_code::VKR_CREATE_COMMAND_POOL_FAIL;
+    }
+    ilog("Successfully initialized command pool");
+    return err_code::VKR_NO_ERROR;
 }
 
-int vkr_init_shader_module(const byte_array *code, VkDevice device, const VkAllocationCallbacks *callbacks, VkShaderModule *module)
+sizet vkr_add_command_pool(vkr_device_queue_fam_info *qfam, const vkr_command_pool *cpool)
 {
+    ilog("Adding command pool to qfamily");
+    sizet ind = qfam->cmd_pools.size;
+    arr_push_back(&qfam->cmd_pools, *cpool);
+    return ind;
+}
+
+void vkr_terminate_command_pool(const vkr_context *vk, u32 fam_ind, vkr_command_pool *cpool)
+{
+    ilog("Terminating command pool");
+    vkDestroyCommandPool(vk->inst.device.hndl, cpool->hndl, &vk->alloc_cbs);
+}
+
+int vkr_init_shader_module(const vkr_context *vk, const byte_array *code, VkShaderModule *module)
+{
+    ilog("Initializing shader module");
     VkShaderModuleCreateInfo create_info{};
     create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    ilog("Code size:%d", code->size);
     create_info.codeSize = code->size;
     create_info.pCode = (const u32 *)code->data;
-    if (vkCreateShaderModule(device, &create_info, callbacks, module) != VK_SUCCESS) {
+    if (vkCreateShaderModule(vk->inst.device.hndl, &create_info, &vk->alloc_cbs, module) != VK_SUCCESS) {
         return err_code::VKR_CREATE_SHADER_MODULE_FAIL;
     }
+    ilog("Successfully initialized shader module");
+    return err_code::VKR_NO_ERROR;
+}
+void vkr_terminate_shader_module(const vkr_context *vk, VkShaderModule module)
+{
+    ilog("Terminating shader module");
+    vkDestroyShaderModule(vk->inst.device.hndl, module, &vk->alloc_cbs);
+}
+
+int vkr_init_render_pass(const vkr_context *vk, VkRenderPass *rpass)
+{
+    ilog("Initializing render pass");
+    // Create Render Pass
+    VkAttachmentDescription col_att{};
+    col_att.format = vk->inst.device.sw_info.format;
+    col_att.samples = VK_SAMPLE_COUNT_1_BIT;
+    col_att.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    col_att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    col_att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    col_att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    col_att.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    col_att.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    VkAttachmentReference col_att_ref{};
+    col_att_ref.attachment = 0;
+    col_att_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    // Create just one subpass for now
+    VkSubpassDescription subpass{};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &col_att_ref;
+
+    VkRenderPassCreateInfo rpass_info{};
+    rpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    rpass_info.attachmentCount = 1;
+    rpass_info.pAttachments = &col_att;
+    rpass_info.subpassCount = 1;
+    rpass_info.pSubpasses = &subpass;
+
+    if (vkCreateRenderPass(vk->inst.device.hndl, &rpass_info, &vk->alloc_cbs, rpass) != VK_SUCCESS) {
+        wlog("Failed to create render pass");
+        return err_code::VKR_CREATE_RENDER_PASS_FAIL;
+    }
+    ilog("Successfully initialized render pass");
     return err_code::VKR_NO_ERROR;
 }
 
-void vkr_terminate_shader_module(VkDevice device, VkShaderModule module, const VkAllocationCallbacks *callbacks)
+sizet vkr_add_render_pass(vkr_device *device, VkRenderPass rpass)
 {
-    vkDestroyShaderModule(device, module, callbacks);
+    ilog("Adding render_pass to device");
+    sizet ind = device->render_passes.size;
+    arr_push_back(&device->render_passes, rpass);
+    return ind;
 }
 
-int vkr_init_pipeline(const vkr_pipeline_init_info *init_info, const vkr_context *vk_ctxt, vkr_pipeline_info *pipe_info)
+void vkr_terminate_render_pass(const vkr_context *vk, VkRenderPass rpass)
 {
+    ilog("Terminating render pass");
+    vkDestroyRenderPass(vk->inst.device.hndl, rpass, &vk->alloc_cbs);
+}
+
+int vkr_init_pipeline(const vkr_pipeline_init_info *init_info, const vkr_context *vk, vkr_pipeline_info *pipe_info)
+{
+    ilog("Initializing pipeline");
     // Take care of the shaders
     VkShaderModule vert, frag;
-    int err = vkr_init_shader_module(&init_info->vert_shader_data, vk_ctxt->device, &vk_ctxt->alloc_cbs, &vert);
+    int err = vkr_init_shader_module(vk, &init_info->vert_shader_data, &vert);
     if (err != err_code::VKR_NO_ERROR) {
         wlog("Could not initialized vert shader module ");
         return err;
     }
-    err = vkr_init_shader_module(&init_info->frag_shader_data, vk_ctxt->device, &vk_ctxt->alloc_cbs, &frag);
+    err = vkr_init_shader_module(vk, &init_info->frag_shader_data, &frag);
     if (err != err_code::VKR_NO_ERROR) {
         wlog("Could not initialized frag shader module ");
-        vkr_terminate_shader_module(vk_ctxt->device, vert, &vk_ctxt->alloc_cbs);
+        vkr_terminate_shader_module(vk, vert);
         return err;
     }
 
@@ -791,10 +919,10 @@ int vkr_init_pipeline(const vkr_pipeline_init_info *init_info, const vkr_context
     vert_stage_info.pName = "main";
 
     VkPipelineShaderStageCreateInfo frag_stage_info{};
-    vert_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vert_stage_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    vert_stage_info.module = frag;
-    vert_stage_info.pName = "main";
+    frag_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    frag_stage_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    frag_stage_info.module = frag;
+    frag_stage_info.pName = "main";
 
     VkPipelineShaderStageCreateInfo shader_stages[] = {vert_stage_info, frag_stage_info};
 
@@ -823,14 +951,14 @@ int vkr_init_pipeline(const vkr_pipeline_init_info *init_info, const vkr_context
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = (float)vk_ctxt->sw_info.extent.width;
-    viewport.height = (float)vk_ctxt->sw_info.extent.height;
+    viewport.width = (float)vk->inst.device.sw_info.extent.width;
+    viewport.height = (float)vk->inst.device.sw_info.extent.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
     VkRect2D scissor{};
     scissor.offset = {0, 0};
-    scissor.extent = vk_ctxt->sw_info.extent;
+    scissor.extent = vk->inst.device.sw_info.extent;
 
     VkPipelineViewportStateCreateInfo viewport_state{};
     viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -895,47 +1023,11 @@ int vkr_init_pipeline(const vkr_pipeline_init_info *init_info, const vkr_context
     pipeline_layout_create_inf.pushConstantRangeCount = 0;    // Optional
     pipeline_layout_create_inf.pPushConstantRanges = nullptr; // Optional
 
-    if (vkCreatePipelineLayout(vk_ctxt->device, &pipeline_layout_create_inf, nullptr, &pipe_info->layout) != VK_SUCCESS) {
+    if (vkCreatePipelineLayout(vk->inst.device.hndl, &pipeline_layout_create_inf, &vk->alloc_cbs, &pipe_info->layout) != VK_SUCCESS) {
         wlog("Failed to create pileline layout");
-        vkr_terminate_shader_module(vk_ctxt->device, vert, &vk_ctxt->alloc_cbs);
-        vkr_terminate_shader_module(vk_ctxt->device, frag, &vk_ctxt->alloc_cbs);
+        vkr_terminate_shader_module(vk, vert);
+        vkr_terminate_shader_module(vk, frag);
         return err_code::VKR_CREATE_PIPELINE_LAYOUT_FAIL;
-    }
-
-    // Create Render Pass
-    VkAttachmentDescription col_att{};
-    col_att.format = vk_ctxt->sw_info.format;
-    col_att.samples = VK_SAMPLE_COUNT_1_BIT;
-    col_att.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    col_att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    col_att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    col_att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    col_att.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    col_att.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-    VkAttachmentReference col_att_ref{};
-    col_att_ref.attachment = 0;
-    col_att_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    // Create just one subpass for now
-    VkSubpassDescription subpass{};
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &col_att_ref;
-
-    VkRenderPassCreateInfo rpass_info{};
-    rpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    rpass_info.attachmentCount = 1;
-    rpass_info.pAttachments = &col_att;
-    rpass_info.subpassCount = 1;
-    rpass_info.pSubpasses = &subpass;
-
-    if (vkCreateRenderPass(vk_ctxt->device, &rpass_info, nullptr, &pipe_info->rpass) != VK_SUCCESS) {
-        wlog("Failed to create render pass");
-        vkr_terminate_shader_module(vk_ctxt->device, vert, &vk_ctxt->alloc_cbs);
-        vkr_terminate_shader_module(vk_ctxt->device, frag, &vk_ctxt->alloc_cbs);
-        vkDestroyPipelineLayout(vk_ctxt->device, pipe_info->layout, &vk_ctxt->alloc_cbs);
-        return err_code::VKR_CREATE_RENDER_PASS_FAIL;
     }
 
     VkGraphicsPipelineCreateInfo pipeline_info{};
@@ -951,47 +1043,101 @@ int vkr_init_pipeline(const vkr_pipeline_init_info *init_info, const vkr_context
     pipeline_info.pColorBlendState = &col_blend_state;
     pipeline_info.pDynamicState = &dyn_state;
     pipeline_info.layout = pipe_info->layout;
-    pipeline_info.renderPass = pipe_info->rpass;
+    pipeline_info.renderPass = init_info->rpass;
     pipeline_info.subpass = 0;
 
     // Optional
     pipeline_info.basePipelineHandle = VK_NULL_HANDLE;
     pipeline_info.basePipelineIndex = -1;
-    if (vkCreateGraphicsPipelines(vk_ctxt->device, VK_NULL_HANDLE, 1, &pipeline_info, &vk_ctxt->alloc_cbs, &pipe_info->pipeline) != VK_SUCCESS) {
-        vkr_terminate_shader_module(vk_ctxt->device, vert, &vk_ctxt->alloc_cbs);
-        vkr_terminate_shader_module(vk_ctxt->device, frag, &vk_ctxt->alloc_cbs);
-        vkDestroyPipelineLayout(vk_ctxt->device, pipe_info->layout, &vk_ctxt->alloc_cbs);
-        vkDestroyRenderPass(vk_ctxt->device, pipe_info->rpass, &vk_ctxt->alloc_cbs);
-        return err_code::VKR_CREATE_PIPELINE_FAIL;
+    int err_ret = vkCreateGraphicsPipelines(vk->inst.device.hndl, VK_NULL_HANDLE, 1, &pipeline_info, &vk->alloc_cbs, &pipe_info->pipeline);
+    if (err_ret != VK_SUCCESS) {
+        vkr_terminate_shader_module(vk, vert);
+        vkr_terminate_shader_module(vk, frag);
+        vkDestroyPipelineLayout(vk->inst.device.hndl, pipe_info->layout, &vk->alloc_cbs);
+        err_ret = err_code::VKR_CREATE_PIPELINE_FAIL;
     }
+    vkr_terminate_shader_module(vk, vert);
+    vkr_terminate_shader_module(vk, frag);
+    ilog("Successfully initialized pipeline");
+    err_ret = err_code::VKR_NO_ERROR;
+    return err_ret;
+}
 
+sizet vkr_add_pipeline(vkr_device *device, const vkr_pipeline_info *pipeline)
+{
+    ilog("Adding pipeline to device");
+    sizet ind = device->pipelines.size;
+    arr_push_back(&device->pipelines, *pipeline);
+    return ind;
+}
+
+void vkr_terminate_pipeline(const vkr_context *vk, const vkr_pipeline_info *pipe_info)
+{
+    ilog("Terminating pipeline");
+    vkDestroyPipeline(vk->inst.device.hndl, pipe_info->pipeline, &vk->alloc_cbs);
+    vkDestroyPipelineLayout(vk->inst.device.hndl, pipe_info->layout, &vk->alloc_cbs);
+}
+
+int vkr_init_framebuffer(const vkr_context *vk,
+                         VkRenderPass render_pass,
+                         uvec2 size,
+                         const VkImageView *attachments,
+                         u32 attachment_count,
+                         VkFramebuffer *framebuffer)
+{
+    ilog("Initializing framebuffer");
+    VkFramebufferCreateInfo create_info{};
+    create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    create_info.renderPass = render_pass;
+    create_info.pAttachments = attachments;
+    create_info.attachmentCount = attachment_count;
+    create_info.width = size.w;
+    create_info.height = size.h;
+    create_info.layers = 1;
+    int res = vkCreateFramebuffer(vk->inst.device.hndl, &create_info, &vk->alloc_cbs, framebuffer);
+    if (res != VK_SUCCESS) {
+        elog("Failed to create framebuffer with vk err %d", res);
+        return err_code::VKR_CREATE_FRAMEBUFFER_FAIL;
+    }
+    ilog("Successfully initialized framebuffer");
     return err_code::VKR_NO_ERROR;
 }
 
-void vkr_init_framebuffer(VkDevice device, const VkAllocationCallbacks *alloc_cbs, VkRenderPass render_pass, VkImageView *image_view, VkFramebuffer *framebuffer)
+sizet vkr_add_framebuffer(vkr_device *device, VkFramebuffer fb)
 {
-    
-    // VkFramebufferCreateInfo create_info{};
-    // create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    // create_info.renderPass = render_pass;
-    // create_info.attachmentCount = 1;
-    // create_info.pAttachments = image_view;
-    // create_info.width = swapChainExtent.width;
-    // create_info.height = swapChainExtent.height;
-    // create_info.layers = 1;
-    // vkCreateFramebuffer(device, const VkFramebufferCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkFramebuffer *pFramebuffer)
+    ilog("Adding framebuffer to device");
+    sizet ind = device->framebuffers.size;
+    arr_push_back(&device->framebuffers, fb);
+    return ind;
 }
 
-void vkr_terminate_framebuffer(VkDevice device, VkFramebuffer framebuffer, const VkAllocationCallbacks *alloc_cbs)
+void vkr_terminate_framebuffer(const vkr_context *vk, VkFramebuffer framebuffer)
 {
-    vkDestroyFramebuffer(device, framebuffer, alloc_cbs);
+    ilog("Terminating framebuffer");
+    vkDestroyFramebuffer(vk->inst.device.hndl, framebuffer, &vk->alloc_cbs);
 }
 
-void vkr_terminate_pipeline(const vkr_context *vk_ctxt, vkr_pipeline_info *pipe_info)
+// Initialize surface in the vk_context from the window - the instance must have been created already
+int vkr_init_surface(const vkr_context *vk, void *window, VkSurfaceKHR *surface)
 {
-    vkDestroyPipeline(vk_ctxt->device, pipe_info->pipeline, &vk_ctxt->alloc_cbs);
-    vkDestroyRenderPass(vk_ctxt->device, pipe_info->rpass, &vk_ctxt->alloc_cbs);
-    vkDestroyPipelineLayout(vk_ctxt->device, pipe_info->layout, &vk_ctxt->alloc_cbs);
+    ilog("Initializing window surface");
+    assert(window);
+    // Create surface
+    int ret = glfwCreateWindowSurface(vk->inst.hndl, (GLFWwindow *)window, &vk->alloc_cbs, surface);
+    if (ret != VK_SUCCESS) {
+        elog("Failed to create surface with err code %d", ret);
+        return err_code::VKR_CREATE_SURFACE_FAIL;
+    }
+    else {
+        ilog("Successfully initialized window surface");
+        return err_code::VKR_NO_ERROR;
+    }
+}
+
+void vkr_terminate_surface(const vkr_context *vk, VkSurfaceKHR surface)
+{
+    ilog("Terminating window surface");
+    vkDestroySurfaceKHR(vk->inst.hndl, surface, &vk->alloc_cbs);
 }
 
 int vkr_init(const vkr_init_info *init_info, vkr_context *vk)
@@ -1014,50 +1160,45 @@ int vkr_init(const vkr_init_info *init_info, vkr_context *vk)
     vk->alloc_cbs.pfnAllocation = vk_alloc;
     vk->alloc_cbs.pfnFree = vk_free;
     vk->alloc_cbs.pfnReallocation = vk_realloc;
-    int err_code = vkr_init_instance(init_info, vk);
-    if (err_code != VK_SUCCESS) {
-        elog("Failed to create vulkan instance with vulkan err code: %d", err_code);
-        return err_code::VKR_CREATE_INSTANCE_FAIL;
-    }
-    ilog("Successfully created vulkan instance");
 
-    // Create surface
+    int code = vkr_init_instance(init_info, vk, &vk->inst);
+    if (code != err_code::VKR_NO_ERROR) {
+        return code;
+    }
+
     if (init_info->window) {
-        int ret = glfwCreateWindowSurface(vk->inst, (GLFWwindow *)init_info->window, &vk->alloc_cbs, &vk->surface);
-        if (ret != VK_SUCCESS) {
-            elog("Failed to create surface with err code %d", ret);
+        code = vkr_init_surface(vk, init_info->window, &vk->inst.surface);
+        if (code != err_code::VKR_NO_ERROR) {
             vkr_terminate(vk);
-            return err_code::VKR_CREATE_SURFACE_FAIL;
+            return code;
         }
-        ilog("Successfully created window surface");
-    }
-    else {
-        wlog("No window provided - rendering to window surface disabled");
     }
 
-    vkr_init_pdevice_swapchain_support(&vk->pdev_info.swap_support, vk->arenas.persistent_arena);
+    vkr_init_pdevice_swapchain_support(&vk->inst.pdev_info.swap_support, vk->arenas.persistent_arena);
 
-    int code = vkr_select_best_graphics_physical_device(vk->inst, vk->surface, &vk->pdev_info, &vk->arenas);
+    // Select the physical device
+    code = vkr_select_best_graphics_physical_device(vk, &vk->inst.pdev_info);
     if (code != err_code::VKR_NO_ERROR) {
-        elog("Failed to select physical device code:%d", code);
         vkr_terminate(vk);
         return code;
     }
 
-    vkr_enumerate_device_extensions(vk->pdev_info.pdevice, DEVICE_EXTENSIONS, DEVICE_EXTENSION_COUNT, &vk->arenas);
-    code = vkr_create_device_and_queues(
-        vk->pdev_info.pdevice, &vk->alloc_cbs, &vk->pdev_info.qfams, VALIDATION_LAYERS, VALIDATION_LAYER_COUNT, &vk->device);
-
+    // Log out the device extensions
+    vkr_enumerate_device_extensions(
+        vk->inst.pdev_info.pdevice, init_info->device_extension_names, init_info->device_extension_count, &vk->arenas);
+    code = vkr_init_device(vk,
+                           init_info->validation_layer_names,
+                           init_info->validation_layer_count,
+                           init_info->device_extension_names,
+                           init_info->device_extension_count,
+                           &vk->inst.device);
     if (code != err_code::VKR_NO_ERROR) {
-        elog("Device creation failed");
         vkr_terminate(vk);
         return code;
     }
 
-    vkr_init_swapchain_info(&vk->sw_info, vk->arenas.persistent_arena);
-    code = vkr_setup_swapchain(vk->device, vk->surface, &vk->pdev_info, &vk->alloc_cbs, init_info->window, &vk->sw_info);
+    code = vkr_init_swapchain(vk, init_info->window, &vk->inst.device.sw_info);
     if (code != err_code::VKR_NO_ERROR) {
-        elog("Failed to initialize swapchain");
         vkr_terminate(vk);
         return code;
     }
@@ -1078,12 +1219,60 @@ void vkr_terminate_pdevice_swapchain_support(vkr_pdevice_swapchain_support *ssup
     ssup->capabilities = {};
 }
 
-void vkr_terminate_instance(vkr_context *vk)
+
+void vkr_terminate_swapchain(const vkr_context *vk, vkr_swapchain_info *sw_info)
 {
-    vk->ext_funcs.destroy_debug_utils_messenger(vk->inst, vk->dbg_messenger, &vk->alloc_cbs);
+    ilog("Terminating swapchain");
+    for (int i = 0; i < sw_info->image_views.size; ++i) {
+        vkDestroyImageView(vk->inst.device.hndl, sw_info->image_views[i], &vk->alloc_cbs);
+    }
+    vkDestroySwapchainKHR(vk->inst.device.hndl, sw_info->swapchain, &vk->alloc_cbs);
+    arr_terminate(&sw_info->images);
+    arr_terminate(&sw_info->image_views);
+}
+
+void vkr_terminate_device(const vkr_context *vk, vkr_device *dev)
+{
+    ilog("Terminating vkr device");
+    for (int i = 0; i < dev->pipelines.size; ++i) {
+        vkr_terminate_pipeline(vk, &dev->pipelines[i]);
+    }
+    for (int i = 0; i < dev->framebuffers.size; ++i) {
+        vkr_terminate_framebuffer(vk, dev->framebuffers[i]);
+    }
+    for (int i = 0; i < dev->render_passes.size; ++i) {
+        vkr_terminate_render_pass(vk, dev->render_passes[i]);
+    }
+    arr_terminate(&dev->render_passes);
+    arr_terminate(&dev->pipelines);
+    arr_terminate(&dev->framebuffers);
+
+    for (sizet qfam_i = 0; qfam_i < VKR_QUEUE_FAM_TYPE_COUNT; ++qfam_i) {
+        auto cur_fam = &dev->qfams[qfam_i];
+        arr_terminate(&cur_fam->qs);
+        for (sizet pool_i = 0; pool_i < cur_fam->cmd_pools.size; ++pool_i) {
+            auto cur_pool = &cur_fam->cmd_pools[pool_i];
+            arr_terminate(&cur_pool->buffers);
+            vkr_terminate_command_pool(vk, cur_fam->fam_ind, cur_pool);
+        }
+        arr_terminate(&cur_fam->cmd_pools);
+    }
+    
+    vkr_terminate_swapchain(vk, &dev->sw_info);
+    vkDestroyDevice(dev->hndl, &vk->alloc_cbs);
+}
+
+
+void vkr_terminate_instance(const vkr_context *vk, vkr_instance *inst)
+{
+    ilog("Terminating vkr instance");
+    vkr_terminate_device(vk, &inst->device);
+    vkr_terminate_pdevice_swapchain_support(&inst->pdev_info.swap_support);
+    vkr_terminate_surface(vk, inst->surface);
+    inst->ext_funcs.destroy_debug_utils_messenger(inst->hndl, inst->dbg_messenger, &vk->alloc_cbs);
 
     // Destroying the instance calls more vk alloc calls
-    vkDestroyInstance(vk->inst, &vk->alloc_cbs);
+    vkDestroyInstance(inst->hndl, &vk->alloc_cbs);
 }
 
 intern void log_mem_stats(const char *type, const vk_mem_alloc_stats *stats)
@@ -1102,18 +1291,60 @@ intern void log_mem_stats(const char *type, const vk_mem_alloc_stats *stats)
 void vkr_terminate(vkr_context *vk)
 {
     ilog("Terminating vulkan");
-    for (int i = 0; i < vk->sw_info.image_views.size; ++i) {
-        vkDestroyImageView(vk->device, vk->sw_info.image_views[i], &vk->alloc_cbs);
-    }
-    vkDestroySwapchainKHR(vk->device, vk->sw_info.swapchain, &vk->alloc_cbs);
-    vkr_terminate_swapchain_info(&vk->sw_info);
-    vkr_terminate_pdevice_swapchain_support(&vk->pdev_info.swap_support);
-    vkDestroySurfaceKHR(vk->inst, vk->surface, &vk->alloc_cbs);
-    vkDestroyDevice(vk->device, &vk->alloc_cbs);
-    vkr_terminate_instance(vk);
+    vkr_terminate_instance(vk, &vk->inst);
     for (int i = 0; i < MEM_ALLOC_TYPE_COUNT; ++i) {
         log_mem_stats(alloc_scope_str(i), &vk->arenas.stats[i]);
     }
+}
+
+void vkr_setup_default_rendering(vkr_context *vk)
+{
+    ilog("Setting up default rendering...");
+    VkRenderPass rpass{};
+    vkr_init_render_pass(vk, &rpass);
+    vkr_add_render_pass(&vk->inst.device, rpass);
+
+    vkr_pipeline_init_info info{};
+
+    platform_file_err_desc err{};
+    const char *frag_fname = "shaders/triangle.frag.spv";
+    const char *vert_fname = "shaders/triangle.vert.spv";
+
+    platform_read_file(frag_fname, &info.frag_shader_data, 0, &err);
+    if (err.code != err_code::PLATFORM_NO_ERROR) {
+        wlog("Error reading file %s from disk (code %d): %s", frag_fname, err.code, err.str);
+        return;
+    }
+
+    err = {};
+    platform_read_file(vert_fname, &info.vert_shader_data, 0, &err);
+    if (err.code != err_code::PLATFORM_NO_ERROR) {
+        wlog("Error reading file %s from disk (code %d): %s", vert_fname, err.code, err.str);
+        return;
+    }
+
+    info.rpass = rpass;
+    vkr_pipeline_info pinfo{};
+    vkr_init_pipeline(&info, vk, &pinfo);
+    vkr_add_pipeline(&vk->inst.device, &pinfo);
+
+    for (int i = 0; i < vk->inst.device.sw_info.image_views.size; ++i) {
+        VkFramebuffer fb{};
+        vkr_init_framebuffer(
+            vk, rpass, {vk->inst.device.sw_info.extent.width, vk->inst.device.sw_info.extent.height}, &vk->inst.device.sw_info.image_views[i], 1, &fb);
+        vkr_add_framebuffer(&vk->inst.device, fb);
+    }
+
+    vkr_command_pool pool{};
+    vkr_device_queue_fam_info *qfam = &vk->inst.device.qfams[VKR_QUEUE_FAM_TYPE_GFX];
+    if (vkr_init_command_pool(vk, qfam->fam_ind, &pool) != err_code::VKR_NO_ERROR) {
+        return;
+    }
+    vkr_add_command_pool(qfam, &pool);
+    if (vkr_add_command_buffer(&vk->inst.device, &pool) != err_code::VKR_NO_ERROR) {
+        return;
+    }
+    
 }
 
 } // namespace nslib

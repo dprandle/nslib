@@ -8,6 +8,11 @@ namespace nslib
 {
 void str_set_capacity(string *str, sizet new_cap)
 {
+    // We should never shrink to less than the static array size
+    if (new_cap < string::SMALL_STR_SIZE) {
+        new_cap = string::SMALL_STR_SIZE;
+    }
+    
     sizet dyn_cap = 0;
     sizet prev_sz = str->buf.size;
     sizet prev_cap = str->buf.capacity;
@@ -121,6 +126,66 @@ string::const_iterator str_end(const string &str)
     return str_cstr(str) + str_len(str);
 }
 
+string::iterator str_erase(string *str, string::iterator iter)
+{
+    if (iter == str_end(str)) {
+        return iter;
+    }
+    auto copy_iter = iter + 1;
+    while (copy_iter != str_end(str)) {
+        *(copy_iter - 1) = *copy_iter;
+        ++copy_iter;
+    }
+    str_pop_back(str);
+    return iter;
+}
+
+string::iterator str_erase(string *str, string::iterator first, string::iterator last)
+{
+    sizet reduce_size = (last - first);
+    if (reduce_size > str_len(str) || reduce_size == 0) {
+        return last;
+    }
+    
+    // Shift all items after the range over to the first item in the range, until we reach to last of the data
+    while (last != str_end(str)) {
+        *first = *last;
+        ++first;
+        ++last;
+    }
+    str_resize(str, str_len(str) - reduce_size);
+    return first;
+}
+
+
+bool str_remove(string *str, sizet ind)
+{
+    if (!str) {
+        return false;
+    }
+    
+    if (ind >= str_len(str)) {
+        return false;
+    }
+
+    // Copy the items back one spot
+    for (sizet i = ind+1; i < str_len(str); ++i) {
+        str[i-1] = str[i];
+    }
+
+    // Pop the last item
+    str_pop_back(str);
+    return true;
+}
+
+sizet str_remove(string *str, char c)
+{
+    auto iter = std::remove(str_begin(str), str_end(str), c);
+    sizet ret = str_end(str) - iter;
+    str_resize(str, str_len(str) - ret);
+    return ret;
+}
+
 bool str_empty(const string &str)
 {
     return (str_len(str) == 0);
@@ -193,7 +258,7 @@ string *str_clear(string *str)
 
 string *str_reserve(string *str, sizet new_cap)
 {
-    if (new_cap > str_capacity(*str)) {
+    if (new_cap > str_capacity(str)) {
         str_set_capacity(str, new_cap);
     }
     return str;
@@ -201,18 +266,24 @@ string *str_reserve(string *str, sizet new_cap)
 
 string *str_shrink_to_fit(string *str)
 {
-    assert(str_len(*str) <= str_capacity(*str));
-    if (str_len(*str) + 1 < str_capacity(*str)) {
-        str_set_capacity(str, str_len(*str) + 1);
+    assert(str_len(str) <= str_capacity(str));
+    if (str_len(str) + 1 < str_capacity(str)) {
+        str_set_capacity(str, str_len(str) + 1);
     }
     return str;
 }
 
 string *str_push_back(string *str, char c)
 {
-    sizet sz = str_len(*str);
+    sizet sz = str_len(str);
     str_resize(str, sz + 1);
     (*str)[sz] = c;
+    return str;
+}
+
+string *str_pop_back(string *str)
+{
+    str_resize(str, str_len(str) - 1);
     return str;
 }
 

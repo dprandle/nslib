@@ -147,11 +147,12 @@ intern void *mem_free_list_alloc(mem_arena *arena, sizet size, sizet alignment)
     arena->peak = std::max(arena->peak, arena->used);
 
 #if DO_DEBUG_PRINT
-    dlog("@H:%p @D:%p RS:%d S:%d AP:%d P:%d M:%d R:%d",
+    dlog("@Hdr:%p @Dptr:%p RqstS:%lu RqrdS:%lu BlkSz:%lu AlgnPdng:%lu Pdng:%lu Mused:%lu Rest:%lu",
          (void *)header_addr,
          (void *)data_addr,
          size,
          required_size,
+         ((alloc_header *)header_addr)->block_size,
          alignment_padding,
          padding,
          arena->used,
@@ -191,13 +192,12 @@ intern void mem_free_list_free(mem_arena *arena, void *ptr)
         it = it->next;
     }
     arena->used -= free_node->data.block_size;
-
-    // Merge contiguous nodes
-    coalescence(&arena->mfl, it_prev, free_node);
     assert(arena->used <= arena->total_size);
 #if DO_DEBUG_PRINT
-    dlog("ptr:%p H:%p S:%d M:%u", ptr, (void *)free_node, free_node->data.block_size, arena->used);
+    dlog("Dptr:%p Hdr:%p BlckS:%lu Mused:%lu", ptr, (void *)free_node, free_node->data.block_size, arena->used);
 #endif
+    // Merge contiguous nodes
+    coalescence(&arena->mfl, it_prev, free_node);
 }
 
 intern void *mem_pool_alloc(mem_arena *arena)

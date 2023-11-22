@@ -82,7 +82,7 @@ ObjCSpaceBeforeProtocolList: true
 PenaltyBreakAssignment: 2
 PenaltyBreakBeforeFirstCallParameter: 19
 PenaltyBreakComment: 10
-PenaltyBreakFirstLessLess: 120
+PenaltyBreakFirstLessLess: 170
 PenaltyBreakString: 1000
 PenaltyExcessCharacter: 10
 PenaltyReturnTypeOnItsOwnLine: 1000
