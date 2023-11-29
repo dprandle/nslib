@@ -7,6 +7,19 @@
 
 namespace nslib
 {
+
+struct vertex
+{
+    vec2 pos;
+    vec3 color;
+};
+
+const vertex verts[] = {
+    {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+};    
+
 namespace err_code
 {
 enum vkr
@@ -31,7 +44,8 @@ enum vkr
     VKR_CREATE_COMMAND_POOL_FAIL,
     VKR_CREATE_COMMAND_BUFFER_FAIL,
     VKR_BEGIN_COMMAND_BUFFER_FAIL,
-    VKR_END_COMMAND_BUFFER_FAIL
+    VKR_END_COMMAND_BUFFER_FAIL,
+    VKR_CREATE_BUFFER_FAIL
 };
 }
 
@@ -44,6 +58,7 @@ enum vkr_queue_fam_type
 
 inline constexpr const u32 MAX_QUEUE_REQUEST_COUNT = 32;
 inline constexpr const u32 VKR_MAX_EXTENSION_STR_LEN = 128;
+inline constexpr const u32 VKR_RENDER_FRAME_COUNT = 3;
 
 const u32 VKR_INVALID = (u32)-1;
 inline constexpr const u32 MEM_ALLOC_TYPE_COUNT = VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE + 1;
@@ -60,6 +75,7 @@ struct vk_mem_alloc_stats
 };
 
 struct mem_arena;
+
 struct vk_arenas
 {
     vk_mem_alloc_stats stats[MEM_ALLOC_TYPE_COUNT]{};
@@ -68,6 +84,20 @@ struct vk_arenas
     mem_arena *persistent_arena{};
     // Should persist for the lifetime of a vulkan command
     mem_arena *command_arena{};
+};
+
+struct vkr_buffer
+{
+    VkBuffer hndl;
+    VkDeviceMemory mem_hndl;
+    sizet size;
+};
+
+struct vkr_cmd_buf_add_result
+{
+    u32 begin;
+    u32 end;
+    int err_code;
 };
 
 struct vkr_debug_extension_funcs
@@ -84,7 +114,7 @@ struct vkr_command_buffer
 struct vkr_command_pool
 {
     VkCommandPool hndl;
-    array<vkr_command_buffer> buffers;
+    array<vkr_command_buffer> buffers{};
 };
 
 struct vkr_queue_family_info
@@ -116,6 +146,22 @@ struct vkr_phys_device
     VkPhysicalDevice hndl{};
     vkr_queue_families qfams{};
     vkr_pdevice_swapchain_support swap_support{};
+    VkPhysicalDeviceMemoryProperties mem_properties{};
+};
+
+struct vkr_cmd_buf_ind
+{
+    u32 qfam_ind;
+    u32 pool_ind;
+    u32 buffer_ind;
+};
+
+struct vkr_frame
+{
+    vkr_cmd_buf_ind cmd_buf_ind;
+    VkSemaphore image_avail;
+    VkSemaphore render_finished;
+    VkFence in_flight;
 };
 
 struct vkr_swapchain
@@ -128,9 +174,7 @@ struct vkr_swapchain
 };
 
 struct vkr_rpass_cfg
-{
-    
-};
+{};
 
 struct vkr_rpass
 {
@@ -156,7 +200,7 @@ struct vkr_framebuffer_cfg
 {
     uvec2 size;
     u32 layers{1};
-    const vkr_rpass* rpass;
+    const vkr_rpass *rpass;
     const VkImageView *attachments;
     u32 attachment_count;
 };
@@ -166,6 +210,7 @@ struct vkr_framebuffer
     uvec2 size;
     u32 layers;
     vkr_rpass rpass;
+    array<VkImageView> attachments;
     VkFramebuffer hndl;
 };
 
@@ -177,6 +222,7 @@ struct vkr_queue
 struct vkr_device_queue_fam_info
 {
     u32 fam_ind;
+    u32 default_pool;
     array<vkr_queue> qs;
     array<vkr_command_pool> cmd_pools;
 };
@@ -188,11 +234,9 @@ struct vkr_device
     array<vkr_rpass> render_passes;
     array<vkr_framebuffer> framebuffers;
     array<vkr_pipeline> pipelines;
-    vkr_swapchain sw_info;
-
-    VkSemaphore image_avail;
-    VkSemaphore render_finished;
-    VkFence in_flight;
+    array<vkr_buffer> buffers;
+    vkr_swapchain swapchain;
+    vkr_frame rframes[VKR_RENDER_FRAME_COUNT];
 };
 
 struct vkr_instance
@@ -258,48 +302,59 @@ void vkr_enumerate_device_extensions(const vkr_phys_device *pdevice,
 // indicated as such
 void vkr_enumerate_validation_layers(const char *const *enabled_layers, u32 enabled_layer_count, const vk_arenas *arenas);
 
+vkr_cmd_buf_add_result vkr_add_cmd_bufs(const vkr_context *vk, vkr_command_pool *pool, u32 count = 1);
 
-int vkr_add_cmd_buf(const vkr_device *device, vkr_command_pool *pool);
+u32 vkr_find_mem_type(u32 type_mask, u32 property_mask, const vkr_phys_device *pdev);
 
+sizet vkr_add_cmd_pool(vkr_device_queue_fam_info *qfam, const vkr_command_pool &cpool);
 int vkr_init_cmd_pool(const vkr_context *vk, u32 fam_ind, vkr_command_pool *cpool);
-sizet vkr_add_cmd_pool(vkr_device_queue_fam_info *qfam, const vkr_command_pool *cpool);
 void vkr_terminate_cmd_pool(const vkr_context *vk, u32 fam_ind, vkr_command_pool *cpool);
 
 // Create a shader module from bytecode
 int vkr_init_shader_module(const vkr_context *vk, const byte_array *code, VkShaderModule *module);
 void vkr_terminate_shader_module(const vkr_context *vk, VkShaderModule module);
 
+sizet vkr_add_render_pass(vkr_device *device, const vkr_rpass &copy);
 int vkr_init_render_pass(const vkr_context *vk, vkr_rpass *rpass);
-sizet vkr_add_render_pass(vkr_device *device, const vkr_rpass* rpass);
-void vkr_terminate_render_pass(const vkr_context *vk, const vkr_rpass*rpass);
+void vkr_terminate_render_pass(const vkr_context *vk, const vkr_rpass *rpass);
 
+sizet vkr_add_pipeline(vkr_device *device, const vkr_pipeline &copy);
 int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pipeline *pipe_info);
-sizet vkr_add_pipeline(vkr_device *device, const vkr_pipeline *pipeline);
 void vkr_terminate_pipeline(const vkr_context *vk_ctxt, const vkr_pipeline *pipe_info);
 
+sizet vkr_add_framebuffer(vkr_device *device, const vkr_framebuffer &copy);
 int vkr_init_framebuffer(const vkr_context *vk, const vkr_framebuffer_cfg *cfg, vkr_framebuffer *framebuffer);
-sizet vkr_add_framebuffer(vkr_device *device, const vkr_framebuffer* fb);
 void vkr_terminate_framebuffer(const vkr_context *vk, const vkr_framebuffer *fb);
 
+sizet vkr_add_buffer(vkr_device *device, const vkr_buffer &copy);
+int vkr_init_buffer(vkr_buffer * buffer, const vkr_context *vk);
+void vkr_terminate_buffer(const vkr_buffer *buffer, const vkr_context *vk);
+
+// Returns the index if the first swapchain framebuffer added
+sizet vkr_add_swapchain_framebuffers(vkr_device *device);
+void vkr_init_swapchain_framebuffers(vkr_device *device,
+                                     const vkr_context *vk,
+                                     const vkr_rpass *rpass,
+                                     const array<array<VkImageView>> *other_attachments,
+                                     sizet fb_offset = 0);
+void vkr_terminate_swapchain_framebuffers(vkr_device *device, const vkr_context *vk, sizet fb_offset = 0);
+
 // The device should be created before calling this
-int vkr_init_swapchain(const vkr_context *vk,
-                        void *window,
-                        vkr_swapchain *sw_info);
-void vkr_terminate_swapchain(const vkr_context *vk, vkr_swapchain *sw_info);
+int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk, void *window);
+void vkr_recreate_swapchain(vkr_instance *inst, const vkr_context *vk, void *window, sizet rpass_ind);
+void vkr_terminate_swapchain(vkr_swapchain *sw_info, const vkr_context *vk);
 
 void vkr_init_pdevice_swapchain_support(vkr_pdevice_swapchain_support *ssup, mem_arena *arena);
 void vkr_fill_pdevice_swapchain_support(VkPhysicalDevice pdevice, VkSurfaceKHR surface, vkr_pdevice_swapchain_support *ssup);
 void vkr_terminate_pdevice_swapchain_support(vkr_pdevice_swapchain_support *ssup);
 
-int vkr_init_device(const vkr_context *vk,
+int vkr_init_device(vkr_device *dev,
+                    const vkr_context *vk,
                     const char *const *layers,
                     u32 layer_count,
                     const char *const *device_extensions,
-                    u32 dev_ext_count,
-                    vkr_device *dev);
-void vkr_terminate_device(const vkr_context *vk,
-                         vkr_device *dev);
-
+                    u32 dev_ext_count);
+void vkr_terminate_device(vkr_device *dev, const vkr_context *vk);
 
 // Initialize surface in the vk_context from the window - the instance must have been created already
 int vkr_init_surface(const vkr_context *vk, void *window, VkSurfaceKHR *surface);
@@ -314,9 +369,7 @@ void vkr_terminate(vkr_context *vk);
 int vkr_begin_cmd_buf(const vkr_command_buffer *buf);
 int vkr_end_cmd_buf(const vkr_command_buffer *buf);
 
-void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf, vkr_framebuffer *fb);
+void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf, const vkr_framebuffer *fb);
 void vkr_cmd_end_rpass(const vkr_command_buffer *cmd_buf);
-
-void vkr_setup_default_rendering(vkr_context *vk);
 
 } // namespace nslib

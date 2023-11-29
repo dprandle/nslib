@@ -3,10 +3,11 @@
 #include "profile_timer.h"
 #include "math/vector2.h"
 #include "containers/array.h"
+#include "util.h"
 
 namespace nslib
 {
-constexpr const u8 MAX_PLATFORM_INPUT_FRAME_EVENTS = 255;
+
 namespace err_code
 {
 enum platform
@@ -69,30 +70,72 @@ struct platform_init_info
     int default_log_level{LOG_TRACE};
 };
 
-enum platform_input_event_type
+enum struct platform_input_event_type
 {
-    PLATFORM_INPUT_EVENT_TYPE_KEY_PRESS,
-    PLATFORM_INPUT_EVENT_TYPE_MOUSE_BTN,
-    PLATFORM_INPUT_EVENT_TYPE_SCROLL,
-    PLATFORM_INPUT_EVENT_TYPE_CURSOR_POS
+    INVALID = -1,
+    KEY_PRESS,
+    MOUSE_BTN,
+    SCROLL,
+    CURSOR_POS
+};
+
+enum struct platform_window_event_type
+{
+    INVALID = -1,
+    WIN_RESIZE,
+    FB_RESIZE,
+    MOVE,
+    FOCUS,
+    ICONIFIED,
+    MAXIMIZED,
 };
 
 struct platform_input_event
 {
-    int type{-1};
+    platform_input_event_type type{platform_input_event_type::INVALID};
     i32 key_or_button{};
     i32 scancode{};
     i32 action{};
     i32 mods{};
-    dvec2 offset;
-    dvec2 pos;
+    vec2 offset;
+    vec2 pos;
     void *win_hndl;
 };
 
-struct platform_frame_input
+struct platform_window_event
 {
-    platform_input_event events[MAX_PLATFORM_INPUT_FRAME_EVENTS];
-    u8 count{0};
+    platform_window_event_type type{platform_window_event_type::INVALID};
+    void *window{};
+    union
+    {
+        // First is new size, second is prev size - for window resize these are screen coords, for fb resize they are pixels
+        pair<ivec2, ivec2> resize{};
+        // First is new pos, second is prev pos
+        pair<ivec2, ivec2> move;
+        // Lost focus is 0, gained focus is 1
+        int focus;
+        // Iconified is 1, restored is 0
+        int iconified;
+        // Maximized is 1, restored is 0
+        int maximized;
+    };
+};
+
+struct platform_frame_input_events
+{
+    static_array<platform_input_event, 255> events{};
+};
+
+struct platform_frame_window_events
+{
+    static_array<platform_window_event, 32> events{};
+
+    // Screen coords
+    ivec2 win_size;
+    ivec2 pos;
+
+    // Pixels
+    ivec2 fb_size;
 };
 
 struct platform_memory
@@ -104,9 +147,11 @@ struct platform_memory
 
 struct platform_ctxt
 {
+
     void *win_hndl{};
     profile_timepoints time_pts{};
-    platform_frame_input finp{};
+    platform_frame_input_events finp;
+    platform_frame_window_events fwind;
     platform_memory arenas{};
     int finished_frames{0};
     char **argv{};
@@ -129,10 +174,14 @@ void platform_run_frame(platform_ctxt *ctxt);
 
 void *platform_create_window(const platform_window_init_info *settings);
 
-dvec2 platform_window_size(void *window_hndl);
-dvec2 platform_cursor_pos(void *window_hndl);
+ivec2 platform_window_size(void *window_hndl);
+ivec2 platform_framebuffer_size(void *window_hndl);
+
+vec2 platform_cursor_pos(void *window_hndl);
 
 void platform_window_process_input(platform_ctxt *pf);
+bool platform_framebuffer_resized(void *win_hndl);
+bool platform_window_resized(void *win_hndl);
 bool platform_window_should_close(void *window_hndl);
 
 sizet platform_file_size(const char *fname, platform_file_err_desc *err);
@@ -171,18 +220,15 @@ sizet platform_write_file(const char *fname,
                           sizet nelements,
                           sizet byte_offset = 0,
                           platform_file_err_desc *err = nullptr);
-    
+
 sizet platform_write_file(const char *fname,
                           const char *mode,
                           const byte_array *data,
                           sizet byte_offset = 0,
                           platform_file_err_desc *err = nullptr);
 
-sizet platform_write_file(const char *fname,
-                          const byte_array *data,
-                          sizet byte_offset = 0,
-                          platform_file_err_desc *err = nullptr);
-    
+sizet platform_write_file(const char *fname, const byte_array *data, sizet byte_offset = 0, platform_file_err_desc *err = nullptr);
+
 } // namespace nslib
 
 #define DEFINE_APPLICATION_MAIN(client_app_data_type)                                                                                      \

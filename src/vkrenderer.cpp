@@ -16,10 +16,12 @@
 namespace nslib
 {
 
+// If this is less than 16 bytes we can get crashes... not totally sure why but probably has to do with... aliasing...?
 struct internal_alloc_header
 {
     u32 scope{};
     sizet req_size{};
+    u32 padding{};
 };
 
 intern const char *alloc_scope_str(int scope)
@@ -445,13 +447,18 @@ vkr_queue_families vkr_get_queue_families(const vkr_context *vk, VkPhysicalDevic
     return ret;
 }
 
-int vkr_init_device(const vkr_context *vk,
+int vkr_init_device(vkr_device *dev,
+                    const vkr_context *vk,
                     const char *const *layers,
                     u32 layer_count,
                     const char *const *device_extensions,
-                    u32 dev_ext_count,
-                    vkr_device *dev)
+                    u32 dev_ext_count)
 {
+    arr_init(&dev->render_passes, vk->cfg.arenas.persistent_arena);
+    arr_init(&dev->framebuffers, vk->cfg.arenas.persistent_arena);
+    arr_init(&dev->pipelines, vk->cfg.arenas.persistent_arena);
+    arr_init(&dev->buffers, vk->cfg.arenas.persistent_arena);
+
     ilog("Creating vk device and queues");
     const vkr_queue_families *qfams = &vk->inst.pdev_info.qfams;
 
@@ -509,7 +516,11 @@ int vkr_init_device(const vkr_context *vk,
         return err_code::VKR_CREATE_DEVICE_FAIL;
     }
 
+    // Create command pools for each family
     for (int i = 0; i < VKR_QUEUE_FAM_TYPE_COUNT; ++i) {
+        arr_init(&dev->qfams[i].qs, vk->cfg.arenas.persistent_arena);
+        arr_init(&dev->qfams[i].cmd_pools, vk->cfg.arenas.persistent_arena);
+
         arr_resize(&dev->qfams[i].qs, qfams->qinfo[i].requested_count);
         dev->qfams[i].fam_ind = qfams->qinfo[i].index;
         for (u32 qind = 0; qind < qfams->qinfo[i].requested_count; ++qind) {
@@ -517,33 +528,57 @@ int vkr_init_device(const vkr_context *vk,
             vkGetDeviceQueue(dev->hndl, qfams->qinfo[i].index, adjusted_ind, &dev->qfams[i].qs[qind].hndl);
             ilog("Getting queue %d from queue family %d: %p", adjusted_ind, qfams->qinfo[i].index, dev->qfams[i].qs[qind]);
         }
+
+        vkr_command_pool qpool;
+        if (vkr_init_cmd_pool(vk, dev->qfams[i].fam_ind, &qpool) == err_code::VKR_NO_ERROR) {
+            u32 dpool = vkr_add_cmd_pool(&dev->qfams[i], qpool);
+            dev->qfams[i].default_pool = dpool;
+            // arr_init(&dev->qfams[i].cmd_pools[dpool].buffers, vk->cfg.arenas.persistent_arena);
+        }
     }
 
-    VkSemaphoreCreateInfo sem_info{};
-    sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-    result = vkCreateSemaphore(dev->hndl, &sem_info, &vk->alloc_cbs, &dev->image_avail);
-    if (result != VK_SUCCESS) {
-        elog("Failed to create image semaphore with vk err code %d", result);
-        return err_code::VKR_CREATE_SEMAPHORE_FAIL;
+    // Create our rframes command buffers
+    auto gfx_fam = &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX];
+    auto buf_res = vkr_add_cmd_bufs(vk, &gfx_fam->cmd_pools[gfx_fam->default_pool], VKR_RENDER_FRAME_COUNT);
+    if (buf_res.err_code != err_code::VKR_NO_ERROR) {
+        vkr_terminate_device(dev, vk);
+        return buf_res.err_code;
     }
 
-    result = vkCreateSemaphore(dev->hndl, &sem_info, &vk->alloc_cbs, &dev->render_finished);
-    if (result != VK_SUCCESS) {
-        elog("Failed to create render semaphore with vk err code %d", result);
-        return err_code::VKR_CREATE_SEMAPHORE_FAIL;
+    // Create frame synchronization objects - start all fences as signalled already
+    for (int framei = 0; framei < VKR_RENDER_FRAME_COUNT; ++framei) {
+        VkSemaphoreCreateInfo sem_info{};
+        sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+        result = vkCreateSemaphore(dev->hndl, &sem_info, &vk->alloc_cbs, &dev->rframes[framei].image_avail);
+        if (result != VK_SUCCESS) {
+            elog("Failed to create image semaphore for frame %d with vk err code %d", framei, result);
+            vkr_terminate_device(dev, vk);
+            return err_code::VKR_CREATE_SEMAPHORE_FAIL;
+        }
+
+        result = vkCreateSemaphore(dev->hndl, &sem_info, &vk->alloc_cbs, &dev->rframes[framei].render_finished);
+        if (result != VK_SUCCESS) {
+            elog("Failed to create render semaphore for frame %d with vk err code %d", framei, result);
+            vkr_terminate_device(dev, vk);
+            return err_code::VKR_CREATE_SEMAPHORE_FAIL;
+        }
+
+        VkFenceCreateInfo fence_info{};
+        fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+        result = vkCreateFence(dev->hndl, &fence_info, &vk->alloc_cbs, &dev->rframes[framei].in_flight);
+        if (result != VK_SUCCESS) {
+            elog("Failed to create flight fence for frame %d with vk err code %d", framei, result);
+            vkr_terminate_device(dev, vk);
+            return err_code::VKR_CREATE_FENCE_FAIL;
+        }
+
+        // Assign the command buffer created earlier to this frame
+        dev->rframes[framei].cmd_buf_ind = {VKR_QUEUE_FAM_TYPE_GFX, gfx_fam->default_pool, buf_res.begin + framei};
     }
 
-    VkFenceCreateInfo fence_info{};
-    fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-    result = vkCreateFence(dev->hndl, &fence_info, &vk->alloc_cbs, &dev->in_flight);
-    if (result != VK_SUCCESS) {
-        elog("Failed to create flight fence with vk err code %d", result);
-        return err_code::VKR_CREATE_FENCE_FAIL;
-    }
-    
     ilog("Successfully created vk device and queues");
     return err_code::VKR_NO_ERROR;
 }
@@ -652,6 +687,9 @@ int vkr_select_best_graphics_physical_device(const vkr_context *vk, vkr_phys_dev
         fill_queue_offsets_and_create_inds(&dev_info->qfams, i);
     }
 
+    // Fill mem properties
+    vkGetPhysicalDeviceMemoryProperties(dev_info->hndl, &dev_info->mem_properties);
+
     return err_code::VKR_NO_ERROR;
 }
 
@@ -671,11 +709,11 @@ void vkr_fill_pdevice_swapchain_support(VkPhysicalDevice pdevice, VkSurfaceKHR s
     vkGetPhysicalDeviceSurfacePresentModesKHR(pdevice, surface, &present_mode_count, ssup->present_modes.data);
 }
 
-int vkr_init_swapchain(const vkr_context *vk, void *window, vkr_swapchain *sw_info)
+int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk, void *window)
 {
     ilog("Setting up swapchain");
-    arr_init(&sw_info->images, vk->cfg.arenas.persistent_arena);
     arr_init(&sw_info->image_views, vk->cfg.arenas.persistent_arena);
+    arr_init(&sw_info->images, vk->cfg.arenas.persistent_arena);
 
     // I no like typing too much
     auto caps = &vk->inst.pdev_info.swap_support.capabilities;
@@ -733,19 +771,21 @@ int vkr_init_swapchain(const vkr_context *vk, void *window, vkr_swapchain *sw_in
 
     // Handle the extents - if the screen coords don't match the pixel coords then we gotta set this from the frame
     // buffer as by default the extents are screen coords - this is really only for retina displays
-    swap_create.imageExtent = caps->currentExtent;
-    if (caps->currentExtent.width == VKR_INVALID) {
-        int width, height;
-        glfwGetFramebufferSize((GLFWwindow *)window, &width, &height);
-        swap_create.imageExtent = {(u32)width, (u32)height};
-        swap_create.imageExtent.width = std::clamp(swap_create.imageExtent.width, caps->minImageExtent.width, caps->maxImageExtent.width);
-        swap_create.imageExtent.height = std::clamp(swap_create.imageExtent.height, caps->minImageExtent.height, caps->maxImageExtent.height);
-    }
+    // swap_create.imageExtent = caps->currentExtent;
+    // if (caps->currentExtent.width == VKR_INVALID) {
+    int width, height;
+    glfwGetFramebufferSize((GLFWwindow *)window, &width, &height);
+    swap_create.imageExtent = {(u32)width, (u32)height};
+    // swap_create.imageExtent.width = std::clamp(swap_create.imageExtent.width, caps->minImageExtent.width, caps->maxImageExtent.width);
+    // swap_create.imageExtent.height = std::clamp(swap_create.imageExtent.height, caps->minImageExtent.height,
+    // caps->maxImageExtent.height);
+    ilog("Should be setting extent to {%d %d}", swap_create.imageExtent.width, swap_create.imageExtent.height);
+    //    }
 
     // Create this baby boo
     if (vkCreateSwapchainKHR(vk->inst.device.hndl, &swap_create, &vk->alloc_cbs, &sw_info->swapchain) != VK_SUCCESS) {
-        arr_terminate(&sw_info->images);
         arr_terminate(&sw_info->image_views);
+        arr_terminate(&sw_info->images);
         return err_code::VKR_CREATE_SWAPCHAIN_FAIL;
     }
     sw_info->extent = swap_create.imageExtent;
@@ -754,13 +794,12 @@ int vkr_init_swapchain(const vkr_context *vk, void *window, vkr_swapchain *sw_in
     VkResult res = vkGetSwapchainImagesKHR(vk->inst.device.hndl, sw_info->swapchain, &image_count, nullptr);
     if (res != VK_SUCCESS) {
         elog("Failed to get swapchain images count with code %d", res);
-        arr_terminate(&sw_info->images);
         arr_terminate(&sw_info->image_views);
+        arr_terminate(&sw_info->images);
         return err_code::VKR_GET_SWAPCHAIN_IMAGES_FAIL;
     }
 
     arr_resize(&sw_info->images, image_count);
-
     res = vkGetSwapchainImagesKHR(vk->inst.device.hndl, sw_info->swapchain, &image_count, sw_info->images.data);
     if (res != VK_SUCCESS) {
         elog("Failed to get swapchain images with code %d", res);
@@ -768,7 +807,7 @@ int vkr_init_swapchain(const vkr_context *vk, void *window, vkr_swapchain *sw_in
     }
 
     arr_resize(&sw_info->image_views, image_count);
-    for (int i = 0; i < sw_info->images.size; ++i) {
+    for (int i = 0; i < sw_info->image_views.size; ++i) {
         VkImageViewCreateInfo iview_create{};
         iview_create.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         iview_create.image = sw_info->images[i];
@@ -797,23 +836,48 @@ int vkr_init_swapchain(const vkr_context *vk, void *window, vkr_swapchain *sw_in
     return err_code::VKR_NO_ERROR;
 }
 
-int vkr_add_cmd_buf(const vkr_device *device, vkr_command_pool *pool)
+void vkr_recreate_swapchain(vkr_instance *inst, const vkr_context *vk, void *window, sizet rpass_ind)
 {
+    vkDeviceWaitIdle(inst->device.hndl);
+    vkr_terminate_swapchain_framebuffers(&inst->device, vk);
+    vkr_terminate_swapchain(&inst->device.swapchain, vk);
+    vkr_terminate_surface(vk, inst->surface);
+    vkr_init_surface(vk, window, &inst->surface);
+    vkr_init_swapchain(&inst->device.swapchain, vk, window);
+    vkr_init_swapchain_framebuffers(&inst->device, vk, &inst->device.render_passes[rpass_ind], nullptr);
+}
+
+vkr_cmd_buf_add_result vkr_add_cmd_bufs(const vkr_context *vk, vkr_command_pool *pool, u32 count)
+{
+    vkr_cmd_buf_add_result ret{};
+
     ilog("Adding command buffer");
-    vkr_command_buffer buf{};
+    array<VkCommandBuffer> hndls;
+    arr_init(&hndls, vk->cfg.arenas.command_arena);
+    arr_resize(&hndls, count);
+
     VkCommandBufferAllocateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     info.commandPool = pool->hndl;
     info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    info.commandBufferCount = 1;
-    int err = vkAllocateCommandBuffers(device->hndl, &info, &buf.hndl);
+    info.commandBufferCount = count;
+    int err = vkAllocateCommandBuffers(vk->inst.device.hndl, &info, hndls.data);
     if (err != VK_SUCCESS) {
         elog("Failed to create command buffer with code %d", err);
-        return err_code::VKR_CREATE_COMMAND_BUFFER_FAIL;
+        arr_terminate(&hndls);
+        ret.err_code = err_code::VKR_CREATE_COMMAND_BUFFER_FAIL;
+        return ret;
     }
-    arr_push_back(&pool->buffers, buf);
+    ret.begin = pool->buffers.size;
+    ret.end = ret.begin + count;
+    arr_resize(&pool->buffers, ret.end);
+    for (sizet i = 0; i < count; ++i) {
+        pool->buffers[ret.begin + i].hndl = hndls[i];
+        ilog("Setting cmd buffer at index %d to hndl %lu", ret.begin + i, hndls[i]);
+    }
+    ret.err_code = err_code::VKR_NO_ERROR;
     ilog("Successfully added command buffer");
-    return err_code::VKR_NO_ERROR;
+    return ret;
 }
 
 int vkr_init_cmd_pool(const vkr_context *vk, u32 fam_ind, vkr_command_pool *cpool)
@@ -832,17 +896,18 @@ int vkr_init_cmd_pool(const vkr_context *vk, u32 fam_ind, vkr_command_pool *cpoo
     return err_code::VKR_NO_ERROR;
 }
 
-sizet vkr_add_cmd_pool(vkr_device_queue_fam_info *qfam, const vkr_command_pool *cpool)
+sizet vkr_add_cmd_pool(vkr_device_queue_fam_info *qfam, const vkr_command_pool &cpool)
 {
     ilog("Adding command pool to qfamily");
     sizet ind = qfam->cmd_pools.size;
-    arr_push_back(&qfam->cmd_pools, *cpool);
+    arr_push_back(&qfam->cmd_pools, cpool);
     return ind;
 }
 
 void vkr_terminate_cmd_pool(const vkr_context *vk, u32 fam_ind, vkr_command_pool *cpool)
 {
     ilog("Terminating command pool");
+    arr_terminate(&cpool->buffers);
     vkDestroyCommandPool(vk->inst.device.hndl, cpool->hndl, &vk->alloc_cbs);
 }
 
@@ -871,7 +936,7 @@ int vkr_init_render_pass(const vkr_context *vk, vkr_rpass *rpass)
     ilog("Initializing render pass");
     // Create Render Pass
     VkAttachmentDescription col_att{};
-    col_att.format = vk->inst.device.sw_info.format;
+    col_att.format = vk->inst.device.swapchain.format;
     col_att.samples = VK_SAMPLE_COUNT_1_BIT;
     col_att.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     col_att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -892,7 +957,7 @@ int vkr_init_render_pass(const vkr_context *vk, vkr_rpass *rpass)
 
     VkSubpassDependency dependency{};
     dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependency.dstSubpass = 0;    
+    dependency.dstSubpass = 0;
     dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     dependency.srcAccessMask = 0;
     dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -906,7 +971,7 @@ int vkr_init_render_pass(const vkr_context *vk, vkr_rpass *rpass)
     rpass_info.pSubpasses = &subpass;
     rpass_info.dependencyCount = 1;
     rpass_info.pDependencies = &dependency;
-    
+
     if (vkCreateRenderPass(vk->inst.device.hndl, &rpass_info, &vk->alloc_cbs, &rpass->hndl) != VK_SUCCESS) {
         elog("Failed to create render pass");
         return err_code::VKR_CREATE_RENDER_PASS_FAIL;
@@ -915,11 +980,11 @@ int vkr_init_render_pass(const vkr_context *vk, vkr_rpass *rpass)
     return err_code::VKR_NO_ERROR;
 }
 
-sizet vkr_add_render_pass(vkr_device *device, const vkr_rpass *rpass)
+sizet vkr_add_render_pass(vkr_device *device, const vkr_rpass &copy)
 {
     ilog("Adding render_pass to device");
     sizet ind = device->render_passes.size;
-    arr_push_back(&device->render_passes, *rpass);
+    arr_push_back(&device->render_passes, copy);
     return ind;
 }
 
@@ -968,13 +1033,30 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
     dyn_state.dynamicStateCount = 2;
     dyn_state.pDynamicStates = states;
 
+    // Vertex binding:
+    VkVertexInputBindingDescription binding_desc;
+    binding_desc.binding = 0;
+    binding_desc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    binding_desc.stride = sizeof(vertex);
+
+    // Attribute Descriptions - so far we just have two
+    VkVertexInputAttributeDescription attrib_desc[2];
+    attrib_desc[0].binding = 0;
+    attrib_desc[0].location = 0;
+    attrib_desc[0].format = VK_FORMAT_R32G32_SFLOAT;
+    attrib_desc[0].offset = offsetof(vertex, pos);
+    attrib_desc[1].binding = 0;
+    attrib_desc[1].location = 1;
+    attrib_desc[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+    attrib_desc[1].offset = offsetof(vertex, color);
+
     // Vertex Input
     VkPipelineVertexInputStateCreateInfo vertex_input_info{};
     vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertex_input_info.vertexBindingDescriptionCount = 0;
-    vertex_input_info.pVertexBindingDescriptions = nullptr; // Optional
-    vertex_input_info.vertexAttributeDescriptionCount = 0;
-    vertex_input_info.pVertexAttributeDescriptions = nullptr; // Optional
+    vertex_input_info.vertexBindingDescriptionCount = 1;
+    vertex_input_info.pVertexBindingDescriptions = &binding_desc;
+    vertex_input_info.vertexAttributeDescriptionCount = 2;
+    vertex_input_info.pVertexAttributeDescriptions = attrib_desc; // Optional
 
     // Input assembly
     VkPipelineInputAssemblyStateCreateInfo input_assembly{};
@@ -986,14 +1068,14 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = (float)vk->inst.device.sw_info.extent.width;
-    viewport.height = (float)vk->inst.device.sw_info.extent.height;
+    viewport.width = (float)vk->inst.device.swapchain.extent.width;
+    viewport.height = (float)vk->inst.device.swapchain.extent.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
     VkRect2D scissor{};
     scissor.offset = {0, 0};
-    scissor.extent = vk->inst.device.sw_info.extent;
+    scissor.extent = vk->inst.device.swapchain.extent;
 
     VkPipelineViewportStateCreateInfo viewport_state{};
     viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -1098,11 +1180,11 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
     return err_ret;
 }
 
-sizet vkr_add_pipeline(vkr_device *device, const vkr_pipeline *pipeline)
+sizet vkr_add_pipeline(vkr_device *device, const vkr_pipeline &copy)
 {
     ilog("Adding pipeline to device");
     sizet ind = device->pipelines.size;
-    arr_push_back(&device->pipelines, *pipeline);
+    arr_push_back(&device->pipelines, copy);
     return ind;
 }
 
@@ -1116,9 +1198,12 @@ void vkr_terminate_pipeline(const vkr_context *vk, const vkr_pipeline *pipe_info
 int vkr_init_framebuffer(const vkr_context *vk, const vkr_framebuffer_cfg *cfg, vkr_framebuffer *fb)
 {
     ilog("Initializing framebuffer");
+    arr_init(&fb->attachments, vk->cfg.arenas.persistent_arena);
     fb->size = cfg->size;
     fb->rpass = *cfg->rpass;
-    
+    fb->layers = fb->layers;
+    arr_copy(&fb->attachments, cfg->attachments, cfg->attachment_count);
+
     VkFramebufferCreateInfo create_info{};
     create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     create_info.renderPass = cfg->rpass->hndl;
@@ -1136,11 +1221,11 @@ int vkr_init_framebuffer(const vkr_context *vk, const vkr_framebuffer_cfg *cfg, 
     return err_code::VKR_NO_ERROR;
 }
 
-sizet vkr_add_framebuffer(vkr_device *device, const vkr_framebuffer *fb)
+sizet vkr_add_framebuffer(vkr_device *device, const vkr_framebuffer &copy)
 {
     ilog("Adding framebuffer to device");
     sizet ind = device->framebuffers.size;
-    arr_push_back(&device->framebuffers, *fb);
+    arr_push_back(&device->framebuffers, copy);
     return ind;
 }
 
@@ -1148,6 +1233,110 @@ void vkr_terminate_framebuffer(const vkr_context *vk, const vkr_framebuffer *fb)
 {
     ilog("Terminating framebuffer");
     vkDestroyFramebuffer(vk->inst.device.hndl, fb->hndl, &vk->alloc_cbs);
+}
+
+u32 vkr_find_mem_type(u32 type_mask, u32 property_mask, const vkr_phys_device *pdev)
+{
+    for (u32 i = 0; i < pdev->mem_properties.memoryTypeCount; ++i) {
+        if ((type_mask & (1 << i)) && test_all_flags(pdev->mem_properties.memoryTypes[i].propertyFlags & property_mask, property_mask)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+sizet vkr_add_buffer(vkr_device *device, const vkr_buffer &copy)
+{
+    ilog("Adding buffer to device");
+    sizet ind = device->buffers.size;
+    arr_push_back(&device->buffers, copy);
+    return ind;
+}
+
+int vkr_init_buffer(vkr_buffer *buffer, const vkr_context *vk)
+{
+    VkBufferCreateInfo cinfo{};
+    cinfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    cinfo.size = sizeof(vertex)*3;
+    cinfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    cinfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    int err = vkCreateBuffer(vk->inst.device.hndl, &cinfo, &vk->alloc_cbs, &buffer->hndl);
+    if (err != VK_SUCCESS) {
+        elog("Failed in creating buffer with vk err %d", err);
+        return err_code::VKR_CREATE_BUFFER_FAIL;
+    }
+
+    VkMemoryRequirements mem_reqs;
+    vkGetBufferMemoryRequirements(vk->inst.device.hndl, buffer->hndl, &mem_reqs);
+
+    u32 mem_t = vkr_find_mem_type(
+        mem_reqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vk->inst.pdev_info);
+    if (mem_t == -1) {
+        elog("No suitable memory found for mem bits %d and properties %d",
+             mem_reqs.memoryTypeBits,
+             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        vkr_terminate_buffer(buffer, vk);
+        return err_code::VKR_CREATE_BUFFER_FAIL;
+    }
+
+    VkMemoryAllocateInfo alloc_info{};
+    alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    alloc_info.allocationSize = mem_reqs.size;
+    alloc_info.memoryTypeIndex = mem_t;
+
+    err = vkAllocateMemory(vk->inst.device.hndl, &alloc_info, &vk->alloc_cbs, &buffer->mem_hndl);
+    if (err != VK_SUCCESS) {
+        elog("Failed to allocate memory for buffer with vk code %d", err);
+        vkr_terminate_buffer(buffer, vk);
+        return err_code::VKR_CREATE_BUFFER_FAIL;
+    }
+    vkBindBufferMemory(vk->inst.device.hndl, buffer->hndl, buffer->mem_hndl, 0);
+    buffer->size = cinfo.size;
+    return err_code::VKR_NO_ERROR;
+}
+
+void vkr_terminate_buffer(const vkr_buffer *buffer, const vkr_context *vk)
+{
+    ilog("Terminating buffer");
+    vkDestroyBuffer(vk->inst.device.hndl, buffer->hndl, &vk->alloc_cbs);
+    vkFreeMemory(vk->inst.device.hndl, buffer->mem_hndl, &vk->alloc_cbs);
+}
+
+sizet vkr_add_swapchain_framebuffers(vkr_device *device)
+{
+    sizet cur_ind = device->framebuffers.size;
+    arr_resize(&device->framebuffers, cur_ind + device->swapchain.image_views.size);
+    return cur_ind;
+}
+
+void vkr_init_swapchain_framebuffers(vkr_device *device,
+                                     const vkr_context *vk,
+                                     const vkr_rpass *rpass,
+                                     const array<array<VkImageView>> *other_attachments,
+                                     sizet fb_offset)
+{
+    for (int i = 0; i < vk->inst.device.swapchain.image_views.size; ++i) {
+        vkr_framebuffer_cfg cfg{};
+        cfg.size = {vk->inst.device.swapchain.extent.width, vk->inst.device.swapchain.extent.height};
+        cfg.rpass = rpass;
+        array<VkImageView> iviews;
+        arr_init(&iviews, vk->cfg.arenas.command_arena);
+        arr_push_back(&iviews, device->swapchain.image_views[i]);
+        if (other_attachments) {
+            arr_append(&iviews, (*other_attachments)[i].data, other_attachments[i].size);
+        }
+        cfg.attachment_count = iviews.size;
+        cfg.attachments = iviews.data;
+        vkr_init_framebuffer(vk, &cfg, &device->framebuffers[fb_offset + i]);
+    }
+}
+
+void vkr_terminate_swapchain_framebuffers(vkr_device *device, const vkr_context *vk, sizet fb_offset)
+{
+    for (int i = 0; i < vk->inst.device.swapchain.image_views.size; ++i) {
+        vkr_terminate_framebuffer(vk, &device->framebuffers[i + fb_offset]);
+        device->framebuffers[i + fb_offset] = {};
+    }
 }
 
 // Initialize surface in the vk_context from the window - the instance must have been created already
@@ -1217,23 +1406,24 @@ int vkr_init(const vkr_cfg *cfg, vkr_context *vk)
 
     // Log out the device extensions
     vkr_enumerate_device_extensions(&vk->inst.pdev_info, cfg->device_extension_names, cfg->device_extension_count, &vk->cfg.arenas);
-    code = vkr_init_device(vk,
+    code = vkr_init_device(&vk->inst.device,
+                           vk,
                            cfg->validation_layer_names,
                            cfg->validation_layer_count,
                            cfg->device_extension_names,
-                           cfg->device_extension_count,
-                           &vk->inst.device);
+                           cfg->device_extension_count);
     if (code != err_code::VKR_NO_ERROR) {
         vkr_terminate(vk);
         return code;
     }
 
-    code = vkr_init_swapchain(vk, cfg->window, &vk->inst.device.sw_info);
+    code = vkr_init_swapchain(&vk->inst.device.swapchain, vk, cfg->window);
     if (code != err_code::VKR_NO_ERROR) {
         vkr_terminate(vk);
         return code;
     }
 
+    vkr_add_swapchain_framebuffers(&vk->inst.device);
     return err_code::VKR_NO_ERROR;
 }
 
@@ -1250,7 +1440,7 @@ void vkr_terminate_pdevice_swapchain_support(vkr_pdevice_swapchain_support *ssup
     ssup->capabilities = {};
 }
 
-void vkr_terminate_swapchain(const vkr_context *vk, vkr_swapchain *sw_info)
+void vkr_terminate_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
 {
     ilog("Terminating swapchain");
     for (int i = 0; i < sw_info->image_views.size; ++i) {
@@ -1261,9 +1451,14 @@ void vkr_terminate_swapchain(const vkr_context *vk, vkr_swapchain *sw_info)
     arr_terminate(&sw_info->image_views);
 }
 
-void vkr_terminate_device(const vkr_context *vk, vkr_device *dev)
+void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
 {
+    ilog("Waiting for sync objects before terminating device...");
+
+    // TODO: Make this wait on our semaphores and fences more explicitly
+    vkDeviceWaitIdle(dev->hndl);
     ilog("Terminating vkr device");
+
     for (int i = 0; i < dev->pipelines.size; ++i) {
         vkr_terminate_pipeline(vk, &dev->pipelines[i]);
     }
@@ -1273,39 +1468,34 @@ void vkr_terminate_device(const vkr_context *vk, vkr_device *dev)
     for (int i = 0; i < dev->render_passes.size; ++i) {
         vkr_terminate_render_pass(vk, &dev->render_passes[i]);
     }
+    for (int i = 0; i < dev->buffers.size; ++i) {
+        vkr_terminate_buffer(&dev->buffers[i], vk);
+    }
+    
     arr_terminate(&dev->render_passes);
     arr_terminate(&dev->pipelines);
     arr_terminate(&dev->framebuffers);
+    arr_terminate(&dev->buffers);
 
     for (sizet qfam_i = 0; qfam_i < VKR_QUEUE_FAM_TYPE_COUNT; ++qfam_i) {
         auto cur_fam = &dev->qfams[qfam_i];
         arr_terminate(&cur_fam->qs);
         for (sizet pool_i = 0; pool_i < cur_fam->cmd_pools.size; ++pool_i) {
             auto cur_pool = &cur_fam->cmd_pools[pool_i];
-            arr_terminate(&cur_pool->buffers);
             vkr_terminate_cmd_pool(vk, cur_fam->fam_ind, cur_pool);
         }
         arr_terminate(&cur_fam->cmd_pools);
     }
 
-    vkr_terminate_swapchain(vk, &dev->sw_info);
+    vkr_terminate_swapchain(&dev->swapchain, vk);
 
-    vkDestroyFence(dev->hndl, dev->in_flight, &vk->alloc_cbs);
-    vkDestroySemaphore(dev->hndl, dev->render_finished, &vk->alloc_cbs);
-    vkDestroySemaphore(dev->hndl, dev->image_avail, &vk->alloc_cbs);
+    for (int framei = 0; framei < VKR_RENDER_FRAME_COUNT; ++framei) {
+        vkDestroySemaphore(dev->hndl, dev->rframes[framei].image_avail, &vk->alloc_cbs);
+        vkDestroySemaphore(dev->hndl, dev->rframes[framei].render_finished, &vk->alloc_cbs);
+        vkDestroyFence(dev->hndl, dev->rframes[framei].in_flight, &vk->alloc_cbs);
+    }
+
     vkDestroyDevice(dev->hndl, &vk->alloc_cbs);
-}
-
-void vkr_terminate_instance(const vkr_context *vk, vkr_instance *inst)
-{
-    ilog("Terminating vkr instance");
-    vkr_terminate_device(vk, &inst->device);
-    vkr_terminate_pdevice_swapchain_support(&inst->pdev_info.swap_support);
-    vkr_terminate_surface(vk, inst->surface);
-    inst->ext_funcs.destroy_debug_utils_messenger(inst->hndl, inst->dbg_messenger, &vk->alloc_cbs);
-
-    // Destroying the instance calls more vk alloc calls
-    vkDestroyInstance(inst->hndl, &vk->alloc_cbs);
 }
 
 intern void log_mem_stats(const char *type, const vk_mem_alloc_stats *stats)
@@ -1319,6 +1509,18 @@ intern void log_mem_stats(const char *type, const vk_mem_alloc_stats *stats)
          stats->req_free,
          stats->actual_alloc,
          stats->actual_free);
+}
+
+void vkr_terminate_instance(const vkr_context *vk, vkr_instance *inst)
+{
+    ilog("Terminating vkr instance");
+    vkr_terminate_device(&inst->device, vk);
+    vkr_terminate_pdevice_swapchain_support(&inst->pdev_info.swap_support);
+    vkr_terminate_surface(vk, inst->surface);
+    inst->ext_funcs.destroy_debug_utils_messenger(inst->hndl, inst->dbg_messenger, &vk->alloc_cbs);
+
+    // Destroying the instance calls more vk alloc calls
+    vkDestroyInstance(inst->hndl, &vk->alloc_cbs);
 }
 
 void vkr_terminate(vkr_context *vk)
@@ -1355,7 +1557,7 @@ int vkr_end_cmd_buf(const vkr_command_buffer *buf)
     return err_code::VKR_NO_ERROR;
 }
 
-void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf, vkr_framebuffer *fb)
+void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf, const vkr_framebuffer *fb)
 {
     VkRenderPassBeginInfo info{};
     info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1364,75 +1566,20 @@ void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf, vkr_framebuffer *fb)
     info.renderArea.extent = {fb->size.w, fb->size.h};
 
     // TODO: Figure out what all these different things are with regards to screen size...
-    // Viewport.. ImageView extent.. framebuffer size.. render area.. 
+    // Viewport.. ImageView extent.. framebuffer size.. render area..
     info.renderArea.offset = {0, 0};
 
     // TODO: Move this in to the render pass - the attachment clearing values
     VkClearValue v = {{{0.0f, 0.0f, 1.0f, 1.0}}};
     info.clearValueCount = 1;
     info.pClearValues = &v;
-    
-    vkCmdBeginRenderPass(cmd_buf->hndl, &info, VK_SUBPASS_CONTENTS_INLINE);        
+
+    vkCmdBeginRenderPass(cmd_buf->hndl, &info, VK_SUBPASS_CONTENTS_INLINE);
 }
 
 void vkr_cmd_end_rpass(const vkr_command_buffer *cmd_buf)
 {
     vkCmdEndRenderPass(cmd_buf->hndl);
-}
-
-
-void vkr_setup_default_rendering(vkr_context *vk)
-{
-    ilog("Setting up default rendering...");
-    vkr_rpass rpass{};
-    vkr_init_render_pass(vk, &rpass);
-    vkr_add_render_pass(&vk->inst.device, &rpass);
-
-    vkr_pipeline_cfg info{};
-
-    platform_file_err_desc err{};
-    const char *frag_fname = "shaders/triangle.frag.spv";
-    const char *vert_fname = "shaders/triangle.vert.spv";
-
-    platform_read_file(frag_fname, &info.frag_shader_data, 0, &err);
-    if (err.code != err_code::PLATFORM_NO_ERROR) {
-        wlog("Error reading file %s from disk (code %d): %s", frag_fname, err.code, err.str);
-        return;
-    }
-
-    err = {};
-    platform_read_file(vert_fname, &info.vert_shader_data, 0, &err);
-    if (err.code != err_code::PLATFORM_NO_ERROR) {
-        wlog("Error reading file %s from disk (code %d): %s", vert_fname, err.code, err.str);
-        return;
-    }
-
-    info.rpass = &rpass;
-    vkr_pipeline pinfo{};
-    vkr_init_pipeline(vk, &info, &pinfo);
-    vkr_add_pipeline(&vk->inst.device, &pinfo);
-
-    for (int i = 0; i < vk->inst.device.sw_info.image_views.size; ++i) {
-        vkr_framebuffer fb{};
-        vkr_framebuffer_cfg cfg{};
-        cfg.size = {vk->inst.device.sw_info.extent.width, vk->inst.device.sw_info.extent.height};
-        cfg.rpass = &rpass;
-        cfg.attachment_count = 1;
-        cfg.attachments = &vk->inst.device.sw_info.image_views[i];
-        vkr_init_framebuffer(vk, &cfg, &fb);
-        vkr_add_framebuffer(&vk->inst.device, &fb);
-    }
-
-    vkr_command_pool pool{};
-    vkr_device_queue_fam_info *qfam = &vk->inst.device.qfams[VKR_QUEUE_FAM_TYPE_GFX];
-    if (vkr_init_cmd_pool(vk, qfam->fam_ind, &pool) != err_code::VKR_NO_ERROR) {
-        return;
-    }
-    int pool_ind = vkr_add_cmd_pool(qfam, &pool);
-    auto added_pool = &vk->inst.device.qfams[VKR_QUEUE_FAM_TYPE_GFX].cmd_pools[pool_ind];
-    if (vkr_add_cmd_buf(&vk->inst.device, added_pool) != err_code::VKR_NO_ERROR) {
-        return;
-    }    
 }
 
 } // namespace nslib

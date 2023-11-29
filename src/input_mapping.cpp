@@ -13,12 +13,12 @@ namespace nslib
 intern void fill_event_from_platform_event(const platform_input_event *raw, input_event *ev)
 {
     ev->modifiers = raw->mods;
-    if (raw->type == PLATFORM_INPUT_EVENT_TYPE_CURSOR_POS) {
+    if (raw->type == platform_input_event_type::CURSOR_POS) {
         ev->type = IEVENT_TYPE_CURSOR;
         ev->cursor_data.pos = raw->pos;
-        ev->cursor_data.norm_pos = raw->pos / platform_window_size(raw->win_hndl);
+        ev->cursor_data.norm_pos = raw->pos / vec2{platform_window_size(raw->win_hndl)};
     }
-    else if (raw->type == PLATFORM_INPUT_EVENT_TYPE_SCROLL) {
+    else if (raw->type == platform_input_event_type::SCROLL) {
         ev->type = IEVENT_TYPE_SCROLL;
         ev->scroll_data.offset = raw->offset;
     }
@@ -214,11 +214,11 @@ void input_map_event(const platform_input_event *raw, const input_keymap_stack *
     }
 }
 
-void input_map_frame(const platform_frame_input *frame, const input_keymap_stack *stack)
+void input_map_frame(const platform_frame_input_events *frame, const input_keymap_stack *stack)
 {
     assert(frame);
     assert(stack);
-    for (int i = 0; i < frame->count; ++i) {
+    for (int i = 0; i < frame->events.size; ++i) {
         input_map_event(&frame->events[i], stack);
     }
 }

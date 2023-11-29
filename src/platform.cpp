@@ -53,42 +53,45 @@ intern i32 get_cursor_scroll_mod_mask(GLFWwindow *window)
 intern void glfw_key_press_callback(GLFWwindow *window, i32 key, i32 scancode, i32 action, i32 mods)
 {
     platform_ctxt *pf = platform_ptr(window);
-    assert(pf->finp.count < MAX_PLATFORM_INPUT_FRAME_EVENTS);
-    pf->finp.events[pf->finp.count] = {PLATFORM_INPUT_EVENT_TYPE_KEY_PRESS, key, scancode, action, mods, {}, {}, window};
-    ++pf->finp.count;
+    assert(pf->finp.events.size + 1 < pf->finp.events.capacity);
+    arr_push_back(&pf->finp.events, {platform_input_event_type::KEY_PRESS, key, scancode, action, mods, {}, {}, window});
 }
 
 intern void glfw_mouse_button_callback(GLFWwindow *window, i32 button, i32 action, i32 mods)
 {
     platform_ctxt *pf = platform_ptr(window);
-    assert(pf->finp.count < MAX_PLATFORM_INPUT_FRAME_EVENTS);
-    pf->finp.events[pf->finp.count] = {PLATFORM_INPUT_EVENT_TYPE_MOUSE_BTN, button, {}, action, mods, {}, {}, window};
-    ++pf->finp.count;
+    assert(pf->finp.events.size + 1 < pf->finp.events.capacity);
+    arr_push_back(&pf->finp.events, {platform_input_event_type::MOUSE_BTN, button, {}, action, mods, {}, {}, window});
 }
 
 intern void glfw_scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
 {
+    vec2 foffset{(float)x_offset, (float)y_offset};
     platform_ctxt *pf = platform_ptr(window);
-    pf->finp.events[pf->finp.count] = {
-        PLATFORM_INPUT_EVENT_TYPE_SCROLL, SCROLL_CHANGE, {}, {}, get_cursor_scroll_mod_mask(window), {x_offset, y_offset}, {}, window};
-    ++pf->finp.count;
+    assert(pf->finp.events.size + 1 < pf->finp.events.capacity);
+    arr_push_back(
+        &pf->finp.events,
+        {platform_input_event_type::SCROLL, SCROLL_CHANGE, {}, {}, get_cursor_scroll_mod_mask(window), foffset, {}, window});
 }
 
 intern void glfw_cursor_pos_callback(GLFWwindow *window, double x_pos, double y_pos)
 {
+    vec2 fpos{(float)x_pos, (float)y_pos};
     platform_ctxt *pf = platform_ptr(window);
-    pf->finp.events[pf->finp.count] = {
-        PLATFORM_INPUT_EVENT_TYPE_CURSOR_POS, CURSOR_POS_CHANGE, {}, {}, get_cursor_scroll_mod_mask(window), {}, {x_pos, y_pos}, window};
-    ++pf->finp.count;
-}
-
-intern void glfw_resize_window_callback(GLFWwindow *window, i32 width, i32 height)
-{
-    dlog("Resizing with size {%d %d}", width, height);
+    assert(pf->finp.events.size + 1 < pf->finp.events.capacity);
+    arr_push_back(
+        &pf->finp.events,
+        {platform_input_event_type::CURSOR_POS, CURSOR_POS_CHANGE, {}, {}, get_cursor_scroll_mod_mask(window), {}, fpos, window});
 }
 
 intern void glfw_focus_change_callback(GLFWwindow *window, i32 focused)
 {
+    platform_ctxt *pf = platform_ptr(window);
+    assert(pf->fwind.events.size + 1 < pf->fwind.events.capacity);
+    platform_window_event we{platform_window_event_type::FOCUS};
+    we.window = window;
+    we.focus = focused;
+    arr_push_back(&pf->fwind.events, we);
     dlog("Focus Change");
 }
 
@@ -99,20 +102,63 @@ intern void glfw_close_window_callback(GLFWwindow *window)
 
 intern void glfw_iconify_window_callback(GLFWwindow *window, i32 iconified)
 {
-    dlog("Iconified");
+    platform_ctxt *pf = platform_ptr(window);
+    assert(pf->fwind.events.size + 1 < pf->fwind.events.capacity);
+    platform_window_event we{platform_window_event_type::ICONIFIED};
+    we.window = window;
+    we.iconified = iconified;
+    arr_push_back(&pf->fwind.events, we);
+    dlog("Window %s", (iconified)?"iconified":"restored");
 }
 
 intern void glfw_maximize_window_callback(GLFWwindow *window, i32 maximized)
 {
-    dlog("Maximize");
+    platform_ctxt *pf = platform_ptr(window);
+    assert(pf->fwind.events.size + 1 < pf->fwind.events.capacity);
+    platform_window_event we{platform_window_event_type::MAXIMIZED};
+    we.window = window;
+    we.iconified = maximized;
+    arr_push_back(&pf->fwind.events, we);
+    dlog("Window %s", (maximized)?"maximized":"restored");
 }
 
 intern void glfw_window_position_callback(GLFWwindow *window, i32 x_pos, i32 y_pos)
-{}
+{
+    platform_ctxt *pf = platform_ptr(window);
+    assert(pf->fwind.events.size + 1 < pf->fwind.events.capacity);
+    platform_window_event we{platform_window_event_type::MOVE};
+    we.window = window;
+    we.move.first = {x_pos, y_pos};
+    we.resize.second = pf->fwind.pos;
+    pf->fwind.pos = we.resize.first;
+    arr_push_back(&pf->fwind.events, we);
+//    dlog("Window moved from {%d %d} to {%d %d}", we.move.second.x, we.move.second.y,we.move.first.x, we.move.first.y);
+}
+
+intern void glfw_resize_window_callback(GLFWwindow *window, i32 width, i32 height)
+{
+    platform_ctxt *pf = platform_ptr(window);
+    assert(pf->fwind.events.size + 1 < pf->fwind.events.capacity);
+    platform_window_event we{platform_window_event_type::WIN_RESIZE};
+    we.window = window;
+    we.resize.first = {width, height};
+    we.resize.second = pf->fwind.win_size;
+    pf->fwind.win_size = we.resize.first;
+    arr_push_back(&pf->fwind.events, we);
+//    dlog("Resized window from {%d %d} to {%d %d}", we.resize.second.w, we.resize.second.h, width, height);
+}
 
 intern void glfw_framebuffer_resized_callback(GLFWwindow *window, i32 width, i32 height)
 {
-    dlog("Resized framebuffer to {%d %d}", width, height);
+    platform_ctxt *pf = platform_ptr(window);
+    assert(pf->fwind.events.size + 1 < pf->fwind.events.capacity);
+    platform_window_event we{platform_window_event_type::FB_RESIZE};
+    we.window = window;
+    we.resize.first = {width, height};
+    we.resize.second = pf->fwind.fb_size;
+    pf->fwind.fb_size = we.resize.first;
+    arr_push_back(&pf->fwind.events, we);
+//    dlog("Resized framebuffer from {%d %d} to {%d %d}", we.resize.second.w, we.resize.second.h, width, height);
 }
 
 intern void set_glfw_callbacks(platform_ctxt *ctxt)
@@ -251,7 +297,8 @@ void *platform_create_window(const platform_window_init_info *settings)
 
 void platform_window_process_input(platform_ctxt *pf)
 {
-    pf->finp.count = 0;
+    arr_clear(&pf->finp.events);
+    arr_clear(&pf->fwind.events);
     glfwPollEvents();
 }
 
@@ -260,21 +307,48 @@ bool platform_window_should_close(void *window_hndl)
     return glfwWindowShouldClose((GLFWwindow *)window_hndl);
 }
 
-dvec2 platform_window_size(void *window_hndl)
+ivec2 platform_window_size(void *win)
 {
-    GLFWwindow *glfw_win = (GLFWwindow *)(window_hndl);
-    ivec2 ret;
-    glfwGetWindowSize(glfw_win, &ret.x, &ret.y);
-    return ret;
+    platform_ctxt *pf = platform_ptr((GLFWwindow*)win);
+    return pf->fwind.win_size;
 }
 
-dvec2 platform_cursor_pos(void *window_hndl)
+ivec2 platform_framebuffer_size(void *win)
+{
+    platform_ctxt *pf = platform_ptr((GLFWwindow*)win);
+    return pf->fwind.fb_size;
+}
+
+vec2 platform_cursor_pos(void *window_hndl)
 {
     GLFWwindow *glfw_win = (GLFWwindow *)(window_hndl);
     dvec2 ret;
     glfwGetCursorPos(glfw_win, &ret.x, &ret.y);
     return ret;
 }
+
+intern bool frame_has_event_type(platform_window_event_type type, const platform_frame_window_events *fwind)
+{
+    for (int i = 0; i < fwind->events.size; ++i) {
+        if (fwind->events[i].type == type) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool platform_framebuffer_resized(void *win_hndl)
+{
+    platform_ctxt *pf = platform_ptr((GLFWwindow*)win_hndl);
+    return frame_has_event_type(platform_window_event_type::WIN_RESIZE, &pf->fwind);
+}
+
+bool platform_window_resized(void *win_hndl)
+{
+    platform_ctxt *pf = platform_ptr((GLFWwindow*)win_hndl);
+    return frame_has_event_type(platform_window_event_type::FB_RESIZE, &pf->fwind);
+}
+
 
 void platform_run_frame(platform_ctxt *ctxt)
 {
@@ -448,12 +522,7 @@ sizet platform_write_file(const char *fname,
     return ret;
 }
 
-sizet platform_write_file(const char *fname,
-                          const void *data,
-                          sizet element_size,
-                          sizet nelements,
-                          sizet byte_offset,
-                          platform_file_err_desc *err)
+sizet platform_write_file(const char *fname, const void *data, sizet element_size, sizet nelements, sizet byte_offset, platform_file_err_desc *err)
 {
     return platform_write_file(fname, "wb", data, element_size, nelements, byte_offset, err);
 }

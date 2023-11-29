@@ -134,6 +134,35 @@ void arr_copy(array<T> *dest, const array<T> *source)
 }
 
 template<class T>
+void arr_copy(array<T> *dest, const T *src, sizet src_size)
+{
+    arr_resize(dest, src_size);
+    for (sizet i = 0; i < src_size; ++i) {
+        (*dest)[i] = src[i];
+    }
+}
+
+template<class T>
+void arr_append(array<T> *arr, const T *src, sizet src_size)
+{
+    sizet start_ind = arr->size;
+    arr_resize(arr, start_ind + src_size);
+    for (sizet i = 0; i < src_size; ++i) {
+        (*arr)[start_ind + i] = src[i];
+    }
+}
+
+template<class T>
+void arr_append(array<T> *arr, const array<T> *source)
+{
+    sizet start_ind = arr->size;
+    arr_resize(arr, start_ind + source->size);
+    for (sizet i = 0; i < source->size; ++i) {
+        (*arr)[start_ind + i] = (*source)[i];
+    }
+}
+
+template<class T>
 void arr_set_capacity(array<T> *arr, sizet new_cap)
 {
     if (new_cap == arr->capacity) {

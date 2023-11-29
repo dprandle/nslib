@@ -23,20 +23,14 @@ union pair
 {
     struct
     {
-        F first;
-        S second;
+        F first{};
+        S second{};
     };
     struct
     {
         F key;
         S value;
     };
-
-    ~pair()
-    {
-        first.~F();
-        second.~S();
-    }
 };
 
 pup_func_tt(pair)
