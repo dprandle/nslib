@@ -17,6 +17,27 @@ intern void glfw_error_callback(i32 error, const char *description)
     elog("Error %d: %s", error, description);
 }
 
+
+intern platform_window_event * get_latest_window_event(platform_window_event_type type, platform_frame_window_events *fwind)
+{
+    for (int i = fwind->events.size - 1; i >= 0; --i) {
+        if (fwind->events[i].type == type) {
+            return &fwind->events[i];
+        }
+    }
+    return nullptr;
+}
+
+intern bool frame_has_event_type(platform_window_event_type type, const platform_frame_window_events *fwind)
+{
+    for (int i = 0; i < fwind->events.size; ++i) {
+        if (fwind->events[i].type == type) {
+            return true;
+        }
+    }
+    return false;
+}
+
 intern i32 get_cursor_scroll_mod_mask(GLFWwindow *window)
 {
     i32 ret{0};
@@ -132,33 +153,38 @@ intern void glfw_window_position_callback(GLFWwindow *window, i32 x_pos, i32 y_p
     we.resize.second = pf->fwind.pos;
     pf->fwind.pos = we.resize.first;
     arr_push_back(&pf->fwind.events, we);
-//    dlog("Window moved from {%d %d} to {%d %d}", we.move.second.x, we.move.second.y,we.move.first.x, we.move.first.y);
 }
 
 intern void glfw_resize_window_callback(GLFWwindow *window, i32 width, i32 height)
 {
     platform_ctxt *pf = platform_ptr(window);
-    assert(pf->fwind.events.size + 1 < pf->fwind.events.capacity);
-    platform_window_event we{platform_window_event_type::WIN_RESIZE};
-    we.window = window;
-    we.resize.first = {width, height};
-    we.resize.second = pf->fwind.win_size;
-    pf->fwind.win_size = we.resize.first;
-    arr_push_back(&pf->fwind.events, we);
-//    dlog("Resized window from {%d %d} to {%d %d}", we.resize.second.w, we.resize.second.h, width, height);
+    platform_window_event *ev_ptr = get_latest_window_event(platform_window_event_type::WIN_RESIZE, &pf->fwind);
+    if (!ev_ptr) {
+        assert(pf->fwind.events.size + 1 < pf->fwind.events.capacity);
+        platform_window_event we{platform_window_event_type::WIN_RESIZE};
+        we.window = window;
+        ev_ptr = arr_push_back(&pf->fwind.events, we);
+    }
+    ev_ptr->resize.first = {width, height};
+    ev_ptr->resize.second = pf->fwind.win_size;
+    pf->fwind.win_size = ev_ptr->resize.first;
+    dlog("Resized window from {%d %d} to {%d %d}", ev_ptr->resize.second.w, ev_ptr->resize.second.h, width, height);
 }
 
 intern void glfw_framebuffer_resized_callback(GLFWwindow *window, i32 width, i32 height)
 {
     platform_ctxt *pf = platform_ptr(window);
-    assert(pf->fwind.events.size + 1 < pf->fwind.events.capacity);
-    platform_window_event we{platform_window_event_type::FB_RESIZE};
-    we.window = window;
-    we.resize.first = {width, height};
-    we.resize.second = pf->fwind.fb_size;
-    pf->fwind.fb_size = we.resize.first;
-    arr_push_back(&pf->fwind.events, we);
-//    dlog("Resized framebuffer from {%d %d} to {%d %d}", we.resize.second.w, we.resize.second.h, width, height);
+    platform_window_event *ev_ptr = get_latest_window_event(platform_window_event_type::FB_RESIZE, &pf->fwind);
+    if (!ev_ptr) {
+        assert(pf->fwind.events.size + 1 < pf->fwind.events.capacity);
+        platform_window_event we{platform_window_event_type::FB_RESIZE};
+        we.window = window;
+        ev_ptr = arr_push_back(&pf->fwind.events, we);
+    }
+    ev_ptr->resize.first = {width, height};
+    ev_ptr->resize.second = pf->fwind.fb_size;
+    pf->fwind.fb_size = ev_ptr->resize.first;
+    dlog("Resized framebuffer from {%d %d} to {%d %d}", ev_ptr->resize.second.w, ev_ptr->resize.second.h, width, height);
 }
 
 intern void set_glfw_callbacks(platform_ctxt *ctxt)
@@ -237,6 +263,10 @@ int platform_init(const platform_init_info *settings, platform_ctxt *ctxt)
         elog("Failed to create window");
         return err_code::PLATFORM_INIT;
     }
+
+    glfwGetFramebufferSize((GLFWwindow*)ctxt->win_hndl, &ctxt->fwind.fb_size.x, &ctxt->fwind.fb_size.y);
+    glfwGetWindowSize((GLFWwindow*)ctxt->win_hndl, &ctxt->fwind.win_size.x, &ctxt->fwind.win_size.y);
+    glfwGetWindowPos((GLFWwindow*)ctxt->win_hndl, &ctxt->fwind.pos.x, &ctxt->fwind.pos.y);
 
     set_glfw_callbacks(ctxt);
 
@@ -327,30 +357,20 @@ vec2 platform_cursor_pos(void *window_hndl)
     return ret;
 }
 
-intern bool frame_has_event_type(platform_window_event_type type, const platform_frame_window_events *fwind)
-{
-    for (int i = 0; i < fwind->events.size; ++i) {
-        if (fwind->events[i].type == type) {
-            return true;
-        }
-    }
-    return false;
-}
-
 bool platform_framebuffer_resized(void *win_hndl)
-{
-    platform_ctxt *pf = platform_ptr((GLFWwindow*)win_hndl);
-    return frame_has_event_type(platform_window_event_type::WIN_RESIZE, &pf->fwind);
-}
-
-bool platform_window_resized(void *win_hndl)
 {
     platform_ctxt *pf = platform_ptr((GLFWwindow*)win_hndl);
     return frame_has_event_type(platform_window_event_type::FB_RESIZE, &pf->fwind);
 }
 
+bool platform_window_resized(void *win_hndl)
+{
+    platform_ctxt *pf = platform_ptr((GLFWwindow*)win_hndl);
+    return frame_has_event_type(platform_window_event_type::WIN_RESIZE, &pf->fwind);
+}
 
-void platform_run_frame(platform_ctxt *ctxt)
+
+void platform_start_frame(platform_ctxt *ctxt)
 {
     ptimer_split(&ctxt->time_pts);
     platform_window_process_input(ctxt);
@@ -358,6 +378,10 @@ void platform_run_frame(platform_ctxt *ctxt)
         dlog("Clearing %d used bytes from frame linear arena", ctxt->arenas.frame_linear.used);
     }
     mem_reset_arena(&ctxt->arenas.frame_linear);
+}
+
+void platform_end_frame(platform_ctxt *ctxt)
+{
     ++ctxt->finished_frames;
 }
 

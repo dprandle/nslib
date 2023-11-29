@@ -170,7 +170,8 @@ int platform_terminate(platform_ctxt *ctxt);
 void *platform_alloc(sizet byte_size);
 void *platform_realloc(void *ptr, sizet byte_size);
 void platform_free(void *block);
-void platform_run_frame(platform_ctxt *ctxt);
+void platform_start_frame(platform_ctxt *ctxt);
+void platform_end_frame(platform_ctxt *ctxt);
 
 void *platform_create_window(const platform_window_init_info *settings);
 
@@ -256,10 +257,11 @@ sizet platform_write_file(const char *fname, const byte_array *data, sizet byte_
         }                                                                                                                                  \
         ptimer_restart(&ctxt.time_pts);                                                                                                    \
         while (run_loop && !platform_window_should_close(ctxt.win_hndl)) {                                                                 \
-            platform_run_frame(&ctxt);                                                                                                     \
+            platform_start_frame(&ctxt);                                                                                                   \
             if (app_run_frame(&ctxt, &client_app_data) != err_code::PLATFORM_NO_ERROR) {                                                   \
                 run_loop = false;                                                                                                          \
             }                                                                                                                              \
+            platform_end_frame(&ctxt);                                                                                                     \
         }                                                                                                                                  \
         if (app_terminate(&ctxt, &client_app_data) != err_code::PLATFORM_NO_ERROR) {                                                       \
             return err_code::PLATFORM_TERMINATE;                                                                                           \

@@ -93,7 +93,7 @@ input_keymap_entry *input_get_keymap_entry(u32 key, input_keymap *km)
     assert(km);
     auto item = hashmap_find(&km->hm, key);
     if (item) {
-        return &item->second;
+        return &item->value;
     }
     return nullptr;
 }
@@ -103,7 +103,7 @@ const input_keymap_entry *input_get_keymap_entry(u32 key, const input_keymap *km
     assert(km);
     auto item = hashmap_find(&km->hm, key);
     if (item) {
-        return &item->second;
+        return &item->value;
     }
     return nullptr;
 }
@@ -115,8 +115,8 @@ input_keymap_entry *input_get_keymap_entry(const char *name, input_keymap *km)
     sizet i{0};
     auto item = hashmap_iter(&km->hm, &i);
     while (item) {
-        if (strncmp(name, item->second.name, SMALL_STR_LEN) == 0) {
-            return &item->second;
+        if (strncmp(name, item->value.name, SMALL_STR_LEN) == 0) {
+            return &item->value;
         }
         item = hashmap_iter(&km->hm, &i);
     }
@@ -130,8 +130,8 @@ const input_keymap_entry *input_get_keymap_entry(const char *name, const input_k
     sizet i{0};
     auto item = hashmap_iter(&km->hm, &i);
     while (item) {
-        if (strncmp(name, item->second.name, SMALL_STR_LEN) == 0) {
-            return &item->second;
+        if (strncmp(name, item->value.name, SMALL_STR_LEN) == 0) {
+            return &item->value;
         }
         item = hashmap_iter(&km->hm, &i);
     }

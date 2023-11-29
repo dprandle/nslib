@@ -15,9 +15,9 @@ namespace nslib
 template<class Key, class Value>
 struct hashmap
 {
-    using value_type = pair<Key, Value>;
-    using iterator = pair<Key, Value> *;
-    using const_iterator = const pair<Key, Value> *;
+    using value_type = key_val_pair<Key, Value>;
+    using iterator = key_val_pair<Key, Value> *;
+    using const_iterator = const key_val_pair<Key, Value> *;
     using mapped_type = Value;
     using key_type = Key;
 
@@ -56,7 +56,7 @@ struct hashmap
         if (!iter) {
             iter = hashmap_find(this, key);
         }
-        return iter->second;
+        return iter->value;
     }
 
     ihashmap *hm{nullptr};
@@ -218,7 +218,7 @@ void hashmap_init(hashmap<Key, Value> *hm)
     // Hash func attempts to call the hash_type function
     auto hash_func = [](const void *item, u64 seed0, u64 seed1) -> u64 {
         auto cast = (typename hashmap<Key,Value>::const_iterator)item;
-        return hash_type(cast->first, seed0, seed1);
+        return hash_type(cast->key, seed0, seed1);
     };
 
     // We only care about == so jsut return 1 in all other cases - If the hashed value of the keys are equal then we
@@ -226,13 +226,13 @@ void hashmap_init(hashmap<Key, Value> *hm)
     auto compare_func = [](const void *a, const void *b, void *) -> i32 {
         auto cast_a = (typename hashmap<Key,Value>::const_iterator)a;
         auto cast_b = (typename hashmap<Key,Value>::const_iterator)b;
-        return (cast_a->first == cast_b->first) ? 0 : 1;
+        return (cast_a->key == cast_b->key) ? 0 : 1;
     };
 
     hm->hm = ihashmap_new_with_allocator(global_malloc_func(),
                                          global_realloc_func(),
                                          global_free_func(),
-                                         sizeof(pair<Key, Value>),
+                                         sizeof(key_val_pair<Key, Value>),
                                          0,
                                          seed0,
                                          seed1,
@@ -247,8 +247,8 @@ string to_str(const hashmap<Key, Value> &hm)
 {
     string ret("\nhashmap {");
     auto for_each = [&ret](typename hashmap<Key,Value>::const_iterator item) -> bool {
-        ret += "\nkey: " + to_str(item->first);
-        ret += "\nval: " + to_str(item->second);
+        ret += "\nkey: " + to_str(item->key);
+        ret += "\nval: " + to_str(item->value);
         return true;
     };
     hashmap_for_each(&hm, for_each);

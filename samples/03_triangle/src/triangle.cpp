@@ -19,9 +19,14 @@ intern const char *VALIDATION_LAYERS[VALIDATION_LAYER_COUNT] = {"VK_LAYER_KHRONO
 intern const u32 ADDITIONAL_INST_EXTENSION_COUNT = 2;
 intern const char *ADDITIONAL_INST_EXTENSIONS[ADDITIONAL_INST_EXTENSION_COUNT] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
                                                                                   VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME};
+
+#if __APPLE__
+intern const u32 DEVICE_EXTENSION_COUNT = 2;
+intern const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_portability_subset"};
+#else
 intern const u32 DEVICE_EXTENSION_COUNT = 1;
 intern const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-
+#endif
 struct app_data
 {
     vkr_context vk;
@@ -91,7 +96,7 @@ void record_command_buffer(vkr_command_buffer *cmd_buf, vkr_framebuffer *fb, vkr
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(cmd_buf->hndl, 0, 1, vert_bufs, offsets);
 
-    vkCmdDraw(cmd_buf->hndl, vert_buf->size, 1, 0, 0);    
+    vkCmdDraw(cmd_buf->hndl, vert_buf->size, 1, 0, 0);
 
     vkr_cmd_end_rpass(cmd_buf);
     vkr_end_cmd_buf(cmd_buf);
@@ -145,7 +150,7 @@ int app_run_frame(platform_ctxt *ctxt, app_data *app)
     if (platform_framebuffer_resized(ctxt->win_hndl)) {
         vkr_recreate_swapchain(&app->vk.inst, &app->vk, ctxt->win_hndl, 0);
     }
-    
+
     int rframe_ind = ctxt->finished_frames % VKR_RENDER_FRAME_COUNT;
     auto cur_frame = &dev->rframes[rframe_ind];
     auto buf_ind = cur_frame->cmd_buf_ind;
@@ -165,7 +170,7 @@ int app_run_frame(platform_ctxt *ctxt, app_data *app)
     }
 
     vkResetFences(dev->hndl, 1, &cur_frame->in_flight);
-    
+
     // We have the acquired image index, though we don't know when it will be ready to have ops submitted, we can record
     // the ops in the command buffer and submit once it is readyy
     auto fb = &dev->framebuffers[im_ind];

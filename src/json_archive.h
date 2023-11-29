@@ -438,7 +438,7 @@ void pack_unpack(json_archive *ar, hashmap<string, T> &val, const pack_var_info 
         sizet i{};
         auto iter = hashmap_iter(&val,&i);
         while (iter) {
-            pup_var(ar, iter->second, {str_cstr(iter->first)});
+            pup_var(ar, iter->value, {str_cstr(iter->key)});
             iter = hashmap_iter(&val, &i);
         }
     }
@@ -462,7 +462,7 @@ void pack_unpack(json_archive *ar, hashmap<rid, T> &val, const pack_var_info &vi
         sizet i{};
         auto iter = hashmap_iter(&val,&i);
         while (iter) {
-            pup_var(ar, iter->second, {str_cstr(iter->first.str)});
+            pup_var(ar, iter->value, {str_cstr(iter->key.str)});
             iter = hashmap_iter(&val, &i);
         }
     }

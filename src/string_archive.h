@@ -156,7 +156,7 @@ void pack_unpack(string_archive *ar, hashmap<string, T> &val, const pack_var_inf
 {
     sizet i{};
     while (auto iter = hashmap_iter(&val, &i)) {
-        pup_var(ar, iter->second, {str_cstr(iter->first)});
+        pup_var(ar, iter->value, {str_cstr(iter->key)});
     }
 }
 
@@ -166,7 +166,7 @@ void pack_unpack(string_archive *ar, hashmap<rid, T> &val, const pack_var_info &
 {
     sizet i{};
     while (auto iter = hashmap_iter(&val, &i)) {
-        pup_var(ar, iter->second, {str_cstr(iter->first.str)});
+        pup_var(ar, iter->value, {str_cstr(iter->key.str)});
     }
 }
 
@@ -176,7 +176,7 @@ void pack_unpack(string_archive *ar, hashmap<K, T> &val, const pack_var_info &vi
 {
     sizet i{};
     while (auto iter = hashmap_iter(&val, &i)) {
-        pup_var(ar, iter->second, {to_cstr(iter->first)});
+        pup_var(ar, iter->value, {to_cstr(iter->key)});
     }
 }
 

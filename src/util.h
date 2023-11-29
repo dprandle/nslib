@@ -19,21 +19,20 @@ pup_func(version_info)
 }    
 
 template<class F, class S>
-union pair
+struct key_val_pair
 {
-    struct
-    {
-        F first{};
-        S second{};
-    };
-    struct
-    {
-        F key;
-        S value;
-    };
+    F key;
+    S value;
 };
 
-pup_func_tt(pair)
+template<class F, class S>
+struct pair
+{
+    F first;
+    S second;
+};
+
+pup_func_tt(key_val_pair)
 {
     if (test_flags(vinfo.meta.flags, pack_va_flags::PACK_PAIR_KEY_VAL)) {
         pup_member(key);
