@@ -9,7 +9,8 @@
 
 #include <iostream>
 
-#define DO_DEBUG_PRINT false
+#define DO_DEBUG_PRINT true
+#define DO_DEBUG_LINEAR_ALLOC false
 
 namespace nslib
 {
@@ -262,11 +263,13 @@ intern void *mem_linear_alloc(mem_arena *arena, sizet size, sizet alignment)
     if (arena->mlin.offset + padding + size > arena->total_size)
         return nullptr;
 
-    arena->mlin.offset += padding;
+    arena->mlin.offset += padding + size;
     sizet next_addr = current_addr + padding;
-    arena->mlin.offset += size;
     arena->used = arena->mlin.offset;
     arena->peak = std::max(arena->peak, arena->used);
+#if DO_DEBUG_LINEAR_ALLOC
+    dlog("Dptr:%p BlckS:%lu Mused:%lu", (void*)next_addr, padding + size, arena->used);
+#endif
     return (void *)next_addr;
 }
 

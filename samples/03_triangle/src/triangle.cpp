@@ -47,21 +47,15 @@ void setup_rendering(vkr_context *vk)
 
     vkr_pipeline_cfg info{};
 
-    platform_file_err_desc err{};
-    const char *frag_fname = "shaders/triangle.frag.spv";
-    const char *vert_fname = "shaders/triangle.vert.spv";
-
-    platform_read_file(frag_fname, &info.frag_shader_data, 0, &err);
-    if (err.code != err_code::PLATFORM_NO_ERROR) {
-        wlog("Error reading file %s from disk (code %d): %s", frag_fname, err.code, err.str);
-        return;
-    }
-
-    err = {};
-    platform_read_file(vert_fname, &info.vert_shader_data, 0, &err);
-    if (err.code != err_code::PLATFORM_NO_ERROR) {
-        wlog("Error reading file %s from disk (code %d): %s", vert_fname, err.code, err.str);
-        return;
+    const char *fnames[] = {"shaders/triangle.vert.spv","shaders/triangle.frag.spv"};
+    for (int i = 0; i <= VKR_SHADER_STAGE_FRAG; ++i) {
+        platform_file_err_desc err{};
+        platform_read_file(fnames[i], &info.shader_stages[i].code, 0, &err);
+        if (err.code != err_code::PLATFORM_NO_ERROR) {
+            wlog("Error reading file %s from disk (code %d): %s", fnames[i], err.code, err.str);
+            return;
+        }
+        info.shader_stages[i].entry_point = "main";
     }
 
     info.rpass = &vk->inst.device.render_passes[rpass_ind];
@@ -80,7 +74,6 @@ void record_command_buffer(vkr_command_buffer *cmd_buf, vkr_framebuffer *fb, vkr
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    // ilog("Viewport size: {%d %d}", fb->size.w, fb->size.h);
     viewport.width = fb->size.w;
     viewport.height = fb->size.h;
     viewport.minDepth = 0.0f;
@@ -166,7 +159,7 @@ int app_run_frame(platform_ctxt *ctxt, app_data *app)
     int result = vkAcquireNextImageKHR(dev->hndl, dev->swapchain.swapchain, UINT64_MAX, cur_frame->image_avail, VK_NULL_HANDLE, &im_ind);
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         wlog("Failed to acquire swapchain image");
-        return err_code::PLATFORM_RUN_FRAME;
+        return err_code::PLATFORM_NO_ERROR;
     }
 
     vkResetFences(dev->hndl, 1, &cur_frame->in_flight);

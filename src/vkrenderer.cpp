@@ -994,37 +994,58 @@ void vkr_terminate_render_pass(const vkr_context *vk, const vkr_rpass *rpass)
     vkDestroyRenderPass(vk->inst.device.hndl, rpass->hndl, &vk->alloc_cbs);
 }
 
+VkShaderStageFlagBits vkr_shader_stage_type_bits(vkr_shader_stage_type st_type)
+{
+    switch (st_type) {
+    case(VKR_SHADER_STAGE_VERT):
+        return VK_SHADER_STAGE_VERTEX_BIT;
+    case(VKR_SHADER_STAGE_FRAG):
+        return VK_SHADER_STAGE_FRAGMENT_BIT;
+    default:
+        elog("Shader type unknown");
+        assert(true);
+        return (VkShaderStageFlagBits)-1;
+    }
+}
+
+const char *vkr_shader_stage_type_str(vkr_shader_stage_type st_type){
+    switch (st_type) {
+    case(VKR_SHADER_STAGE_VERT):
+        return "vert";
+    case(VKR_SHADER_STAGE_FRAG):
+        return "frag";
+    default:
+        elog("Shader type unknown");
+        assert(true);
+        return "unknown";
+    }
+}
+
 int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pipeline *pipe_info)
 {
     ilog("Initializing pipeline");
-    // Take care of the shaders
-    VkShaderModule vert, frag;
-    int err = vkr_init_shader_module(vk, &cfg->vert_shader_data, &vert);
-    if (err != err_code::VKR_NO_ERROR) {
-        elog("Could not initialized vert shader module ");
-        return err;
+    VkPipelineShaderStageCreateInfo stages[VKR_SHADER_STAGE_COUNT]{};
+    u32 actual_stagei = 0;
+    for (u32 stagei = 0; stagei < VKR_SHADER_STAGE_COUNT; ++stagei) {
+        if (cfg->shader_stages[stagei].code.size > 0) {
+            int err = vkr_init_shader_module(vk, &cfg->shader_stages[stagei].code, &stages[actual_stagei].module);
+            if (err != err_code::VKR_NO_ERROR) {
+                // Destroy the previously successfully initialized shader modules
+                for (int previ = 0; previ < actual_stagei; ++previ) {
+                    vkr_terminate_shader_module(vk, stages[previ].module);
+                }
+                elog("Could not initialize %s shader module", vkr_shader_stage_type_str((vkr_shader_stage_type)stagei));
+                return err;
+            }
+            
+            stages[actual_stagei].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            stages[actual_stagei].stage = vkr_shader_stage_type_bits((vkr_shader_stage_type)stagei);
+            stages[actual_stagei].pName = cfg->shader_stages[stagei].entry_point;
+            ++actual_stagei;
+        }
     }
-    err = vkr_init_shader_module(vk, &cfg->frag_shader_data, &frag);
-    if (err != err_code::VKR_NO_ERROR) {
-        elog("Could not initialized frag shader module ");
-        vkr_terminate_shader_module(vk, vert);
-        return err;
-    }
+    
     pipe_info->rpass = *cfg->rpass;
-
-    VkPipelineShaderStageCreateInfo vert_stage_info{};
-    vert_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vert_stage_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vert_stage_info.module = vert;
-    vert_stage_info.pName = "main";
-
-    VkPipelineShaderStageCreateInfo frag_stage_info{};
-    frag_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    frag_stage_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    frag_stage_info.module = frag;
-    frag_stage_info.pName = "main";
-
-    VkPipelineShaderStageCreateInfo shader_stages[] = {vert_stage_info, frag_stage_info};
 
     // Dynamic state
     VkDynamicState states[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
@@ -1142,15 +1163,17 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
 
     if (vkCreatePipelineLayout(vk->inst.device.hndl, &pipeline_layout_create_inf, &vk->alloc_cbs, &pipe_info->layout_hndl) != VK_SUCCESS) {
         elog("Failed to create pileline layout");
-        vkr_terminate_shader_module(vk, vert);
-        vkr_terminate_shader_module(vk, frag);
+        for (u32 si = 0; si < actual_stagei; ++si) {
+            vkr_terminate_shader_module(vk, stages[si].module);
+        }
         return err_code::VKR_CREATE_PIPELINE_LAYOUT_FAIL;
     }
 
     VkGraphicsPipelineCreateInfo pipeline_info{};
     pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipeline_info.stageCount = 2;
-    pipeline_info.pStages = shader_stages;
+    dlog("Actual stage i: %d", actual_stagei);
+    pipeline_info.stageCount = actual_stagei;
+    pipeline_info.pStages = stages;
     pipeline_info.pVertexInputState = &vertex_input_info;
     pipeline_info.pInputAssemblyState = &input_assembly;
     pipeline_info.pViewportState = &viewport_state;
@@ -1168,13 +1191,15 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
     pipeline_info.basePipelineIndex = -1;
     int err_ret = vkCreateGraphicsPipelines(vk->inst.device.hndl, VK_NULL_HANDLE, 1, &pipeline_info, &vk->alloc_cbs, &pipe_info->hndl);
     if (err_ret != VK_SUCCESS) {
-        vkr_terminate_shader_module(vk, vert);
-        vkr_terminate_shader_module(vk, frag);
+        for (u32 si = 0; si < actual_stagei; ++si) {
+            vkr_terminate_shader_module(vk, stages[si].module);
+        }        
         vkDestroyPipelineLayout(vk->inst.device.hndl, pipe_info->layout_hndl, &vk->alloc_cbs);
         err_ret = err_code::VKR_CREATE_PIPELINE_FAIL;
     }
-    vkr_terminate_shader_module(vk, vert);
-    vkr_terminate_shader_module(vk, frag);
+    for (u32 si = 0; si < actual_stagei; ++si) {
+        vkr_terminate_shader_module(vk, stages[si].module);
+    }
     ilog("Successfully initialized pipeline");
     err_ret = err_code::VKR_NO_ERROR;
     return err_ret;

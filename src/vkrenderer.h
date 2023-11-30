@@ -14,11 +14,7 @@ struct vertex
     vec3 color;
 };
 
-const vertex verts[] = {
-    {{0.0f, -0.5f}, {1.0f, 1.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{-0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}}
-};    
+const vertex verts[] = {{{0.0f, -0.5f}, {1.0f, 1.0f, 0.0f}}, {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}}, {{-0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}}};
 
 namespace err_code
 {
@@ -48,6 +44,13 @@ enum vkr
     VKR_CREATE_BUFFER_FAIL
 };
 }
+
+enum vkr_shader_stage_type
+{
+    VKR_SHADER_STAGE_VERT,
+    VKR_SHADER_STAGE_FRAG,
+    VKR_SHADER_STAGE_COUNT
+};
 
 enum vkr_queue_fam_type
 {
@@ -182,10 +185,15 @@ struct vkr_rpass
     vkr_rpass_cfg cfg;
 };
 
+struct vkr_shader_stage
+{
+    byte_array code;
+    const char *entry_point;
+};
+
 struct vkr_pipeline_cfg
 {
-    byte_array frag_shader_data;
-    byte_array vert_shader_data;
+    vkr_shader_stage shader_stages[VKR_SHADER_STAGE_COUNT];
     const vkr_rpass *rpass;
 };
 
@@ -278,6 +286,8 @@ struct vkr_context
     VkAllocationCallbacks alloc_cbs;
 };
 
+VkShaderStageFlagBits vkr_shader_stage_type_bits(vkr_shader_stage_type st_type);
+const char *vkr_shader_stage_type_str(vkr_shader_stage_type st_type);
 
 const char *vkr_physical_device_type_str(VkPhysicalDeviceType type);
 vkr_queue_families vkr_get_queue_families(const vkr_context *vk, VkPhysicalDevice dev);
@@ -327,7 +337,7 @@ int vkr_init_framebuffer(const vkr_context *vk, const vkr_framebuffer_cfg *cfg, 
 void vkr_terminate_framebuffer(const vkr_context *vk, const vkr_framebuffer *fb);
 
 sizet vkr_add_buffer(vkr_device *device, const vkr_buffer &copy);
-int vkr_init_buffer(vkr_buffer * buffer, const vkr_context *vk);
+int vkr_init_buffer(vkr_buffer *buffer, const vkr_context *vk);
 void vkr_terminate_buffer(const vkr_buffer *buffer, const vkr_context *vk);
 
 // Returns the index if the first swapchain framebuffer added
