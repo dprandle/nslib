@@ -117,14 +117,14 @@ int app_init(platform_ctxt *ctxt, app_data *app)
     }
     setup_rendering(&app->vk);
 
-    auto dev = &app->vk.inst.device;
-    sizet ind = vkr_add_buffer(dev, {});
-    vkr_init_buffer(&dev->buffers[ind], &app->vk);
+    // auto dev = &app->vk.inst.device;
+    // sizet ind = vkr_add_buffer(dev, {});
+    // vkr_init_buffer(&dev->buffers[ind], &app->vk);
 
-    void *data{};
-    vkMapMemory(dev->hndl, dev->buffers[ind].mem_hndl, 0, dev->buffers[ind].size, 0, &data);
-    memcpy(data, verts, dev->buffers[ind].size);
-    vkUnmapMemory(dev->hndl, dev->buffers[ind].mem_hndl);
+    // void *data{};
+    // vkMapMemory(dev->hndl, dev->buffers[ind].mem_hndl, 0, dev->buffers[ind].size, 0, &data);
+    // memcpy(data, verts, dev->buffers[ind].size);
+    // vkUnmapMemory(dev->hndl, dev->buffers[ind].mem_hndl);
     return err_code::PLATFORM_NO_ERROR;
 }
 
@@ -140,9 +140,9 @@ int app_run_frame(platform_ctxt *ctxt, app_data *app)
 {
     auto dev = &app->vk.inst.device;
 
-    if (platform_framebuffer_resized(ctxt->win_hndl)) {
-        vkr_recreate_swapchain(&app->vk.inst, &app->vk, ctxt->win_hndl, 0);
-    }
+    // if (platform_framebuffer_resized(ctxt->win_hndl)) {
+    //     vkr_recreate_swapchain(&app->vk.inst, &app->vk, ctxt->win_hndl, 0);
+    // }
 
     int rframe_ind = ctxt->finished_frames % VKR_RENDER_FRAME_COUNT;
     auto cur_frame = &dev->rframes[rframe_ind];
@@ -150,7 +150,7 @@ int app_run_frame(platform_ctxt *ctxt, app_data *app)
     auto cmd_buf = &dev->qfams[buf_ind.qfam_ind].cmd_pools[buf_ind.pool_ind].buffers[buf_ind.buffer_ind];
     auto pipeline = &dev->pipelines[0];
     auto vert_buf = &dev->buffers[0];
-
+#if 0
     // Wait for the rendering to be done before starting on the next frame and then reset the fence
     vkWaitForFences(dev->hndl, 1, &cur_frame->in_flight, VK_TRUE, UINT64_MAX);
 
@@ -196,6 +196,7 @@ int app_run_frame(platform_ctxt *ctxt, app_data *app)
     present_info.pResults = nullptr; // Optional - check for individual swaps
     vkQueuePresentKHR(dev->qfams[VKR_QUEUE_FAM_TYPE_PRESENT].qs[0].hndl, &present_info);
 
+#endif
     return err_code::PLATFORM_NO_ERROR;
 }
 

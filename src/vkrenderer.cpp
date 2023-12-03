@@ -1254,10 +1254,11 @@ sizet vkr_add_framebuffer(vkr_device *device, const vkr_framebuffer &copy)
     return ind;
 }
 
-void vkr_terminate_framebuffer(const vkr_context *vk, const vkr_framebuffer *fb)
+void vkr_terminate_framebuffer(const vkr_context *vk, vkr_framebuffer *fb)
 {
     ilog("Terminating framebuffer");
     vkDestroyFramebuffer(vk->inst.device.hndl, fb->hndl, &vk->alloc_cbs);
+    arr_terminate(&fb->attachments);
 }
 
 u32 vkr_find_mem_type(u32 type_mask, u32 property_mask, const vkr_phys_device *pdev)
@@ -1352,7 +1353,8 @@ void vkr_init_swapchain_framebuffers(vkr_device *device,
         }
         cfg.attachment_count = iviews.size;
         cfg.attachments = iviews.data;
-        vkr_init_framebuffer(vk, &cfg, &device->framebuffers[fb_offset + i]);
+        //vkr_init_framebuffer(vk, &cfg, &device->framebuffers[fb_offset + i]);
+        arr_terminate(&iviews);
     }
 }
 
@@ -1438,6 +1440,7 @@ int vkr_init(const vkr_cfg *cfg, vkr_context *vk)
                            cfg->device_extension_names,
                            cfg->device_extension_count);
     if (code != err_code::VKR_NO_ERROR) {
+        
         vkr_terminate(vk);
         return code;
     }

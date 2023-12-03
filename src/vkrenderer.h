@@ -334,7 +334,7 @@ void vkr_terminate_pipeline(const vkr_context *vk_ctxt, const vkr_pipeline *pipe
 
 sizet vkr_add_framebuffer(vkr_device *device, const vkr_framebuffer &copy);
 int vkr_init_framebuffer(const vkr_context *vk, const vkr_framebuffer_cfg *cfg, vkr_framebuffer *framebuffer);
-void vkr_terminate_framebuffer(const vkr_context *vk, const vkr_framebuffer *fb);
+void vkr_terminate_framebuffer(const vkr_context *vk, vkr_framebuffer *fb);
 
 sizet vkr_add_buffer(vkr_device *device, const vkr_buffer &copy);
 int vkr_init_buffer(vkr_buffer *buffer, const vkr_context *vk);
