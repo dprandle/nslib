@@ -47,6 +47,77 @@ void setup_rendering(vkr_context *vk)
 
     vkr_pipeline_cfg info{};
 
+    arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_VIEWPORT);
+    arr_push_back(&info.dynamic_states,  VK_DYNAMIC_STATE_SCISSOR);
+
+//    arr_emplace_back(&info.dynamic_states, )
+
+    // Vertex binding:
+    VkVertexInputBindingDescription binding_desc{};
+    binding_desc.binding = 0;
+    binding_desc.stride = sizeof(vertex);
+    binding_desc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    arr_push_back(&info.vert_binding_desc, binding_desc);
+
+    // Attribute Descriptions - so far we just have two
+    VkVertexInputAttributeDescription attrib_desc{};
+    attrib_desc.binding = 0;
+    attrib_desc.location = 0;
+    attrib_desc.format = VK_FORMAT_R32G32_SFLOAT;
+    attrib_desc.offset = offsetof(vertex, pos);
+    arr_push_back(&info.vert_attrib_desc, attrib_desc);    
+    attrib_desc.binding = 0;
+    attrib_desc.location = 1;
+    attrib_desc.format = VK_FORMAT_R32G32B32_SFLOAT;
+    attrib_desc.offset = offsetof(vertex, color);
+    arr_push_back(&info.vert_attrib_desc, attrib_desc);
+
+    // Viewports and scissors
+    VkViewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = (float)vk->inst.device.swapchain.extent.width;
+    viewport.height = (float)vk->inst.device.swapchain.extent.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    arr_push_back(&info.viewports, viewport);
+
+    VkRect2D scissor{};
+    scissor.offset = {0, 0};
+    scissor.extent = vk->inst.device.swapchain.extent;
+    arr_push_back(&info.scissors, scissor);
+
+    // Input Assembly
+    info.input_assembly.primitive_topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    info.input_assembly.primitive_restart_enable = false;
+
+    // Raster options
+    info.raster.depth_clamp_enable = false;
+    info.raster.rasterizer_discard_enable = false;
+    info.raster.polygon_mode = VK_POLYGON_MODE_FILL;
+    info.raster.line_width = 1.0f;
+    info.raster.cull_mode = VK_CULL_MODE_BACK_BIT;
+    info.raster.front_face = VK_FRONT_FACE_CLOCKWISE;
+    info.raster.depth_bias_enable = false;
+    info.raster.depth_bias_constant_factor = 0.0f;
+    info.raster.depth_bias_clamp = 0.0f;
+    info.raster.depth_bias_slope_factor = 0.0f;
+
+    // Multisampling defaults are good
+
+    // Color blending
+    VkPipelineColorBlendAttachmentState col_blnd_att{};
+    col_blnd_att.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    col_blnd_att.blendEnable = VK_FALSE;
+    col_blnd_att.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;  // Optional
+    col_blnd_att.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
+    col_blnd_att.colorBlendOp = VK_BLEND_OP_ADD;             // Optional
+    col_blnd_att.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;  // Optional
+    col_blnd_att.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
+    col_blnd_att.alphaBlendOp = VK_BLEND_OP_ADD;             // Optional
+    arr_push_back(&info.col_blend.attachments, col_blnd_att);
+
+    // Our basic shaders
     const char *fnames[] = {"shaders/triangle.vert.spv","shaders/triangle.frag.spv"};
     for (int i = 0; i <= VKR_SHADER_STAGE_FRAG; ++i) {
         platform_file_err_desc err{};
@@ -117,14 +188,14 @@ int app_init(platform_ctxt *ctxt, app_data *app)
     }
     setup_rendering(&app->vk);
 
-    // auto dev = &app->vk.inst.device;
-    // sizet ind = vkr_add_buffer(dev, {});
-    // vkr_init_buffer(&dev->buffers[ind], &app->vk);
+    auto dev = &app->vk.inst.device;
+    sizet ind = vkr_add_buffer(dev, {});
+    vkr_init_buffer(&dev->buffers[ind], &app->vk);
 
-    // void *data{};
-    // vkMapMemory(dev->hndl, dev->buffers[ind].mem_hndl, 0, dev->buffers[ind].size, 0, &data);
-    // memcpy(data, verts, dev->buffers[ind].size);
-    // vkUnmapMemory(dev->hndl, dev->buffers[ind].mem_hndl);
+    void *data{};
+    vkMapMemory(dev->hndl, dev->buffers[ind].mem_hndl, 0, dev->buffers[ind].size, 0, &data);
+    memcpy(data, verts, dev->buffers[ind].size);
+    vkUnmapMemory(dev->hndl, dev->buffers[ind].mem_hndl);
     return err_code::PLATFORM_NO_ERROR;
 }
 
@@ -140,9 +211,9 @@ int app_run_frame(platform_ctxt *ctxt, app_data *app)
 {
     auto dev = &app->vk.inst.device;
 
-    // if (platform_framebuffer_resized(ctxt->win_hndl)) {
-    //     vkr_recreate_swapchain(&app->vk.inst, &app->vk, ctxt->win_hndl, 0);
-    // }
+    if (platform_framebuffer_resized(ctxt->win_hndl)) {
+        vkr_recreate_swapchain(&app->vk.inst, &app->vk, ctxt->win_hndl, 0);
+    }
 
     int rframe_ind = ctxt->finished_frames % VKR_RENDER_FRAME_COUNT;
     auto cur_frame = &dev->rframes[rframe_ind];
@@ -150,7 +221,7 @@ int app_run_frame(platform_ctxt *ctxt, app_data *app)
     auto cmd_buf = &dev->qfams[buf_ind.qfam_ind].cmd_pools[buf_ind.pool_ind].buffers[buf_ind.buffer_ind];
     auto pipeline = &dev->pipelines[0];
     auto vert_buf = &dev->buffers[0];
-#if 0
+
     // Wait for the rendering to be done before starting on the next frame and then reset the fence
     vkWaitForFences(dev->hndl, 1, &cur_frame->in_flight, VK_TRUE, UINT64_MAX);
 
@@ -195,8 +266,6 @@ int app_run_frame(platform_ctxt *ctxt, app_data *app)
     present_info.pImageIndices = &im_ind;
     present_info.pResults = nullptr; // Optional - check for individual swaps
     vkQueuePresentKHR(dev->qfams[VKR_QUEUE_FAM_TYPE_PRESENT].qs[0].hndl, &present_info);
-
-#endif
     return err_code::PLATFORM_NO_ERROR;
 }
 

@@ -1048,73 +1048,43 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
     pipe_info->rpass = *cfg->rpass;
 
     // Dynamic state
-    VkDynamicState states[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
     VkPipelineDynamicStateCreateInfo dyn_state{};
     dyn_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dyn_state.dynamicStateCount = 2;
-    dyn_state.pDynamicStates = states;
-
-    // Vertex binding:
-    VkVertexInputBindingDescription binding_desc;
-    binding_desc.binding = 0;
-    binding_desc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-    binding_desc.stride = sizeof(vertex);
-
-    // Attribute Descriptions - so far we just have two
-    VkVertexInputAttributeDescription attrib_desc[2];
-    attrib_desc[0].binding = 0;
-    attrib_desc[0].location = 0;
-    attrib_desc[0].format = VK_FORMAT_R32G32_SFLOAT;
-    attrib_desc[0].offset = offsetof(vertex, pos);
-    attrib_desc[1].binding = 0;
-    attrib_desc[1].location = 1;
-    attrib_desc[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-    attrib_desc[1].offset = offsetof(vertex, color);
+    dyn_state.dynamicStateCount = cfg->dynamic_states.size;
+    dyn_state.pDynamicStates = cfg->dynamic_states.data;
 
     // Vertex Input
     VkPipelineVertexInputStateCreateInfo vertex_input_info{};
     vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertex_input_info.vertexBindingDescriptionCount = 1;
-    vertex_input_info.pVertexBindingDescriptions = &binding_desc;
-    vertex_input_info.vertexAttributeDescriptionCount = 2;
-    vertex_input_info.pVertexAttributeDescriptions = attrib_desc; // Optional
+    vertex_input_info.vertexBindingDescriptionCount = cfg->vert_binding_desc.size;
+    vertex_input_info.pVertexBindingDescriptions = cfg->vert_binding_desc.data;
+    vertex_input_info.vertexAttributeDescriptionCount = cfg->vert_attrib_desc.size;
+    vertex_input_info.pVertexAttributeDescriptions = cfg->vert_attrib_desc.data;
 
     // Input assembly
     VkPipelineInputAssemblyStateCreateInfo input_assembly{};
     input_assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    input_assembly.primitiveRestartEnable = VK_FALSE;
+    input_assembly.topology = cfg->input_assembly.primitive_topology;
+    input_assembly.primitiveRestartEnable = cfg->input_assembly.primitive_restart_enable;
 
-    // Viewport and Scissors
-    VkViewport viewport{};
-    viewport.x = 0.0f;
-    viewport.y = 0.0f;
-    viewport.width = (float)vk->inst.device.swapchain.extent.width;
-    viewport.height = (float)vk->inst.device.swapchain.extent.height;
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-
-    VkRect2D scissor{};
-    scissor.offset = {0, 0};
-    scissor.extent = vk->inst.device.swapchain.extent;
-
+    // Viewport and scissors (default)
     VkPipelineViewportStateCreateInfo viewport_state{};
     viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewport_state.viewportCount = 1;
-    viewport_state.pViewports = &viewport;
-    viewport_state.scissorCount = 1;
-    viewport_state.pScissors = &scissor;
+    viewport_state.viewportCount = cfg->viewports.size;
+    viewport_state.pViewports = cfg->viewports.data;
+    viewport_state.scissorCount = cfg->scissors.size;
+    viewport_state.pScissors = cfg->scissors.data;
 
     // Rasterizer
     VkPipelineRasterizationStateCreateInfo rstr{};
     rstr.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rstr.depthClampEnable = VK_FALSE;
-    rstr.rasterizerDiscardEnable = VK_FALSE;
+    rstr.depthClampEnable = false;
+    rstr.rasterizerDiscardEnable = false;
     rstr.polygonMode = VK_POLYGON_MODE_FILL;
     rstr.lineWidth = 1.0f;
     rstr.cullMode = VK_CULL_MODE_BACK_BIT;
     rstr.frontFace = VK_FRONT_FACE_CLOCKWISE;
-    rstr.depthBiasEnable = VK_FALSE;
+    rstr.depthBiasEnable = false;
     rstr.depthBiasConstantFactor = 0.0f;
     rstr.depthBiasClamp = 0.0f;
     rstr.depthBiasSlopeFactor = 0.0f;
@@ -1122,44 +1092,33 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
     // Multisampling
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-    multisampling.minSampleShading = 1.0f;          // Optional
-    multisampling.pSampleMask = nullptr;            // Optional
-    multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
-    multisampling.alphaToOneEnable = VK_FALSE;      // Optional
+    multisampling.sampleShadingEnable = cfg->multisampling.sample_shading_enable;
+    multisampling.rasterizationSamples = cfg->multisampling.rasterization_samples;
+    multisampling.minSampleShading = cfg->multisampling.min_sample_shading;
+    multisampling.pSampleMask = cfg->multisampling.sample_masks;
+    multisampling.alphaToCoverageEnable = cfg->multisampling.alpha_to_coverage_enable;
+    multisampling.alphaToOneEnable = cfg->multisampling.alpha_to_one_enable;
 
     // Depth/Stencil - Skip for now
 
     // Color blending
-    VkPipelineColorBlendAttachmentState col_blnd_att{};
-    col_blnd_att.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    col_blnd_att.blendEnable = VK_FALSE;
-    col_blnd_att.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;  // Optional
-    col_blnd_att.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
-    col_blnd_att.colorBlendOp = VK_BLEND_OP_ADD;             // Optional
-    col_blnd_att.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;  // Optional
-    col_blnd_att.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
-    col_blnd_att.alphaBlendOp = VK_BLEND_OP_ADD;             // Optional
-
     VkPipelineColorBlendStateCreateInfo col_blend_state{};
     col_blend_state.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    col_blend_state.logicOpEnable = VK_FALSE;
-    col_blend_state.logicOp = VK_LOGIC_OP_COPY; // Optional
-    col_blend_state.attachmentCount = 1;
-    col_blend_state.pAttachments = &col_blnd_att;
-    col_blend_state.blendConstants[0] = 0.0f; // Optional
-    col_blend_state.blendConstants[1] = 0.0f; // Optional
-    col_blend_state.blendConstants[2] = 0.0f; // Optional
-    col_blend_state.blendConstants[3] = 0.0f; // Optional
+    col_blend_state.logicOpEnable = cfg->col_blend.logic_op_enabled;
+    col_blend_state.logicOp = cfg->col_blend.logic_op;
+    col_blend_state.attachmentCount = cfg->col_blend.attachments.size;
+    col_blend_state.pAttachments = cfg->col_blend.attachments.data;
+    for (int i = 0; i < cfg->col_blend.blend_constants.size(); ++i) {
+        col_blend_state.blendConstants[i] = cfg->col_blend.blend_constants[i];
+    }
 
     // Pipeline layout - where we would bind uniforms and such
     VkPipelineLayoutCreateInfo pipeline_layout_create_inf{};
     pipeline_layout_create_inf.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipeline_layout_create_inf.setLayoutCount = 0;            // Optional
-    pipeline_layout_create_inf.pSetLayouts = nullptr;         // Optional
-    pipeline_layout_create_inf.pushConstantRangeCount = 0;    // Optional
-    pipeline_layout_create_inf.pPushConstantRanges = nullptr; // Optional
+    pipeline_layout_create_inf.setLayoutCount = cfg->set_layouts.size;
+    pipeline_layout_create_inf.pSetLayouts = cfg->set_layouts.data;
+    pipeline_layout_create_inf.pushConstantRangeCount = cfg->push_constant_ranges.size;
+    pipeline_layout_create_inf.pPushConstantRanges = cfg->push_constant_ranges.data;
 
     if (vkCreatePipelineLayout(vk->inst.device.hndl, &pipeline_layout_create_inf, &vk->alloc_cbs, &pipe_info->layout_hndl) != VK_SUCCESS) {
         elog("Failed to create pileline layout");
@@ -1171,10 +1130,9 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
 
     VkGraphicsPipelineCreateInfo pipeline_info{};
     pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    dlog("Actual stage i: %d", actual_stagei);
     pipeline_info.stageCount = actual_stagei;
-    pipeline_info.pStages = stages;
-    pipeline_info.pVertexInputState = &vertex_input_info;
+    pipeline_info.pStages = stages; // done 
+    pipeline_info.pVertexInputState = &vertex_input_info; // done
     pipeline_info.pInputAssemblyState = &input_assembly;
     pipeline_info.pViewportState = &viewport_state;
     pipeline_info.pRasterizationState = &rstr;
@@ -1182,13 +1140,15 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
     pipeline_info.pDepthStencilState = nullptr; // Optional
     pipeline_info.pColorBlendState = &col_blend_state;
     pipeline_info.pDynamicState = &dyn_state;
+
     pipeline_info.layout = pipe_info->layout_hndl;
     pipeline_info.renderPass = cfg->rpass->hndl;
     pipeline_info.subpass = 0;
 
-    // Optional
+    // This could possibly be used in future but who knows
     pipeline_info.basePipelineHandle = VK_NULL_HANDLE;
     pipeline_info.basePipelineIndex = -1;
+
     int err_ret = vkCreateGraphicsPipelines(vk->inst.device.hndl, VK_NULL_HANDLE, 1, &pipeline_info, &vk->alloc_cbs, &pipe_info->hndl);
     if (err_ret != VK_SUCCESS) {
         for (u32 si = 0; si < actual_stagei; ++si) {
@@ -1353,7 +1313,7 @@ void vkr_init_swapchain_framebuffers(vkr_device *device,
         }
         cfg.attachment_count = iviews.size;
         cfg.attachments = iviews.data;
-        //vkr_init_framebuffer(vk, &cfg, &device->framebuffers[fb_offset + i]);
+        vkr_init_framebuffer(vk, &cfg, &device->framebuffers[fb_offset + i]);
         arr_terminate(&iviews);
     }
 }

@@ -191,10 +191,88 @@ struct vkr_shader_stage
     const char *entry_point;
 };
 
+struct vkr_descriptor_set_layout
+{
+    VkDescriptorSetLayout hndl;
+};
+
+struct vkr_push_constant_range
+{
+    VkPushConstantRange hndl;
+};
+
+struct vkr_pipeline_cfg_raster
+{
+    bool depth_clamp_enable;
+    bool rasterizer_discard_enable;
+    VkPolygonMode polygon_mode;
+    float line_width;
+    VkCullModeFlags cull_mode;
+    VkFrontFace front_face;
+    bool depth_bias_enable;
+    float depth_bias_constant_factor{0.0f};
+    float depth_bias_clamp{0.0f};
+    float depth_bias_slope_factor{0.0f};
+};
+
+struct vkr_pipeline_cfg_multisample
+{
+    bool sample_shading_enable{false};
+    VkSampleCountFlagBits rasterization_samples{VK_SAMPLE_COUNT_1_BIT};
+    float min_sample_shading{1.0f};
+    const VkSampleMask *sample_masks{nullptr};
+    bool alpha_to_coverage_enable{false};
+    bool alpha_to_one_enable{false};
+};
+
+struct vkr_pipeline_cfg_input_assembly
+{
+    bool primitive_restart_enable{};
+    VkPrimitiveTopology primitive_topology{};
+};
+
+struct vkr_pipeline_cfg_color_blending
+{
+    bool logic_op_enabled{false};
+    VkLogicOp logic_op{};
+    static_array<VkPipelineColorBlendAttachmentState,16> attachments{};
+    vec4 blend_constants{};
+};
+
 struct vkr_pipeline_cfg
 {
     vkr_shader_stage shader_stages[VKR_SHADER_STAGE_COUNT];
+
+    // Render pass info
     const vkr_rpass *rpass;
+    u32 subpass{};
+
+    // Dynamic states
+    static_array<VkDynamicState, 32> dynamic_states{};
+
+    // Vertex Input
+    static_array<VkVertexInputBindingDescription, 32> vert_binding_desc{};
+    static_array<VkVertexInputAttributeDescription, 32> vert_attrib_desc{};
+
+    // Default Scissor/Viewport
+    static_array<VkViewport, 16> viewports{};
+    static_array<VkRect2D, 16> scissors{};
+
+    // Input assembly
+    vkr_pipeline_cfg_input_assembly input_assembly{};
+
+    // Rasterization
+    vkr_pipeline_cfg_raster raster;
+
+    // Multisampling
+    vkr_pipeline_cfg_multisample multisampling;
+
+    // Color blending
+    vkr_pipeline_cfg_color_blending col_blend{};
+
+    // Descriptor Sets and push constants
+    static_array<VkDescriptorSetLayout, 32> set_layouts;
+    static_array<VkPushConstantRange, 32> push_constant_ranges;
 };
 
 struct vkr_pipeline

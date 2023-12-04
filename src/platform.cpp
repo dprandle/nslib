@@ -374,9 +374,9 @@ void platform_start_frame(platform_ctxt *ctxt)
 {
     ptimer_split(&ctxt->time_pts);
     platform_window_process_input(ctxt);
-    if (ctxt->arenas.frame_linear.used > 0) {
-        dlog("Clearing %d used bytes from frame linear arena", ctxt->arenas.frame_linear.used);
-    }
+    // if (ctxt->arenas.frame_linear.used > 0) {
+    //     dlog("Clearing %d used bytes from frame linear arena", ctxt->arenas.frame_linear.used);
+    // }
     mem_reset_arena(&ctxt->arenas.frame_linear);
 }
 
