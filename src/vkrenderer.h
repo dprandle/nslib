@@ -89,6 +89,15 @@ struct vk_arenas
     mem_arena *command_arena{};
 };
 
+struct vkr_buffer_cfg
+{
+    sizet size;
+    VkBufferUsageFlags usage;
+    VkSharingMode sharing_mode;
+    VkMemoryPropertyFlags mem_flags;
+    static_array<u32, 16> q_fam_indices;
+};
+
 struct vkr_buffer
 {
     VkBuffer hndl;
@@ -152,10 +161,15 @@ struct vkr_phys_device
     VkPhysicalDeviceMemoryProperties mem_properties{};
 };
 
-struct vkr_cmd_buf_ind
+struct vkr_cmd_pool_ind
 {
     u32 qfam_ind;
     u32 pool_ind;
+};
+
+struct vkr_cmd_buf_ind
+{
+    vkr_cmd_pool_ind pool_ind;
     u32 buffer_ind;
 };
 
@@ -249,7 +263,7 @@ struct vkr_pipeline_cfg_color_blending
 {
     bool logic_op_enabled{false};
     VkLogicOp logic_op{};
-    static_array<VkPipelineColorBlendAttachmentState,16> attachments{};
+    static_array<VkPipelineColorBlendAttachmentState, 16> attachments{};
     vec4 blend_constants{};
 };
 
@@ -323,6 +337,7 @@ struct vkr_device_queue_fam_info
 {
     u32 fam_ind;
     u32 default_pool;
+    u32 transient_pool;
     array<vkr_queue> qs;
     array<vkr_command_pool> cmd_pools;
 };
@@ -404,12 +419,13 @@ void vkr_enumerate_device_extensions(const vkr_phys_device *pdevice,
 // indicated as such
 void vkr_enumerate_validation_layers(const char *const *enabled_layers, u32 enabled_layer_count, const vk_arenas *arenas);
 
-vkr_cmd_buf_add_result vkr_add_cmd_bufs(const vkr_context *vk, vkr_command_pool *pool, u32 count = 1);
+vkr_cmd_buf_add_result vkr_add_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, u32 count = 1);
+void vkr_remove_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, u32 ind, u32 count = 1);
 
-u32 vkr_find_mem_type(u32 type_mask, u32 property_mask, const vkr_phys_device *pdev);
+u32 vkr_find_mem_type(u32 type_flags, VkMemoryPropertyFlags property_flags, const vkr_phys_device *pdev);
 
 sizet vkr_add_cmd_pool(vkr_device_queue_fam_info *qfam, const vkr_command_pool &cpool);
-int vkr_init_cmd_pool(const vkr_context *vk, u32 fam_ind, vkr_command_pool *cpool);
+int vkr_init_cmd_pool(const vkr_context *vk, u32 fam_ind, VkCommandPoolCreateFlags flags, vkr_command_pool *cpool);
 void vkr_terminate_cmd_pool(const vkr_context *vk, u32 fam_ind, vkr_command_pool *cpool);
 
 // Create a shader module from bytecode
@@ -429,7 +445,7 @@ int vkr_init_framebuffer(const vkr_context *vk, const vkr_framebuffer_cfg *cfg, 
 void vkr_terminate_framebuffer(const vkr_context *vk, vkr_framebuffer *fb);
 
 sizet vkr_add_buffer(vkr_device *device, const vkr_buffer &copy);
-int vkr_init_buffer(vkr_buffer *buffer, const vkr_context *vk);
+int vkr_init_buffer(vkr_buffer *buffer, const vkr_buffer_cfg *cfg, const vkr_context *vk);
 void vkr_terminate_buffer(const vkr_buffer *buffer, const vkr_context *vk);
 
 // Returns the index if the first swapchain framebuffer added
@@ -473,5 +489,7 @@ int vkr_end_cmd_buf(const vkr_command_buffer *buf);
 
 void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf, const vkr_framebuffer *fb);
 void vkr_cmd_end_rpass(const vkr_command_buffer *cmd_buf);
+
+int vkr_copy_buffer(vkr_buffer *dest, const vkr_buffer *src, vkr_device_queue_fam_info *cmd_q, const vkr_context *vk, VkBufferCopy region = {});
 
 } // namespace nslib

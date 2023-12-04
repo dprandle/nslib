@@ -80,8 +80,6 @@ void setup_rendering(vkr_context *vk)
     arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_VIEWPORT);
     arr_push_back(&info.dynamic_states,  VK_DYNAMIC_STATE_SCISSOR);
 
-//    arr_emplace_back(&info.dynamic_states, )
-
     // Vertex binding:
     VkVertexInputBindingDescription binding_desc{};
     binding_desc.binding = 0;
@@ -163,6 +161,33 @@ void setup_rendering(vkr_context *vk)
     sizet pipe_ind = vkr_add_pipeline(&vk->inst.device, {});
     vkr_init_pipeline(vk, &info, &vk->inst.device.pipelines[pipe_ind]);
     vkr_init_swapchain_framebuffers(&vk->inst.device, vk, info.rpass, nullptr);
+
+    auto dev = &vk->inst.device;
+
+    // Create staging buffer
+    vkr_buffer staging_buf{};
+    vkr_buffer_cfg b_cfg{};
+    b_cfg.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
+    b_cfg.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    b_cfg.size = sizeof(vertex)*3;
+    b_cfg.mem_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    vkr_init_buffer(&staging_buf, &b_cfg, vk);
+
+    // Copy data to staging buffer
+    void *data{};
+    vkMapMemory(dev->hndl, staging_buf.mem_hndl, 0, staging_buf.size, 0, &data);
+    memcpy(data, verts, staging_buf.size);
+    vkUnmapMemory(dev->hndl, staging_buf.mem_hndl);
+
+    // Create actual buffer
+    sizet ind = vkr_add_buffer(dev, {});    
+    b_cfg.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    b_cfg.mem_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    vkr_init_buffer(&dev->buffers[ind], &b_cfg, vk);
+
+    // Run copy buffer command
+    vkr_copy_buffer(&dev->buffers[ind], &staging_buf, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
+    vkr_terminate_buffer(&staging_buf, vk);
 }
 
 void record_command_buffer(vkr_command_buffer *cmd_buf, vkr_framebuffer *fb, vkr_pipeline *pipeline, vkr_buffer *vert_buf)
@@ -217,15 +242,6 @@ int app_init(platform_ctxt *ctxt, app_data *app)
         return err_code::PLATFORM_INIT;
     }
     setup_rendering(&app->vk);
-
-    auto dev = &app->vk.inst.device;
-    sizet ind = vkr_add_buffer(dev, {});
-    vkr_init_buffer(&dev->buffers[ind], &app->vk);
-
-    void *data{};
-    vkMapMemory(dev->hndl, dev->buffers[ind].mem_hndl, 0, dev->buffers[ind].size, 0, &data);
-    memcpy(data, verts, dev->buffers[ind].size);
-    vkUnmapMemory(dev->hndl, dev->buffers[ind].mem_hndl);
     return err_code::PLATFORM_NO_ERROR;
 }
 
@@ -248,7 +264,7 @@ int app_run_frame(platform_ctxt *ctxt, app_data *app)
     int rframe_ind = ctxt->finished_frames % VKR_RENDER_FRAME_COUNT;
     auto cur_frame = &dev->rframes[rframe_ind];
     auto buf_ind = cur_frame->cmd_buf_ind;
-    auto cmd_buf = &dev->qfams[buf_ind.qfam_ind].cmd_pools[buf_ind.pool_ind].buffers[buf_ind.buffer_ind];
+    auto cmd_buf = &dev->qfams[buf_ind.pool_ind.qfam_ind].cmd_pools[buf_ind.pool_ind.pool_ind].buffers[buf_ind.buffer_ind];
     auto pipeline = &dev->pipelines[0];
     auto vert_buf = &dev->buffers[0];
 

@@ -529,17 +529,22 @@ int vkr_init_device(vkr_device *dev,
             ilog("Getting queue %d from queue family %d: %p", adjusted_ind, qfams->qinfo[i].index, dev->qfams[i].qs[qind]);
         }
 
-        vkr_command_pool qpool;
-        if (vkr_init_cmd_pool(vk, dev->qfams[i].fam_ind, &qpool) == err_code::VKR_NO_ERROR) {
+        vkr_command_pool qpool{};
+        if (vkr_init_cmd_pool(vk, dev->qfams[i].fam_ind, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, &qpool) == err_code::VKR_NO_ERROR) {
             u32 dpool = vkr_add_cmd_pool(&dev->qfams[i], qpool);
             dev->qfams[i].default_pool = dpool;
-            // arr_init(&dev->qfams[i].cmd_pools[dpool].buffers, vk->cfg.arenas.persistent_arena);
+        }
+
+        vkr_command_pool qpool_transient{};
+        if (vkr_init_cmd_pool(vk, dev->qfams[i].fam_ind, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, &qpool_transient) == err_code::VKR_NO_ERROR) {
+            u32 pool_transient_ind = vkr_add_cmd_pool(&dev->qfams[i], qpool_transient);
+            dev->qfams[i].transient_pool = pool_transient_ind;
         }
     }
 
     // Create our rframes command buffers
     auto gfx_fam = &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX];
-    auto buf_res = vkr_add_cmd_bufs(vk, &gfx_fam->cmd_pools[gfx_fam->default_pool], VKR_RENDER_FRAME_COUNT);
+    auto buf_res = vkr_add_cmd_bufs(&gfx_fam->cmd_pools[gfx_fam->default_pool], vk, VKR_RENDER_FRAME_COUNT);
     if (buf_res.err_code != err_code::VKR_NO_ERROR) {
         vkr_terminate_device(dev, vk);
         return buf_res.err_code;
@@ -847,7 +852,7 @@ void vkr_recreate_swapchain(vkr_instance *inst, const vkr_context *vk, void *win
     vkr_init_swapchain_framebuffers(&inst->device, vk, &inst->device.render_passes[rpass_ind], nullptr);
 }
 
-vkr_cmd_buf_add_result vkr_add_cmd_bufs(const vkr_context *vk, vkr_command_pool *pool, u32 count)
+vkr_cmd_buf_add_result vkr_add_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, u32 count)
 {
     vkr_cmd_buf_add_result ret{};
 
@@ -880,12 +885,25 @@ vkr_cmd_buf_add_result vkr_add_cmd_bufs(const vkr_context *vk, vkr_command_pool 
     return ret;
 }
 
-int vkr_init_cmd_pool(const vkr_context *vk, u32 fam_ind, vkr_command_pool *cpool)
+void vkr_remove_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, u32 ind, u32 count)
+{
+    array<VkCommandBuffer> hndls{};
+    arr_init(&hndls, vk->cfg.arenas.command_arena);
+    arr_resize(&hndls, count);
+    for (u32 i = 0; i < count; ++i) {
+        hndls[i] = pool->buffers[ind + i].hndl;
+    }
+    vkFreeCommandBuffers(vk->inst.device.hndl, pool->hndl, count, hndls.data);
+    arr_erase(&pool->buffers, &pool->buffers[ind], &pool->buffers[ind+count]);
+}
+
+
+int vkr_init_cmd_pool(const vkr_context *vk, u32 fam_ind, VkCommandPoolCreateFlags flags, vkr_command_pool *cpool)
 {
     ilog("Initializing command pool");
     VkCommandPoolCreateInfo pool_info{};
     pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    pool_info.flags = flags;
     pool_info.queueFamilyIndex = fam_ind;
     int err = vkCreateCommandPool(vk->inst.device.hndl, &pool_info, &vk->alloc_cbs, &cpool->hndl);
     if (err != VK_SUCCESS) {
@@ -934,7 +952,7 @@ void vkr_terminate_shader_module(const vkr_context *vk, VkShaderModule module)
 int vkr_init_render_pass(const vkr_context *vk, const vkr_rpass_cfg *cfg, vkr_rpass *rpass)
 {
     ilog("Initializing render pass");
-    
+
     VkAttachmentReference col_att_ref{};
     col_att_ref.attachment = 0;
     col_att_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -943,19 +961,32 @@ int vkr_init_render_pass(const vkr_context *vk, const vkr_rpass_cfg *cfg, vkr_rp
     array<VkSubpassDescription> subpasses{};
     arr_init(&subpasses, vk->cfg.arenas.command_arena);
     arr_resize(&subpasses, cfg->subpasses.size);
-    
+
     for (int i = 0; i < cfg->subpasses.size; ++i) {
         subpasses[i].pipelineBindPoint = cfg->subpasses[i].pipeline_bind_point;
+
         subpasses[i].colorAttachmentCount = cfg->subpasses[i].color_attachments.size;
-        subpasses[i].pColorAttachments = cfg->subpasses[i].color_attachments.data;
+        if (subpasses[i].colorAttachmentCount > 0) {
+            subpasses[i].pColorAttachments = cfg->subpasses[i].color_attachments.data;
+        }
+        
         subpasses[i].inputAttachmentCount = cfg->subpasses[i].input_attachments.size;
-        subpasses[i].pInputAttachments = cfg->subpasses[i].input_attachments.data;
+        if (subpasses[i].inputAttachmentCount > 0) {
+            subpasses[i].pInputAttachments = cfg->subpasses[i].input_attachments.data;
+        }
+
         subpasses[i].preserveAttachmentCount = cfg->subpasses[i].preserve_attachments.size;
-        subpasses[i].pPreserveAttachments = cfg->subpasses[i].preserve_attachments.data;
-        subpasses[i].pResolveAttachments = cfg->subpasses[i].resolve_attachments.data;
+        if (subpasses[i].preserveAttachmentCount > 0) {
+            subpasses[i].pPreserveAttachments = cfg->subpasses[i].preserve_attachments.data;
+        }
+
+        if (cfg->subpasses[i].resolve_attachments.size > 0) {
+            subpasses[i].pResolveAttachments = cfg->subpasses[i].resolve_attachments.data;
+        }
+        
         subpasses[i].pDepthStencilAttachment = cfg->subpasses[i].depth_stencil_attachment;
     }
-        
+
     VkRenderPassCreateInfo rpass_info{};
     rpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
     rpass_info.attachmentCount = cfg->attachments.size;
@@ -990,9 +1021,9 @@ void vkr_terminate_render_pass(const vkr_context *vk, const vkr_rpass *rpass)
 VkShaderStageFlagBits vkr_shader_stage_type_bits(vkr_shader_stage_type st_type)
 {
     switch (st_type) {
-    case(VKR_SHADER_STAGE_VERT):
+    case (VKR_SHADER_STAGE_VERT):
         return VK_SHADER_STAGE_VERTEX_BIT;
-    case(VKR_SHADER_STAGE_FRAG):
+    case (VKR_SHADER_STAGE_FRAG):
         return VK_SHADER_STAGE_FRAGMENT_BIT;
     default:
         elog("Shader type unknown");
@@ -1001,11 +1032,12 @@ VkShaderStageFlagBits vkr_shader_stage_type_bits(vkr_shader_stage_type st_type)
     }
 }
 
-const char *vkr_shader_stage_type_str(vkr_shader_stage_type st_type){
+const char *vkr_shader_stage_type_str(vkr_shader_stage_type st_type)
+{
     switch (st_type) {
-    case(VKR_SHADER_STAGE_VERT):
+    case (VKR_SHADER_STAGE_VERT):
         return "vert";
-    case(VKR_SHADER_STAGE_FRAG):
+    case (VKR_SHADER_STAGE_FRAG):
         return "frag";
     default:
         elog("Shader type unknown");
@@ -1030,14 +1062,14 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
                 elog("Could not initialize %s shader module", vkr_shader_stage_type_str((vkr_shader_stage_type)stagei));
                 return err;
             }
-            
+
             stages[actual_stagei].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
             stages[actual_stagei].stage = vkr_shader_stage_type_bits((vkr_shader_stage_type)stagei);
             stages[actual_stagei].pName = cfg->shader_stages[stagei].entry_point;
             ++actual_stagei;
         }
     }
-    
+
     pipe_info->rpass = *cfg->rpass;
 
     // Dynamic state
@@ -1124,7 +1156,7 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
     VkGraphicsPipelineCreateInfo pipeline_info{};
     pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     pipeline_info.stageCount = actual_stagei;
-    pipeline_info.pStages = stages; // done 
+    pipeline_info.pStages = stages;                       // done
     pipeline_info.pVertexInputState = &vertex_input_info; // done
     pipeline_info.pInputAssemblyState = &input_assembly;
     pipeline_info.pViewportState = &viewport_state;
@@ -1146,7 +1178,7 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
     if (err_ret != VK_SUCCESS) {
         for (u32 si = 0; si < actual_stagei; ++si) {
             vkr_terminate_shader_module(vk, stages[si].module);
-        }        
+        }
         vkDestroyPipelineLayout(vk->inst.device.hndl, pipe_info->layout_hndl, &vk->alloc_cbs);
         err_ret = err_code::VKR_CREATE_PIPELINE_FAIL;
     }
@@ -1214,10 +1246,10 @@ void vkr_terminate_framebuffer(const vkr_context *vk, vkr_framebuffer *fb)
     arr_terminate(&fb->attachments);
 }
 
-u32 vkr_find_mem_type(u32 type_mask, u32 property_mask, const vkr_phys_device *pdev)
+u32 vkr_find_mem_type(u32 type_flags, VkMemoryPropertyFlags property_flags, const vkr_phys_device *pdev)
 {
     for (u32 i = 0; i < pdev->mem_properties.memoryTypeCount; ++i) {
-        if ((type_mask & (1 << i)) && test_all_flags(pdev->mem_properties.memoryTypes[i].propertyFlags & property_mask, property_mask)) {
+        if ((type_flags & (1 << i)) && test_all_flags(pdev->mem_properties.memoryTypes[i].propertyFlags & property_flags, property_flags)) {
             return i;
         }
     }
@@ -1232,13 +1264,13 @@ sizet vkr_add_buffer(vkr_device *device, const vkr_buffer &copy)
     return ind;
 }
 
-int vkr_init_buffer(vkr_buffer *buffer, const vkr_context *vk)
+int vkr_init_buffer(vkr_buffer *buffer, const vkr_buffer_cfg *cfg, const vkr_context *vk)
 {
     VkBufferCreateInfo cinfo{};
     cinfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    cinfo.size = sizeof(vertex)*3;
-    cinfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    cinfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    cinfo.size = cfg->size;
+    cinfo.usage = cfg->usage;
+    cinfo.sharingMode = cfg->sharing_mode;
     int err = vkCreateBuffer(vk->inst.device.hndl, &cinfo, &vk->alloc_cbs, &buffer->hndl);
     if (err != VK_SUCCESS) {
         elog("Failed in creating buffer with vk err %d", err);
@@ -1248,12 +1280,9 @@ int vkr_init_buffer(vkr_buffer *buffer, const vkr_context *vk)
     VkMemoryRequirements mem_reqs;
     vkGetBufferMemoryRequirements(vk->inst.device.hndl, buffer->hndl, &mem_reqs);
 
-    u32 mem_t = vkr_find_mem_type(
-        mem_reqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vk->inst.pdev_info);
+    u32 mem_t = vkr_find_mem_type(mem_reqs.memoryTypeBits, cfg->mem_flags, &vk->inst.pdev_info);
     if (mem_t == -1) {
-        elog("No suitable memory found for mem bits %d and properties %d",
-             mem_reqs.memoryTypeBits,
-             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        elog("No suitable memory found for mem bits %d and properties %d", mem_reqs.memoryTypeBits, cfg->mem_flags);
         vkr_terminate_buffer(buffer, vk);
         return err_code::VKR_CREATE_BUFFER_FAIL;
     }
@@ -1393,7 +1422,7 @@ int vkr_init(const vkr_cfg *cfg, vkr_context *vk)
                            cfg->device_extension_names,
                            cfg->device_extension_count);
     if (code != err_code::VKR_NO_ERROR) {
-        
+
         vkr_terminate(vk);
         return code;
     }
@@ -1452,7 +1481,7 @@ void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
     for (int i = 0; i < dev->buffers.size; ++i) {
         vkr_terminate_buffer(&dev->buffers[i], vk);
     }
-    
+
     arr_terminate(&dev->render_passes);
     arr_terminate(&dev->pipelines);
     arr_terminate(&dev->framebuffers);
@@ -1562,5 +1591,38 @@ void vkr_cmd_end_rpass(const vkr_command_buffer *cmd_buf)
 {
     vkCmdEndRenderPass(cmd_buf->hndl);
 }
+
+int vkr_copy_buffer(vkr_buffer *dest, const vkr_buffer *src, vkr_device_queue_fam_info *cmd_q, const vkr_context *vk, VkBufferCopy region)
+{
+    auto pool = &cmd_q->cmd_pools[cmd_q->transient_pool];
+    vkr_cmd_buf_add_result tmp_buf = vkr_add_cmd_bufs(pool, vk);
+    if (tmp_buf.err_code != err_code::VKR_NO_ERROR) {
+        return tmp_buf.err_code;
+    }
+    auto tmp_buf_hndl = pool->buffers[tmp_buf.begin].hndl;
+
+    if (region.size == 0) {
+        region.size = src->size;
+    }
+    
+    VkCommandBufferBeginInfo beg_info{};
+    beg_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beg_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(tmp_buf_hndl, &beg_info);
+    vkCmdCopyBuffer(tmp_buf_hndl, src->hndl, dest->hndl, 1, &region);
+    vkEndCommandBuffer(tmp_buf_hndl);
+
+    VkSubmitInfo submit_info{};
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &tmp_buf_hndl;
+
+    vkQueueSubmit(cmd_q->qs[0].hndl, 1, &submit_info, VK_NULL_HANDLE);
+    vkQueueWaitIdle(cmd_q->qs[0].hndl);
+
+    vkr_remove_cmd_bufs(pool, vk, tmp_buf.begin);
+    return err_code::VKR_NO_ERROR;
+}
+
 
 } // namespace nslib
