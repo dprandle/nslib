@@ -43,7 +43,37 @@ void setup_rendering(vkr_context *vk)
 {
     ilog("Setting up default rendering...");
     sizet rpass_ind = vkr_add_render_pass(&vk->inst.device, {});
-    vkr_init_render_pass(vk, &vk->inst.device.render_passes[rpass_ind]);
+
+    vkr_rpass_cfg rp_cfg{};
+    
+    VkAttachmentDescription col_att{};
+    col_att.format = vk->inst.device.swapchain.format;
+    col_att.samples = VK_SAMPLE_COUNT_1_BIT;
+    col_att.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    col_att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    col_att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    col_att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    col_att.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    col_att.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    arr_push_back(&rp_cfg.attachments, col_att);
+
+    vkr_rpass_cfg_subpass subpass{};
+    VkAttachmentReference att_ref{};
+    att_ref.attachment = 0;
+    att_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    arr_push_back(&subpass.color_attachments, att_ref);
+    arr_push_back(&rp_cfg.subpasses, subpass);
+
+    VkSubpassDependency sp_dep{};
+    sp_dep.srcSubpass = VK_SUBPASS_EXTERNAL;
+    sp_dep.dstSubpass = 0;
+    sp_dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    sp_dep.srcAccessMask = 0;
+    sp_dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    sp_dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    arr_push_back(&rp_cfg.subpass_dependencies, sp_dep);
+    
+    vkr_init_render_pass(vk, &rp_cfg, &vk->inst.device.render_passes[rpass_ind]);
 
     vkr_pipeline_cfg info{};
 

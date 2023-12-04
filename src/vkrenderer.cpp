@@ -931,46 +931,39 @@ void vkr_terminate_shader_module(const vkr_context *vk, VkShaderModule module)
     vkDestroyShaderModule(vk->inst.device.hndl, module, &vk->alloc_cbs);
 }
 
-int vkr_init_render_pass(const vkr_context *vk, vkr_rpass *rpass)
+int vkr_init_render_pass(const vkr_context *vk, const vkr_rpass_cfg *cfg, vkr_rpass *rpass)
 {
     ilog("Initializing render pass");
-    // Create Render Pass
-    VkAttachmentDescription col_att{};
-    col_att.format = vk->inst.device.swapchain.format;
-    col_att.samples = VK_SAMPLE_COUNT_1_BIT;
-    col_att.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    col_att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    col_att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    col_att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    col_att.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    col_att.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
+    
     VkAttachmentReference col_att_ref{};
     col_att_ref.attachment = 0;
     col_att_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     // Create just one subpass for now
-    VkSubpassDescription subpass{};
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &col_att_ref;
-
-    VkSubpassDependency dependency{};
-    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependency.dstSubpass = 0;
-    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.srcAccessMask = 0;
-    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
+    array<VkSubpassDescription> subpasses{};
+    arr_init(&subpasses, vk->cfg.arenas.command_arena);
+    arr_resize(&subpasses, cfg->subpasses.size);
+    
+    for (int i = 0; i < cfg->subpasses.size; ++i) {
+        subpasses[i].pipelineBindPoint = cfg->subpasses[i].pipeline_bind_point;
+        subpasses[i].colorAttachmentCount = cfg->subpasses[i].color_attachments.size;
+        subpasses[i].pColorAttachments = cfg->subpasses[i].color_attachments.data;
+        subpasses[i].inputAttachmentCount = cfg->subpasses[i].input_attachments.size;
+        subpasses[i].pInputAttachments = cfg->subpasses[i].input_attachments.data;
+        subpasses[i].preserveAttachmentCount = cfg->subpasses[i].preserve_attachments.size;
+        subpasses[i].pPreserveAttachments = cfg->subpasses[i].preserve_attachments.data;
+        subpasses[i].pResolveAttachments = cfg->subpasses[i].resolve_attachments.data;
+        subpasses[i].pDepthStencilAttachment = cfg->subpasses[i].depth_stencil_attachment;
+    }
+        
     VkRenderPassCreateInfo rpass_info{};
     rpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    rpass_info.attachmentCount = 1;
-    rpass_info.pAttachments = &col_att;
-    rpass_info.subpassCount = 1;
-    rpass_info.pSubpasses = &subpass;
-    rpass_info.dependencyCount = 1;
-    rpass_info.pDependencies = &dependency;
+    rpass_info.attachmentCount = cfg->attachments.size;
+    rpass_info.pAttachments = cfg->attachments.data;
+    rpass_info.subpassCount = cfg->subpasses.size;
+    rpass_info.pSubpasses = subpasses.data;
+    rpass_info.dependencyCount = cfg->subpass_dependencies.size;
+    rpass_info.pDependencies = cfg->subpass_dependencies.data;
 
     if (vkCreateRenderPass(vk->inst.device.hndl, &rpass_info, &vk->alloc_cbs, &rpass->hndl) != VK_SUCCESS) {
         elog("Failed to create render pass");

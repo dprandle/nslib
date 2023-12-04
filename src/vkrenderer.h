@@ -176,8 +176,22 @@ struct vkr_swapchain
     VkSwapchainKHR swapchain;
 };
 
+struct vkr_rpass_cfg_subpass
+{
+    VkPipelineBindPoint pipeline_bind_point{};
+    static_array<VkAttachmentReference, 16> color_attachments;
+    static_array<VkAttachmentReference, 16> input_attachments;
+    static_array<VkAttachmentReference, 16> resolve_attachments;
+    static_array<u32, 16> preserve_attachments;
+    const VkAttachmentReference *depth_stencil_attachment{};
+};
+
 struct vkr_rpass_cfg
-{};
+{
+    static_array<VkAttachmentDescription, 16> attachments;
+    static_array<vkr_rpass_cfg_subpass, 16> subpasses;
+    static_array<VkSubpassDependency, 16> subpass_dependencies;
+};
 
 struct vkr_rpass
 {
@@ -403,7 +417,7 @@ int vkr_init_shader_module(const vkr_context *vk, const byte_array *code, VkShad
 void vkr_terminate_shader_module(const vkr_context *vk, VkShaderModule module);
 
 sizet vkr_add_render_pass(vkr_device *device, const vkr_rpass &copy);
-int vkr_init_render_pass(const vkr_context *vk, vkr_rpass *rpass);
+int vkr_init_render_pass(const vkr_context *vk, const vkr_rpass_cfg *cfg, vkr_rpass *rpass);
 void vkr_terminate_render_pass(const vkr_context *vk, const vkr_rpass *rpass);
 
 sizet vkr_add_pipeline(vkr_device *device, const vkr_pipeline &copy);
