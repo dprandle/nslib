@@ -13,6 +13,8 @@
 #define PRINT_MEM_DEBUG false
 #define PRINT_MEM_INSTANCE_ONLY true
 
+#define PRINT_MEM_GPU_ALLOC true
+
 namespace nslib
 {
 
@@ -40,6 +42,34 @@ intern const char *alloc_scope_str(int scope)
     default:
         return "unknown";
     }
+}
+
+intern void vk_gpu_alloc_cb(VmaAllocator allocator, uint32_t memory_type, VkDeviceMemory memory, VkDeviceSize size, void *devp)
+{
+    vkr_device *dev = (vkr_device *)devp;
+    dev->vma_alloc.total_size += size;
+#if PRINT_MEM_GPU_ALLOC
+    dlog("Allocator %p with mem type %d allocated ptr %p of size %lu - new total size %lu",
+         allocator,
+         memory_type,
+         memory,
+         size,
+         dev->vma_alloc.total_size);
+#endif
+}
+
+intern void vk_gpu_free_cb(VmaAllocator allocator, uint32_t memory_type, VkDeviceMemory memory, VkDeviceSize size, void *devp)
+{
+    vkr_device *dev = (vkr_device *)devp;
+    dev->vma_alloc.total_size -= size;
+#if PRINT_MEM_GPU_ALLOC
+    dlog("Allocator %p with mem type %d freeing ptr %p of size %lu - new total size %lu",
+         allocator,
+         memory_type,
+         memory,
+         size,
+         dev->vma_alloc.total_size);
+#endif
 }
 
 intern void *vk_alloc(void *user, sizet size, sizet alignment, VkSystemAllocationScope scope)
@@ -583,8 +613,24 @@ int vkr_init_device(vkr_device *dev,
         // Assign the command buffer created earlier to this frame
         dev->rframes[framei].cmd_buf_ind = {VKR_QUEUE_FAM_TYPE_GFX, gfx_fam->default_pool, buf_res.begin + framei};
     }
-
     ilog("Successfully created vk device and queues");
+
+    VmaDeviceMemoryCallbacks cb{};
+    cb.pUserData = dev;
+    cb.pfnAllocate = vk_gpu_alloc_cb;
+    cb.pfnFree = vk_gpu_free_cb;
+
+    // Create the vk mem allocator
+    VmaAllocatorCreateInfo cr_info{};
+    cr_info.device = dev->hndl;
+    cr_info.physicalDevice = vk->inst.pdev_info.hndl;
+    cr_info.instance = vk->inst.hndl;
+    cr_info.pDeviceMemoryCallbacks = &cb;
+    cr_info.pAllocationCallbacks = &vk->alloc_cbs;
+    cr_info.vulkanApiVersion = VK_API_VERSION_1_3;
+    cr_info.preferredLargeHeapBlockSize = 0; // This defaults to 256 MB
+    vmaCreateAllocator(&cr_info, &dev->vma_alloc.hndl);
+
     return err_code::VKR_NO_ERROR;
 }
 
@@ -894,9 +940,8 @@ void vkr_remove_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, u32 ind,
         hndls[i] = pool->buffers[ind + i].hndl;
     }
     vkFreeCommandBuffers(vk->inst.device.hndl, pool->hndl, count, hndls.data);
-    arr_erase(&pool->buffers, &pool->buffers[ind], &pool->buffers[ind+count]);
+    arr_erase(&pool->buffers, &pool->buffers[ind], &pool->buffers[ind + count]);
 }
-
 
 int vkr_init_cmd_pool(const vkr_context *vk, u32 fam_ind, VkCommandPoolCreateFlags flags, vkr_command_pool *cpool)
 {
@@ -969,7 +1014,7 @@ int vkr_init_render_pass(const vkr_context *vk, const vkr_rpass_cfg *cfg, vkr_rp
         if (subpasses[i].colorAttachmentCount > 0) {
             subpasses[i].pColorAttachments = cfg->subpasses[i].color_attachments.data;
         }
-        
+
         subpasses[i].inputAttachmentCount = cfg->subpasses[i].input_attachments.size;
         if (subpasses[i].inputAttachmentCount > 0) {
             subpasses[i].pInputAttachments = cfg->subpasses[i].input_attachments.data;
@@ -983,7 +1028,7 @@ int vkr_init_render_pass(const vkr_context *vk, const vkr_rpass_cfg *cfg, vkr_rp
         if (cfg->subpasses[i].resolve_attachments.size > 0) {
             subpasses[i].pResolveAttachments = cfg->subpasses[i].resolve_attachments.data;
         }
-        
+
         subpasses[i].pDepthStencilAttachment = cfg->subpasses[i].depth_stencil_attachment;
     }
 
@@ -1271,43 +1316,24 @@ int vkr_init_buffer(vkr_buffer *buffer, const vkr_buffer_cfg *cfg, const vkr_con
     cinfo.size = cfg->size;
     cinfo.usage = cfg->usage;
     cinfo.sharingMode = cfg->sharing_mode;
-    int err = vkCreateBuffer(vk->inst.device.hndl, &cinfo, &vk->alloc_cbs, &buffer->hndl);
+
+    VmaAllocationCreateInfo alloc_info = {};
+    alloc_info.usage = cfg->mem_usage;
+    alloc_info.requiredFlags = cfg->required_flags;
+    alloc_info.preferredFlags = cfg->preferred_flags;
+ 
+    int err = vmaCreateBuffer(vk->inst.device.vma_alloc.hndl, &cinfo, &alloc_info, &buffer->hndl, &buffer->mem_hndl, &buffer->mem_info);
     if (err != VK_SUCCESS) {
         elog("Failed in creating buffer with vk err %d", err);
         return err_code::VKR_CREATE_BUFFER_FAIL;
     }
-
-    VkMemoryRequirements mem_reqs;
-    vkGetBufferMemoryRequirements(vk->inst.device.hndl, buffer->hndl, &mem_reqs);
-
-    u32 mem_t = vkr_find_mem_type(mem_reqs.memoryTypeBits, cfg->mem_flags, &vk->inst.pdev_info);
-    if (mem_t == -1) {
-        elog("No suitable memory found for mem bits %d and properties %d", mem_reqs.memoryTypeBits, cfg->mem_flags);
-        vkr_terminate_buffer(buffer, vk);
-        return err_code::VKR_CREATE_BUFFER_FAIL;
-    }
-
-    VkMemoryAllocateInfo alloc_info{};
-    alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    alloc_info.allocationSize = mem_reqs.size;
-    alloc_info.memoryTypeIndex = mem_t;
-
-    err = vkAllocateMemory(vk->inst.device.hndl, &alloc_info, &vk->alloc_cbs, &buffer->mem_hndl);
-    if (err != VK_SUCCESS) {
-        elog("Failed to allocate memory for buffer with vk code %d", err);
-        vkr_terminate_buffer(buffer, vk);
-        return err_code::VKR_CREATE_BUFFER_FAIL;
-    }
-    vkBindBufferMemory(vk->inst.device.hndl, buffer->hndl, buffer->mem_hndl, 0);
-    buffer->size = cinfo.size;
     return err_code::VKR_NO_ERROR;
 }
 
 void vkr_terminate_buffer(const vkr_buffer *buffer, const vkr_context *vk)
 {
     ilog("Terminating buffer");
-    vkDestroyBuffer(vk->inst.device.hndl, buffer->hndl, &vk->alloc_cbs);
-    vkFreeMemory(vk->inst.device.hndl, buffer->mem_hndl, &vk->alloc_cbs);
+    vmaDestroyBuffer(vk->inst.device.vma_alloc.hndl, buffer->hndl, buffer->mem_hndl);
 }
 
 sizet vkr_add_swapchain_framebuffers(vkr_device *device)
@@ -1505,6 +1531,7 @@ void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
         vkDestroyFence(dev->hndl, dev->rframes[framei].in_flight, &vk->alloc_cbs);
     }
 
+    vmaDestroyAllocator(dev->vma_alloc.hndl);
     vkDestroyDevice(dev->hndl, &vk->alloc_cbs);
 }
 
@@ -1602,9 +1629,9 @@ int vkr_copy_buffer(vkr_buffer *dest, const vkr_buffer *src, vkr_device_queue_fa
     auto tmp_buf_hndl = pool->buffers[tmp_buf.begin].hndl;
 
     if (region.size == 0) {
-        region.size = src->size;
+        region.size = src->mem_info.size;
     }
-    
+
     VkCommandBufferBeginInfo beg_info{};
     beg_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beg_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -1623,6 +1650,5 @@ int vkr_copy_buffer(vkr_buffer *dest, const vkr_buffer *src, vkr_device_queue_fa
     vkr_remove_cmd_bufs(pool, vk, tmp_buf.begin);
     return err_code::VKR_NO_ERROR;
 }
-
 
 } // namespace nslib

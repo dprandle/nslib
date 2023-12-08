@@ -170,19 +170,19 @@ void setup_rendering(vkr_context *vk)
     b_cfg.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
     b_cfg.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     b_cfg.size = sizeof(vertex)*3;
-    b_cfg.mem_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    b_cfg.mem_usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
     vkr_init_buffer(&staging_buf, &b_cfg, vk);
 
     // Copy data to staging buffer
     void *data{};
-    vkMapMemory(dev->hndl, staging_buf.mem_hndl, 0, staging_buf.size, 0, &data);
-    memcpy(data, verts, staging_buf.size);
-    vkUnmapMemory(dev->hndl, staging_buf.mem_hndl);
+    vmaMapMemory(dev->vma_alloc.hndl, staging_buf.mem_hndl, &data);
+    memcpy(data, verts, staging_buf.mem_info.size);
+    vmaUnmapMemory(dev->vma_alloc.hndl, staging_buf.mem_hndl);
 
     // Create actual buffer
     sizet ind = vkr_add_buffer(dev, {});    
     b_cfg.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    b_cfg.mem_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    b_cfg.mem_usage = VMA_MEMORY_USAGE_GPU_ONLY;
     vkr_init_buffer(&dev->buffers[ind], &b_cfg, vk);
 
     // Run copy buffer command
@@ -215,7 +215,7 @@ void record_command_buffer(vkr_command_buffer *cmd_buf, vkr_framebuffer *fb, vkr
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(cmd_buf->hndl, 0, 1, vert_bufs, offsets);
 
-    vkCmdDraw(cmd_buf->hndl, vert_buf->size, 1, 0, 0);
+    vkCmdDraw(cmd_buf->hndl, vert_buf->mem_info.size, 1, 0, 0);
 
     vkr_cmd_end_rpass(cmd_buf);
     vkr_end_cmd_buf(cmd_buf);

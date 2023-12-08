@@ -1,5 +1,5 @@
 #pragma once
-#include <vulkan/vulkan.h>
+#include <vk_mem_alloc.h>
 #include "containers/array.h"
 #include "util.h"
 #include "math/vector4.h"
@@ -94,15 +94,17 @@ struct vkr_buffer_cfg
     sizet size;
     VkBufferUsageFlags usage;
     VkSharingMode sharing_mode;
-    VkMemoryPropertyFlags mem_flags;
+    VmaMemoryUsage mem_usage;
+    VkMemoryPropertyFlags required_flags;
+    VkMemoryPropertyFlags preferred_flags;
     static_array<u32, 16> q_fam_indices;
 };
 
 struct vkr_buffer
 {
     VkBuffer hndl;
-    VkDeviceMemory mem_hndl;
-    sizet size;
+    VmaAllocation mem_hndl;
+    VmaAllocationInfo mem_info;
 };
 
 struct vkr_cmd_buf_add_result
@@ -342,6 +344,12 @@ struct vkr_device_queue_fam_info
     array<vkr_command_pool> cmd_pools;
 };
 
+struct vkr_gpu_allocator
+{
+    VmaAllocator hndl;
+    VkDeviceSize total_size;
+};
+
 struct vkr_device
 {
     VkDevice hndl;
@@ -352,6 +360,7 @@ struct vkr_device
     array<vkr_buffer> buffers;
     vkr_swapchain swapchain;
     vkr_frame rframes[VKR_RENDER_FRAME_COUNT];
+    vkr_gpu_allocator vma_alloc;
 };
 
 struct vkr_instance
