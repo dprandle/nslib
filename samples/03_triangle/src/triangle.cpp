@@ -4,9 +4,29 @@
 #include "platform.h"
 #include "vkrenderer.h"
 #include "logging.h"
-#include "math/vector4.h"
+#include "math/matrix4.h"
 
 using namespace nslib;
+
+struct uniform_buffer_object
+{
+    mat4 model;
+    mat4 view;
+    mat4 proj;
+};
+
+struct vertex
+{
+    vec2 pos;
+    vec3 color;
+};
+
+const vertex verts[] = {{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+                        {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+                        {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+                        {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}};
+
+const u16 indices[] = {0, 1, 2, 2, 3, 0};
 
 #if defined(NDEBUG)
 intern const u32 VALIDATION_LAYER_COUNT = 0;
@@ -30,6 +50,8 @@ intern const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN
 struct app_data
 {
     vkr_context vk;
+    u32 vert_buf_ind;
+    u32 ind_buf_ind;
 };
 
 int load_platform_settings(platform_init_info *settings, app_data *app)
@@ -39,13 +61,13 @@ int load_platform_settings(platform_init_info *settings, app_data *app)
     return err_code::PLATFORM_NO_ERROR;
 }
 
-void setup_rendering(vkr_context *vk)
+void setup_rendering(app_data *app, vkr_context *vk)
 {
     ilog("Setting up default rendering...");
     sizet rpass_ind = vkr_add_render_pass(&vk->inst.device, {});
 
     vkr_rpass_cfg rp_cfg{};
-    
+
     VkAttachmentDescription col_att{};
     col_att.format = vk->inst.device.swapchain.format;
     col_att.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -72,14 +94,22 @@ void setup_rendering(vkr_context *vk)
     sp_dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     sp_dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     arr_push_back(&rp_cfg.subpass_dependencies, sp_dep);
-    
+
     vkr_init_render_pass(vk, &rp_cfg, &vk->inst.device.render_passes[rpass_ind]);
 
     vkr_pipeline_cfg info{};
 
     arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_VIEWPORT);
-    arr_push_back(&info.dynamic_states,  VK_DYNAMIC_STATE_SCISSOR);
+    arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_SCISSOR);
 
+    // Descripitor Set Layouts just a single uniform buffer for now
+    info.set_layouts[0].bindings[0].binding = 0;
+    info.set_layouts[0].bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    info.set_layouts[0].bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    info.set_layouts[0].bindings[0].descriptorCount = 1;
+    ++info.set_layouts[0].bindings.size;
+    ++info.set_layouts.size;
+    
     // Vertex binding:
     VkVertexInputBindingDescription binding_desc{};
     binding_desc.binding = 0;
@@ -93,7 +123,7 @@ void setup_rendering(vkr_context *vk)
     attrib_desc.location = 0;
     attrib_desc.format = VK_FORMAT_R32G32_SFLOAT;
     attrib_desc.offset = offsetof(vertex, pos);
-    arr_push_back(&info.vert_attrib_desc, attrib_desc);    
+    arr_push_back(&info.vert_attrib_desc, attrib_desc);
     attrib_desc.binding = 0;
     attrib_desc.location = 1;
     attrib_desc.format = VK_FORMAT_R32G32B32_SFLOAT;
@@ -146,7 +176,7 @@ void setup_rendering(vkr_context *vk)
     arr_push_back(&info.col_blend.attachments, col_blnd_att);
 
     // Our basic shaders
-    const char *fnames[] = {"shaders/triangle.vert.spv","shaders/triangle.frag.spv"};
+    const char *fnames[] = {"shaders/triangle.vert.spv", "shaders/triangle.frag.spv"};
     for (int i = 0; i <= VKR_SHADER_STAGE_FRAG; ++i) {
         platform_file_err_desc err{};
         platform_read_file(fnames[i], &info.shader_stages[i].code, 0, &err);
@@ -164,33 +194,34 @@ void setup_rendering(vkr_context *vk)
 
     auto dev = &vk->inst.device;
 
-    // Create staging buffer
-    vkr_buffer staging_buf{};
+    // Create vertex buffer on GPU
     vkr_buffer_cfg b_cfg{};
+    app->vert_buf_ind = vkr_add_buffer(dev, {});
+    app->ind_buf_ind = vkr_add_buffer(dev, {});
+
+    // Common to all buffer options
+    b_cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    b_cfg.gpu_alloc = vk->inst.device.vma_alloc.hndl;
     b_cfg.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
-    b_cfg.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    b_cfg.size = sizeof(vertex)*3;
-    b_cfg.mem_usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
-    vkr_init_buffer(&staging_buf, &b_cfg, vk);
 
-    // Copy data to staging buffer
-    void *data{};
-    vmaMapMemory(dev->vma_alloc.hndl, staging_buf.mem_hndl, &data);
-    memcpy(data, verts, staging_buf.mem_info.size);
-    vmaUnmapMemory(dev->vma_alloc.hndl, staging_buf.mem_hndl);
-
-    // Create actual buffer
-    sizet ind = vkr_add_buffer(dev, {});    
+    // Vert buffer
     b_cfg.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    b_cfg.mem_usage = VMA_MEMORY_USAGE_GPU_ONLY;
-    vkr_init_buffer(&dev->buffers[ind], &b_cfg, vk);
+    b_cfg.buffer_size = sizeof(vertex) * 4;
+    vkr_init_buffer(&dev->buffers[app->vert_buf_ind], &b_cfg);
 
-    // Run copy buffer command
-    vkr_copy_buffer(&dev->buffers[ind], &staging_buf, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
-    vkr_terminate_buffer(&staging_buf, vk);
+    // Init and copy data to staging buffer, then copy staging buf to vert buffer, then delete staging buf
+    vkr_stage_and_upload_buffer_data(&dev->buffers[app->vert_buf_ind], verts, b_cfg.buffer_size, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
+
+    // Ind buffer
+    b_cfg.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    b_cfg.buffer_size = sizeof(u32) * 6;
+    vkr_init_buffer(&dev->buffers[app->ind_buf_ind], &b_cfg);
+
+    // Init and copy data to staging buffer, then copy staging buf to vert buffer, then delete staging buf
+    vkr_stage_and_upload_buffer_data(&dev->buffers[app->ind_buf_ind], indices, b_cfg.buffer_size, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
 }
 
-void record_command_buffer(vkr_command_buffer *cmd_buf, vkr_framebuffer *fb, vkr_pipeline *pipeline, vkr_buffer *vert_buf)
+void record_command_buffer(vkr_command_buffer *cmd_buf, vkr_framebuffer *fb, vkr_pipeline *pipeline, vkr_buffer *vert_buf, vkr_buffer *ind_buf)
 {
     vkr_begin_cmd_buf(cmd_buf);
     vkr_cmd_begin_rpass(cmd_buf, fb);
@@ -215,7 +246,10 @@ void record_command_buffer(vkr_command_buffer *cmd_buf, vkr_framebuffer *fb, vkr
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(cmd_buf->hndl, 0, 1, vert_bufs, offsets);
 
+    vkCmdBindIndexBuffer(cmd_buf->hndl, ind_buf->hndl, 0, VK_INDEX_TYPE_UINT16);
+
     vkCmdDraw(cmd_buf->hndl, vert_buf->mem_info.size, 1, 0, 0);
+    vkCmdDrawIndexed(cmd_buf->hndl, 6, 1, 0, 0, 0);
 
     vkr_cmd_end_rpass(cmd_buf);
     vkr_end_cmd_buf(cmd_buf);
@@ -225,23 +259,26 @@ int app_init(platform_ctxt *ctxt, app_data *app)
 {
     ilog("App init");
     version_info v{1, 0, 0};
-
+    
     vkr_cfg vkii{"03 Triangle",
                  {1, 0, 0},
                  {},
                  LOG_TRACE,
                  ctxt->win_hndl,
+                 {},
+                 4,
                  ADDITIONAL_INST_EXTENSIONS,
                  ADDITIONAL_INST_EXTENSION_COUNT,
                  DEVICE_EXTENSIONS,
                  DEVICE_EXTENSION_COUNT,
                  VALIDATION_LAYERS,
                  VALIDATION_LAYER_COUNT};
+    
 
     if (vkr_init(&vkii, &app->vk) != err_code::VKR_NO_ERROR) {
         return err_code::PLATFORM_INIT;
     }
-    setup_rendering(&app->vk);
+    setup_rendering(app, &app->vk);
     return err_code::PLATFORM_NO_ERROR;
 }
 
@@ -266,7 +303,8 @@ int app_run_frame(platform_ctxt *ctxt, app_data *app)
     auto buf_ind = cur_frame->cmd_buf_ind;
     auto cmd_buf = &dev->qfams[buf_ind.pool_ind.qfam_ind].cmd_pools[buf_ind.pool_ind.pool_ind].buffers[buf_ind.buffer_ind];
     auto pipeline = &dev->pipelines[0];
-    auto vert_buf = &dev->buffers[0];
+    auto vert_buf = &dev->buffers[app->vert_buf_ind];
+    auto ind_buf = &dev->buffers[app->ind_buf_ind];
 
     // Wait for the rendering to be done before starting on the next frame and then reset the fence
     vkWaitForFences(dev->hndl, 1, &cur_frame->in_flight, VK_TRUE, UINT64_MAX);
@@ -284,7 +322,7 @@ int app_run_frame(platform_ctxt *ctxt, app_data *app)
     // We have the acquired image index, though we don't know when it will be ready to have ops submitted, we can record
     // the ops in the command buffer and submit once it is readyy
     auto fb = &dev->framebuffers[im_ind];
-    record_command_buffer(cmd_buf, fb, pipeline, vert_buf);
+    record_command_buffer(cmd_buf, fb, pipeline, vert_buf, ind_buf);
 
     // Get the info ready to submit our command buffer to the queue. We need to wait until the image avail semaphore has
     // signaled, and then we need to trigger the render finished signal once the the command buffer completes

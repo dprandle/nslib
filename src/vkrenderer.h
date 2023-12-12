@@ -8,14 +8,6 @@
 namespace nslib
 {
 
-struct vertex
-{
-    vec2 pos;
-    vec3 color;
-};
-
-const vertex verts[] = {{{0.0f, -0.5f}, {1.0f, 1.0f, 0.0f}}, {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}}, {{-0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}}};
-
 namespace err_code
 {
 enum vkr
@@ -59,6 +51,8 @@ enum vkr_queue_fam_type
     VKR_QUEUE_FAM_TYPE_COUNT
 };
 
+const u32 VKR_DESCRIPTOR_TYPE_COUNT = 11;
+
 inline constexpr const u32 MAX_QUEUE_REQUEST_COUNT = 32;
 inline constexpr const u32 VKR_MAX_EXTENSION_STR_LEN = 128;
 inline constexpr const u32 VKR_RENDER_FRAME_COUNT = 3;
@@ -77,6 +71,12 @@ struct vk_mem_alloc_stats
     sizet actual_free{};
 };
 
+struct vkr_gpu_allocator
+{
+    VmaAllocator hndl;
+    VkDeviceSize total_size;
+};
+
 struct mem_arena;
 
 struct vk_arenas
@@ -91,13 +91,14 @@ struct vk_arenas
 
 struct vkr_buffer_cfg
 {
-    sizet size;
+    VmaAllocationCreateFlags alloc_flags;
+    sizet buffer_size;
     VkBufferUsageFlags usage;
     VkSharingMode sharing_mode;
     VmaMemoryUsage mem_usage;
     VkMemoryPropertyFlags required_flags;
     VkMemoryPropertyFlags preferred_flags;
-    static_array<u32, 16> q_fam_indices;
+    VmaAllocator gpu_alloc;
 };
 
 struct vkr_buffer
@@ -105,6 +106,7 @@ struct vkr_buffer
     VkBuffer hndl;
     VmaAllocation mem_hndl;
     VmaAllocationInfo mem_info;
+    vkr_buffer_cfg cfg;
 };
 
 struct vkr_cmd_buf_add_result
@@ -175,9 +177,21 @@ struct vkr_cmd_buf_ind
     u32 buffer_ind;
 };
 
+struct vkr_descriptor_set
+{
+    VkDescriptorSet hndl;
+};
+
+struct vkr_descriptor_pool
+{
+    VkDescriptorPool hndl;
+    array<vkr_descriptor_set> desc_sets;
+};
+
 struct vkr_frame
 {
     vkr_cmd_buf_ind cmd_buf_ind;
+    vkr_descriptor_pool desc_pool;
     VkSemaphore image_avail;
     VkSemaphore render_finished;
     VkFence in_flight;
@@ -219,11 +233,6 @@ struct vkr_shader_stage
 {
     byte_array code;
     const char *entry_point;
-};
-
-struct vkr_descriptor_set_layout
-{
-    VkDescriptorSetLayout hndl;
 };
 
 struct vkr_push_constant_range
@@ -269,6 +278,11 @@ struct vkr_pipeline_cfg_color_blending
     vec4 blend_constants{};
 };
 
+struct vkr_descriptor_set_layout_desc
+{
+    static_array<VkDescriptorSetLayoutBinding, 16> bindings;
+};
+
 struct vkr_pipeline_cfg
 {
     vkr_shader_stage shader_stages[VKR_SHADER_STAGE_COUNT];
@@ -301,7 +315,7 @@ struct vkr_pipeline_cfg
     vkr_pipeline_cfg_color_blending col_blend{};
 
     // Descriptor Sets and push constants
-    static_array<VkDescriptorSetLayout, 32> set_layouts;
+    static_array<vkr_descriptor_set_layout_desc, 4> set_layouts;
     static_array<VkPushConstantRange, 32> push_constant_ranges;
 };
 
@@ -309,6 +323,7 @@ struct vkr_pipeline
 {
     vkr_rpass rpass;
     VkPipelineLayout layout_hndl;
+    static_array<VkDescriptorSetLayout, 4> descriptor_layouts;
     VkPipeline hndl;
 };
 
@@ -344,12 +359,6 @@ struct vkr_device_queue_fam_info
     array<vkr_command_pool> cmd_pools;
 };
 
-struct vkr_gpu_allocator
-{
-    VmaAllocator hndl;
-    VkDeviceSize total_size;
-};
-
 struct vkr_device
 {
     VkDevice hndl;
@@ -374,6 +383,11 @@ struct vkr_instance
     vkr_device device;
 };
 
+struct vkr_max_descriptor_count
+{
+    u32 count[VKR_DESCRIPTOR_TYPE_COUNT] = {0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0};
+};
+
 struct vkr_cfg
 {
     const char *app_name;
@@ -381,6 +395,9 @@ struct vkr_cfg
     vk_arenas arenas;
     int log_verbosity;
     void *window;
+
+    vkr_max_descriptor_count max_desc_per_type_per_pool{};
+    u32 max_desc_sets_per_pool{4};
 
     // Array of additional instance extension names - besides defaults determined by window
     const char *const *extra_instance_extension_names;
@@ -454,8 +471,16 @@ int vkr_init_framebuffer(const vkr_context *vk, const vkr_framebuffer_cfg *cfg, 
 void vkr_terminate_framebuffer(const vkr_context *vk, vkr_framebuffer *fb);
 
 sizet vkr_add_buffer(vkr_device *device, const vkr_buffer &copy);
-int vkr_init_buffer(vkr_buffer *buffer, const vkr_buffer_cfg *cfg, const vkr_context *vk);
+int vkr_init_buffer(vkr_buffer *buffer, const vkr_buffer_cfg *cfg);
 void vkr_terminate_buffer(const vkr_buffer *buffer, const vkr_context *vk);
+
+void *vkr_map_buffer(vkr_buffer *buf);
+void vkr_unmap_buffer(vkr_buffer *buf);
+void vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
+                                      const void *src_data,
+                                      sizet src_data_size,
+                                      vkr_device_queue_fam_info *cmd_q,
+                                      const vkr_context *vkr);
 
 // Returns the index if the first swapchain framebuffer added
 sizet vkr_add_swapchain_framebuffers(vkr_device *device);

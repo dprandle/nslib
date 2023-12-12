@@ -612,6 +612,28 @@ int vkr_init_device(vkr_device *dev,
 
         // Assign the command buffer created earlier to this frame
         dev->rframes[framei].cmd_buf_ind = {VKR_QUEUE_FAM_TYPE_GFX, gfx_fam->default_pool, buf_res.begin + framei};
+
+        // Get a count of the number of descriptors we are making avaialable for each desc type
+        VkDescriptorPoolSize psize[VKR_DESCRIPTOR_TYPE_COUNT] = {};
+        u32 desc_size_count{};
+        for (int desc_t = 0; desc_t < VKR_DESCRIPTOR_TYPE_COUNT; ++desc_t) {
+            if (vk->cfg.max_desc_per_type_per_pool.count[desc_t] > 0) {
+                psize[desc_size_count].descriptorCount = vk->cfg.max_desc_per_type_per_pool.count[desc_t];
+                psize[desc_size_count].type = (VkDescriptorType)desc_t;
+                ilog("Adding desc type %d to frame descriptor pool with %d desc available",
+                     psize[desc_size_count].type,
+                     psize[desc_size_count].descriptorCount);
+                ++desc_size_count;
+            }
+        }
+
+        // Create the frame descriptor pool
+        VkDescriptorPoolCreateInfo pool_info{};
+        pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        pool_info.poolSizeCount = desc_size_count;
+        pool_info.pPoolSizes = psize;
+        pool_info.maxSets = vk->cfg.max_desc_sets_per_pool;
+        vkCreateDescriptorPool(dev->hndl, &pool_info, &vk->alloc_cbs, &dev->rframes[framei].desc_pool.hndl);
     }
     ilog("Successfully created vk device and queues");
 
@@ -1182,11 +1204,30 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
         col_blend_state.blendConstants[i] = cfg->col_blend.blend_constants[i];
     }
 
+    // Create the descriptor set layouts
+    for (int desc_i = 0; desc_i < cfg->set_layouts.size; ++desc_i) {
+        VkDescriptorSetLayoutCreateInfo ci{};
+        ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        ci.bindingCount = cfg->set_layouts[desc_i].bindings.size;
+        ci.pBindings = cfg->set_layouts[desc_i].bindings.data;
+        VkDescriptorSetLayout hndl{};
+        int res = vkCreateDescriptorSetLayout(vk->inst.device.hndl, &ci, &vk->alloc_cbs, &hndl);
+        if (res == VK_SUCCESS) {
+            arr_push_back(&pipe_info->descriptor_layouts, hndl);
+        }
+        else {
+            elog("Could not create descriptor set layout with vk err %d", res);
+            for (u32 i = 0; i < pipe_info->descriptor_layouts.size; ++i) {
+                vkDestroyDescriptorSetLayout(vk->inst.device.hndl, pipe_info->descriptor_layouts[i], &vk->alloc_cbs);
+            }
+        }
+    }
+
     // Pipeline layout - where we would bind uniforms and such
     VkPipelineLayoutCreateInfo pipeline_layout_create_inf{};
     pipeline_layout_create_inf.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipeline_layout_create_inf.setLayoutCount = cfg->set_layouts.size;
-    pipeline_layout_create_inf.pSetLayouts = cfg->set_layouts.data;
+    pipeline_layout_create_inf.setLayoutCount = pipe_info->descriptor_layouts.size;
+    pipeline_layout_create_inf.pSetLayouts = pipe_info->descriptor_layouts.data;
     pipeline_layout_create_inf.pushConstantRangeCount = cfg->push_constant_ranges.size;
     pipeline_layout_create_inf.pPushConstantRanges = cfg->push_constant_ranges.data;
 
@@ -1194,6 +1235,9 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
         elog("Failed to create pileline layout");
         for (u32 si = 0; si < actual_stagei; ++si) {
             vkr_terminate_shader_module(vk, stages[si].module);
+        }
+        for (u32 i = 0; i < pipe_info->descriptor_layouts.size; ++i) {
+            vkDestroyDescriptorSetLayout(vk->inst.device.hndl, pipe_info->descriptor_layouts[i], &vk->alloc_cbs);
         }
         return err_code::VKR_CREATE_PIPELINE_LAYOUT_FAIL;
     }
@@ -1224,6 +1268,9 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
         for (u32 si = 0; si < actual_stagei; ++si) {
             vkr_terminate_shader_module(vk, stages[si].module);
         }
+        for (u32 i = 0; i < pipe_info->descriptor_layouts.size; ++i) {
+            vkDestroyDescriptorSetLayout(vk->inst.device.hndl, pipe_info->descriptor_layouts[i], &vk->alloc_cbs);
+        }
         vkDestroyPipelineLayout(vk->inst.device.hndl, pipe_info->layout_hndl, &vk->alloc_cbs);
         err_ret = err_code::VKR_CREATE_PIPELINE_FAIL;
     }
@@ -1248,6 +1295,9 @@ void vkr_terminate_pipeline(const vkr_context *vk, const vkr_pipeline *pipe_info
     ilog("Terminating pipeline");
     vkDestroyPipeline(vk->inst.device.hndl, pipe_info->hndl, &vk->alloc_cbs);
     vkDestroyPipelineLayout(vk->inst.device.hndl, pipe_info->layout_hndl, &vk->alloc_cbs);
+    for (int i = 0; i < pipe_info->descriptor_layouts.size; ++i) {
+        vkDestroyDescriptorSetLayout(vk->inst.device.hndl, pipe_info->descriptor_layouts[i], &vk->alloc_cbs);
+    }
 }
 
 int vkr_init_framebuffer(const vkr_context *vk, const vkr_framebuffer_cfg *cfg, vkr_framebuffer *fb)
@@ -1309,20 +1359,56 @@ sizet vkr_add_buffer(vkr_device *device, const vkr_buffer &copy)
     return ind;
 }
 
-int vkr_init_buffer(vkr_buffer *buffer, const vkr_buffer_cfg *cfg, const vkr_context *vk)
+void *vkr_map_buffer(vkr_buffer *buf)
 {
+    void *ret;
+    vmaMapMemory(buf->cfg.gpu_alloc, buf->mem_hndl, &ret);
+    return ret;
+}
+
+void vkr_unmap_buffer(vkr_buffer *buf)
+{
+    vmaUnmapMemory(buf->cfg.gpu_alloc, buf->mem_hndl);
+}
+
+void vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
+                                      const void *src_data,
+                                      sizet src_data_size,
+                                      vkr_device_queue_fam_info *cmd_q,
+                                      const vkr_context *vk)
+{
+    vkr_buffer staging_buf{};
+    auto buf_cfg = dest_buffer->cfg;
+    buf_cfg.alloc_flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+    buf_cfg.usage &= ~VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    buf_cfg.usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    buf_cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+    vkr_init_buffer(&staging_buf, &buf_cfg);
+
+    void *mem = vkr_map_buffer(&staging_buf);
+    memcpy(mem, src_data, src_data_size);
+    vkr_unmap_buffer(&staging_buf);
+
+    vkr_copy_buffer(dest_buffer, &staging_buf, cmd_q, vk);
+    vkr_terminate_buffer(&staging_buf, vk);
+}
+
+int vkr_init_buffer(vkr_buffer *buffer, const vkr_buffer_cfg *cfg)
+{
+    buffer->cfg = *cfg;
     VkBufferCreateInfo cinfo{};
     cinfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    cinfo.size = cfg->size;
+    cinfo.size = cfg->buffer_size;
     cinfo.usage = cfg->usage;
     cinfo.sharingMode = cfg->sharing_mode;
 
     VmaAllocationCreateInfo alloc_info = {};
+    alloc_info.flags = cfg->alloc_flags;
     alloc_info.usage = cfg->mem_usage;
     alloc_info.requiredFlags = cfg->required_flags;
     alloc_info.preferredFlags = cfg->preferred_flags;
- 
-    int err = vmaCreateBuffer(vk->inst.device.vma_alloc.hndl, &cinfo, &alloc_info, &buffer->hndl, &buffer->mem_hndl, &buffer->mem_info);
+
+    int err = vmaCreateBuffer(cfg->gpu_alloc, &cinfo, &alloc_info, &buffer->hndl, &buffer->mem_hndl, &buffer->mem_info);
     if (err != VK_SUCCESS) {
         elog("Failed in creating buffer with vk err %d", err);
         return err_code::VKR_CREATE_BUFFER_FAIL;
@@ -1526,6 +1612,7 @@ void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
     vkr_terminate_swapchain(&dev->swapchain, vk);
 
     for (int framei = 0; framei < VKR_RENDER_FRAME_COUNT; ++framei) {
+        vkDestroyDescriptorPool(dev->hndl, dev->rframes[framei].desc_pool.hndl, &vk->alloc_cbs);
         vkDestroySemaphore(dev->hndl, dev->rframes[framei].image_avail, &vk->alloc_cbs);
         vkDestroySemaphore(dev->hndl, dev->rframes[framei].render_finished, &vk->alloc_cbs);
         vkDestroyFence(dev->hndl, dev->rframes[framei].in_flight, &vk->alloc_cbs);
