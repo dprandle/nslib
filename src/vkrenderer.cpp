@@ -581,7 +581,7 @@ int vkr_init_device(vkr_device *dev,
     }
 
     // Create frame synchronization objects - start all fences as signalled already
-    for (int framei = 0; framei < VKR_RENDER_FRAME_COUNT; ++framei) {
+    for (u32 framei = 0; framei < VKR_RENDER_FRAME_COUNT; ++framei) {
         VkSemaphoreCreateInfo sem_info{};
         sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
@@ -614,26 +614,12 @@ int vkr_init_device(vkr_device *dev,
         dev->rframes[framei].cmd_buf_ind = {VKR_QUEUE_FAM_TYPE_GFX, gfx_fam->default_pool, buf_res.begin + framei};
 
         // Get a count of the number of descriptors we are making avaialable for each desc type
-        VkDescriptorPoolSize psize[VKR_DESCRIPTOR_TYPE_COUNT] = {};
-        u32 desc_size_count{};
-        for (int desc_t = 0; desc_t < VKR_DESCRIPTOR_TYPE_COUNT; ++desc_t) {
-            if (vk->cfg.max_desc_per_type_per_pool.count[desc_t] > 0) {
-                psize[desc_size_count].descriptorCount = vk->cfg.max_desc_per_type_per_pool.count[desc_t];
-                psize[desc_size_count].type = (VkDescriptorType)desc_t;
-                ilog("Adding desc type %d to frame descriptor pool with %d desc available",
-                     psize[desc_size_count].type,
-                     psize[desc_size_count].descriptorCount);
-                ++desc_size_count;
-            }
+        result = vkr_init_descriptor_pool(&dev->rframes[framei].desc_pool, vk, vk->cfg.max_desc_sets_per_pool);
+        if (result != VK_SUCCESS) {
+            elog("Failed to create descriptor pool for frame %d - aborting init", framei);
+            vkr_terminate_device(dev, vk);
+            return result;
         }
-
-        // Create the frame descriptor pool
-        VkDescriptorPoolCreateInfo pool_info{};
-        pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        pool_info.poolSizeCount = desc_size_count;
-        pool_info.pPoolSizes = psize;
-        pool_info.maxSets = vk->cfg.max_desc_sets_per_pool;
-        vkCreateDescriptorPool(dev->hndl, &pool_info, &vk->alloc_cbs, &dev->rframes[framei].desc_pool.hndl);
     }
     ilog("Successfully created vk device and queues");
 
@@ -920,11 +906,10 @@ void vkr_recreate_swapchain(vkr_instance *inst, const vkr_context *vk, void *win
     vkr_init_swapchain_framebuffers(&inst->device, vk, &inst->device.render_passes[rpass_ind], nullptr);
 }
 
-vkr_cmd_buf_add_result vkr_add_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, u32 count)
+vkr_add_result vkr_add_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, sizet count)
 {
-    vkr_cmd_buf_add_result ret{};
-
-    ilog("Adding command buffer");
+    ilog("Adding %lu command buffer/s", count);
+    vkr_add_result ret{};
     array<VkCommandBuffer> hndls;
     arr_init(&hndls, vk->cfg.arenas.command_arena);
     arr_resize(&hndls, count);
@@ -936,7 +921,7 @@ vkr_cmd_buf_add_result vkr_add_cmd_bufs(vkr_command_pool *pool, const vkr_contex
     info.commandBufferCount = count;
     int err = vkAllocateCommandBuffers(vk->inst.device.hndl, &info, hndls.data);
     if (err != VK_SUCCESS) {
-        elog("Failed to create command buffer with code %d", err);
+        elog("Failed to create command buffer/s with code %d", err);
         arr_terminate(&hndls);
         ret.err_code = err_code::VKR_CREATE_COMMAND_BUFFER_FAIL;
         return ret;
@@ -946,15 +931,15 @@ vkr_cmd_buf_add_result vkr_add_cmd_bufs(vkr_command_pool *pool, const vkr_contex
     arr_resize(&pool->buffers, ret.end);
     for (sizet i = 0; i < count; ++i) {
         pool->buffers[ret.begin + i].hndl = hndls[i];
-        ilog("Setting cmd buffer at index %d to hndl %lu", ret.begin + i, hndls[i]);
+        ilog("Setting cmd buffer at index %d in pool %p to hndl %lu", ret.begin + i, pool, hndls[i]);
     }
-    ret.err_code = err_code::VKR_NO_ERROR;
-    ilog("Successfully added command buffer");
+    ilog("Successfully added command buffer/s");
     return ret;
 }
 
-void vkr_remove_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, u32 ind, u32 count)
+void vkr_remove_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, sizet ind, sizet count)
 {
+    ilog("Removing %lu command buffers starting at index %lu", count, ind);
     array<VkCommandBuffer> hndls{};
     arr_init(&hndls, vk->cfg.arenas.command_arena);
     arr_resize(&hndls, count);
@@ -963,6 +948,51 @@ void vkr_remove_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, u32 ind,
     }
     vkFreeCommandBuffers(vk->inst.device.hndl, pool->hndl, count, hndls.data);
     arr_erase(&pool->buffers, &pool->buffers[ind], &pool->buffers[ind + count]);
+}
+
+vkr_add_result vkr_add_descriptor_sets(vkr_descriptor_pool *pool, const vkr_context *vk, const VkDescriptorSetLayout *layouts, sizet count)
+{
+    ilog("Adding %lu descritor set/s", count);
+    vkr_add_result result{};
+    array<VkDescriptorSet> hndls;
+    arr_init(&hndls, vk->cfg.arenas.command_arena);
+    arr_resize(&hndls, count);
+
+    VkDescriptorSetAllocateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    info.descriptorPool = pool->hndl;
+    info.descriptorSetCount = count;
+    info.pSetLayouts = layouts;
+    int err = vkAllocateDescriptorSets(vk->inst.device.hndl, &info, hndls.data);
+    if (err != VK_SUCCESS) {
+        elog("Failed to create descriptor set/s with code %d", err);
+        arr_terminate(&hndls);
+        result.err_code = err_code::VKR_CREATE_DESCRIPTOR_SETS_FAIL;
+        return result;
+    }
+
+    result.begin = pool->desc_sets.size;
+    result.end = result.begin + count;
+    arr_resize(&pool->desc_sets, result.end);
+
+    for (sizet i = 0; i < count; ++i) {
+        pool->desc_sets[result.begin + i].hndl = hndls[i];
+        ilog("Setting descriptor set at index %lu in pool %p to hndl %lu", result.begin + i, pool, hndls[i]);
+    }
+    ilog("Successfully added descriptor set/s");
+    return result;
+}
+
+void vkr_remove_descriptor_sets(vkr_descriptor_pool *pool, const vkr_context *vk, u32 ind, u32 count)
+{
+    array<VkDescriptorSet> hndls{};
+    arr_init(&hndls, vk->cfg.arenas.command_arena);
+    arr_resize(&hndls, count);
+    for (u32 i = 0; i < count; ++i) {
+        hndls[i] = pool->desc_sets[ind + i].hndl;
+    }
+    vkFreeDescriptorSets(vk->inst.device.hndl, pool->hndl, count, hndls.data);
+    arr_erase(&pool->desc_sets, &pool->desc_sets[ind], &pool->desc_sets[ind + count]);
 }
 
 int vkr_init_cmd_pool(const vkr_context *vk, u32 fam_ind, VkCommandPoolCreateFlags flags, vkr_command_pool *cpool)
@@ -1351,6 +1381,45 @@ u32 vkr_find_mem_type(u32 type_flags, VkMemoryPropertyFlags property_flags, cons
     return -1;
 }
 
+int vkr_init_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk, u32 max_sets)
+{
+    arr_init(&desc_pool->desc_sets, vk->cfg.arenas.persistent_arena);
+    
+    // Get a count of the number of descriptors we are making avaialable for each desc type
+    VkDescriptorPoolSize psize[VKR_DESCRIPTOR_TYPE_COUNT] = {};
+    u32 desc_size_count{};
+    for (int desc_t = 0; desc_t < VKR_DESCRIPTOR_TYPE_COUNT; ++desc_t) {
+        if (vk->cfg.max_desc_per_type_per_pool.count[desc_t] > 0) {
+            psize[desc_size_count].descriptorCount = vk->cfg.max_desc_per_type_per_pool.count[desc_t];
+            psize[desc_size_count].type = (VkDescriptorType)desc_t;
+            ilog("Adding desc type %d to frame descriptor pool with %d desc available",
+                 psize[desc_size_count].type,
+                 psize[desc_size_count].descriptorCount);
+            ++desc_size_count;
+        }
+    }
+
+    // Create the frame descriptor pool
+    VkDescriptorPoolCreateInfo pool_info{};
+    pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pool_info.poolSizeCount = desc_size_count;
+    pool_info.pPoolSizes = psize;
+    pool_info.maxSets = vk->cfg.max_desc_sets_per_pool;
+    
+    int err = vkCreateDescriptorPool(vk->inst.device.hndl, &pool_info, &vk->alloc_cbs, &desc_pool->hndl);
+    if (err != VK_SUCCESS) {
+        elog("Failed to create descriptor pool with vk err code %d", err);
+        return err_code::VKR_CREATE_DESCRIPTOR_POOL_FAIL;
+    }
+    return err_code::VKR_NO_ERROR;
+}
+
+void vkr_terminate_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk)
+{
+    vkDestroyDescriptorPool(vk->inst.device.hndl, desc_pool->hndl, &vk->alloc_cbs);
+    arr_terminate(&desc_pool->desc_sets);
+}
+
 sizet vkr_add_buffer(vkr_device *device, const vkr_buffer &copy)
 {
     ilog("Adding buffer to device");
@@ -1612,7 +1681,7 @@ void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
     vkr_terminate_swapchain(&dev->swapchain, vk);
 
     for (int framei = 0; framei < VKR_RENDER_FRAME_COUNT; ++framei) {
-        vkDestroyDescriptorPool(dev->hndl, dev->rframes[framei].desc_pool.hndl, &vk->alloc_cbs);
+        vkr_terminate_descriptor_pool(&dev->rframes[framei].desc_pool, vk);
         vkDestroySemaphore(dev->hndl, dev->rframes[framei].image_avail, &vk->alloc_cbs);
         vkDestroySemaphore(dev->hndl, dev->rframes[framei].render_finished, &vk->alloc_cbs);
         vkDestroyFence(dev->hndl, dev->rframes[framei].in_flight, &vk->alloc_cbs);
@@ -1709,7 +1778,7 @@ void vkr_cmd_end_rpass(const vkr_command_buffer *cmd_buf)
 int vkr_copy_buffer(vkr_buffer *dest, const vkr_buffer *src, vkr_device_queue_fam_info *cmd_q, const vkr_context *vk, VkBufferCopy region)
 {
     auto pool = &cmd_q->cmd_pools[cmd_q->transient_pool];
-    vkr_cmd_buf_add_result tmp_buf = vkr_add_cmd_bufs(pool, vk);
+    vkr_add_result tmp_buf = vkr_add_cmd_bufs(pool, vk);
     if (tmp_buf.err_code != err_code::VKR_NO_ERROR) {
         return tmp_buf.err_code;
     }

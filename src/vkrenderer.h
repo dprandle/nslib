@@ -31,6 +31,8 @@ enum vkr
     VKR_CREATE_FRAMEBUFFER_FAIL,
     VKR_CREATE_COMMAND_POOL_FAIL,
     VKR_CREATE_COMMAND_BUFFER_FAIL,
+    VKR_CREATE_DESCRIPTOR_POOL_FAIL,
+    VKR_CREATE_DESCRIPTOR_SETS_FAIL,
     VKR_BEGIN_COMMAND_BUFFER_FAIL,
     VKR_END_COMMAND_BUFFER_FAIL,
     VKR_CREATE_BUFFER_FAIL
@@ -109,10 +111,10 @@ struct vkr_buffer
     vkr_buffer_cfg cfg;
 };
 
-struct vkr_cmd_buf_add_result
+struct vkr_add_result
 {
-    u32 begin;
-    u32 end;
+    sizet begin;
+    sizet end;
     int err_code;
 };
 
@@ -167,14 +169,14 @@ struct vkr_phys_device
 
 struct vkr_cmd_pool_ind
 {
-    u32 qfam_ind;
-    u32 pool_ind;
+    sizet qfam_ind;
+    sizet pool_ind;
 };
 
 struct vkr_cmd_buf_ind
 {
     vkr_cmd_pool_ind pool_ind;
-    u32 buffer_ind;
+    sizet buffer_ind;
 };
 
 struct vkr_descriptor_set
@@ -445,10 +447,16 @@ void vkr_enumerate_device_extensions(const vkr_phys_device *pdevice,
 // indicated as such
 void vkr_enumerate_validation_layers(const char *const *enabled_layers, u32 enabled_layer_count, const vk_arenas *arenas);
 
-vkr_cmd_buf_add_result vkr_add_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, u32 count = 1);
-void vkr_remove_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, u32 ind, u32 count = 1);
+vkr_add_result vkr_add_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, sizet count=1);
+void vkr_remove_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, sizet ind, sizet count=1);
+
+vkr_add_result vkr_add_descriptor_sets(vkr_descriptor_pool *pool, const vkr_context *vk, const VkDescriptorSetLayout *layouts, sizet count=1);
+void vkr_remove_descriptor_sets(vkr_descriptor_pool *pool, const vkr_context *vk, u32 ind, u32 count = 1);
 
 u32 vkr_find_mem_type(u32 type_flags, VkMemoryPropertyFlags property_flags, const vkr_phys_device *pdev);
+
+int vkr_init_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk, u32 max_sets);
+void vkr_terminate_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk);
 
 sizet vkr_add_cmd_pool(vkr_device_queue_fam_info *qfam, const vkr_command_pool &cpool);
 int vkr_init_cmd_pool(const vkr_context *vk, u32 fam_ind, VkCommandPoolCreateFlags flags, vkr_command_pool *cpool);

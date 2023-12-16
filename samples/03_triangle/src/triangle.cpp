@@ -219,6 +219,16 @@ void setup_rendering(app_data *app, vkr_context *vk)
 
     // Init and copy data to staging buffer, then copy staging buf to vert buffer, then delete staging buf
     vkr_stage_and_upload_buffer_data(&dev->buffers[app->ind_buf_ind], indices, b_cfg.buffer_size, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
+
+    // Create descriptor sets for each frame
+    for (int i = 0; i < VKR_RENDER_FRAME_COUNT; ++i) {
+        vkr_add_descriptor_sets(&dev->rframes[i].desc_pool, vk, &dev->pipelines[pipe_ind].descriptor_layouts[0]);
+        
+        VkDescriptorBufferInfo buffer_info{};
+        //buffer_info.buffer = Buffers[i];
+        buffer_info.offset = 0;
+        buffer_info.range = sizeof(UniformBufferObject);        
+    }
 }
 
 void record_command_buffer(vkr_command_buffer *cmd_buf, vkr_framebuffer *fb, vkr_pipeline *pipeline, vkr_buffer *vert_buf, vkr_buffer *ind_buf)
