@@ -192,11 +192,13 @@ intern void mem_free_list_free(mem_arena *arena, void *ptr)
         it_prev = it;
         it = it->next;
     }
+
     arena->used -= free_node->data.block_size;
-    assert(arena->used <= arena->total_size);
 #if DO_DEBUG_PRINT
     dlog("Dptr:%p Hdr:%p BlckS:%lu Mused:%lu", ptr, (void *)free_node, free_node->data.block_size, arena->used);
 #endif
+    assert(arena->used <= arena->total_size);
+    
     // Merge contiguous nodes
     coalescence(&arena->mfl, it_prev, free_node);
 }
@@ -446,7 +448,7 @@ void mem_init_arena(sizet total_size, mem_alloc_type mtype, mem_arena *arena)
 {
     arena->total_size = total_size;
     arena->alloc_type = mtype;
-    ilog("Initializing %s arena with %d available bytes", mem_arena_type_str(arena->alloc_type), arena->total_size);
+    ilog("Initializing %s arena with %lu available", mem_arena_type_str(arena->alloc_type), arena->total_size);
 
     // Make sure user filled out a size before passsing in
     assert(arena->total_size != 0);
@@ -464,7 +466,7 @@ void mem_init_arena(sizet total_size, mem_alloc_type mtype, mem_arena *arena)
 
 void mem_terminate_arena(mem_arena *arena)
 {
-    ilog("Terminating %s arena with %d used bytes of %d allocated", mem_arena_type_str(arena->alloc_type), arena->used, arena->total_size);
+    ilog("Terminating %s arena with %lu used of %lu allocated and %lu peak", mem_arena_type_str(arena->alloc_type), arena->used, arena->total_size, arena->peak);
     mem_reset_arena(arena);
     platform_free(arena->start);
     arena->start = nullptr;

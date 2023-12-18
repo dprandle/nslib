@@ -23,7 +23,6 @@ struct internal_alloc_header
 {
     u32 scope{};
     sizet req_size{};
-    u32 padding{};
 };
 
 intern const char *alloc_scope_str(int scope)
@@ -98,7 +97,8 @@ intern void *vk_alloc(void *user, sizet size, sizet alignment, VkSystemAllocatio
 #if PRINT_MEM_INSTANCE_ONLY
     if (scope == VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE) {
 #endif
-        dlog("header_addr:%p ptr:%p requested_size:%d alignment:%d scope:%s used_before:%d alloc:%d used_after:%d",
+        dlog("hs:%lu, header_addr:%p ptr:%p requested_size:%lu alignment:%lu scope:%s used_before:%lu alloc:%lu used_after:%lu",
+             header_size,
              (void *)header,
              ret,
              size,
@@ -144,7 +144,8 @@ intern void vk_free(void *user, void *ptr)
 #if PRINT_MEM_INSTANCE_ONLY
     if (scope == VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE) {
 #endif
-        dlog("header_addr:%p ptr:%p requested_size:%d scope:%s used_before:%d dealloc:%d used_after:%d",
+        dlog("hs:%lu, header_addr:%p ptr:%p requested_size:%lu scope:%s used_before:%lu dealloc:%lu used_after:%lu",
+             header_size,
              header,
              ptr,
              req_size,
@@ -379,7 +380,9 @@ int vkr_init_instance(const vkr_context *vk, vkr_instance *inst)
     create_inf.enabledExtensionCount = total_exts;
     create_inf.ppEnabledLayerNames = vk->cfg.validation_layer_names;
     create_inf.enabledLayerCount = vk->cfg.validation_layer_count;
-    create_inf.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+    
+    // TODO: Need to make the ability to pass in flags on creatnig instance - mac has extra layers required
+    //create_inf.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 
     int err = vkCreateInstance(&create_inf, &vk->alloc_cbs, &inst->hndl);
     if (err == VK_SUCCESS) {
@@ -934,6 +937,7 @@ vkr_add_result vkr_add_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, s
         ilog("Setting cmd buffer at index %d in pool %p to hndl %lu", ret.begin + i, pool, hndls[i]);
     }
     ilog("Successfully added command buffer/s");
+    arr_terminate(&hndls);
     return ret;
 }
 
@@ -948,6 +952,7 @@ void vkr_remove_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, sizet in
     }
     vkFreeCommandBuffers(vk->inst.device.hndl, pool->hndl, count, hndls.data);
     arr_erase(&pool->buffers, &pool->buffers[ind], &pool->buffers[ind + count]);
+    arr_terminate(&hndls);
 }
 
 vkr_add_result vkr_add_descriptor_sets(vkr_descriptor_pool *pool, const vkr_context *vk, const VkDescriptorSetLayout *layouts, sizet count)
@@ -980,6 +985,7 @@ vkr_add_result vkr_add_descriptor_sets(vkr_descriptor_pool *pool, const vkr_cont
         ilog("Setting descriptor set at index %lu in pool %p to hndl %lu", result.begin + i, pool, hndls[i]);
     }
     ilog("Successfully added descriptor set/s");
+    arr_terminate(&hndls);
     return result;
 }
 
@@ -993,11 +999,13 @@ void vkr_remove_descriptor_sets(vkr_descriptor_pool *pool, const vkr_context *vk
     }
     vkFreeDescriptorSets(vk->inst.device.hndl, pool->hndl, count, hndls.data);
     arr_erase(&pool->desc_sets, &pool->desc_sets[ind], &pool->desc_sets[ind + count]);
+    arr_terminate(&hndls);
 }
 
 int vkr_init_cmd_pool(const vkr_context *vk, u32 fam_ind, VkCommandPoolCreateFlags flags, vkr_command_pool *cpool)
 {
     ilog("Initializing command pool");
+    arr_init(&cpool->buffers, vk->cfg.arenas.persistent_arena);
     VkCommandPoolCreateInfo pool_info{};
     pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     pool_info.flags = flags;
@@ -1022,8 +1030,8 @@ sizet vkr_add_cmd_pool(vkr_device_queue_fam_info *qfam, const vkr_command_pool &
 void vkr_terminate_cmd_pool(const vkr_context *vk, u32 fam_ind, vkr_command_pool *cpool)
 {
     ilog("Terminating command pool");
-    arr_terminate(&cpool->buffers);
     vkDestroyCommandPool(vk->inst.device.hndl, cpool->hndl, &vk->alloc_cbs);
+    arr_terminate(&cpool->buffers);
 }
 
 int vkr_init_shader_module(const vkr_context *vk, const byte_array *code, VkShaderModule *module)
@@ -1092,6 +1100,8 @@ int vkr_init_render_pass(const vkr_context *vk, const vkr_rpass_cfg *cfg, vkr_rp
     rpass_info.pSubpasses = subpasses.data;
     rpass_info.dependencyCount = cfg->subpass_dependencies.size;
     rpass_info.pDependencies = cfg->subpass_dependencies.data;
+
+    arr_terminate(&subpasses);
 
     if (vkCreateRenderPass(vk->inst.device.hndl, &rpass_info, &vk->alloc_cbs, &rpass->hndl) != VK_SUCCESS) {
         elog("Failed to create render pass");
@@ -1693,15 +1703,18 @@ void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
 
 intern void log_mem_stats(const char *type, const vk_mem_alloc_stats *stats)
 {
-    ilog("%s stats:\n alloc_count:%d free_count:%d realloc_count:%d req_alloc:%d req_free:%d actual_alloc:%d actual_free:%d",
+    ilog("%s alloc_count:%d free_count:%d realloc_count:%d",
          type,
          stats->alloc_count,
          stats->free_count,
-         stats->realloc_count,
+         stats->realloc_count);
+    ilog("%s req_alloc:%lu req_free:%lu actual_alloc:%lu actual_free:%lu",
+         type,
          stats->req_alloc,
          stats->req_free,
          stats->actual_alloc,
          stats->actual_free);
+    
 }
 
 void vkr_terminate_instance(const vkr_context *vk, vkr_instance *inst)
@@ -1723,6 +1736,7 @@ void vkr_terminate(vkr_context *vk)
     for (int i = 0; i < MEM_ALLOC_TYPE_COUNT; ++i) {
         log_mem_stats(alloc_scope_str(i), &vk->cfg.arenas.stats[i]);
     }
+    ilog("Persistant mem size:%lu peak:%lu  Command mem size:%lu peak:%lu", vk->cfg.arenas.persistent_arena->total_size, vk->cfg.arenas.persistent_arena->peak, vk->cfg.arenas.command_arena->total_size, vk->cfg.arenas.command_arena->peak);
 }
 
 int vkr_begin_cmd_buf(const vkr_command_buffer *buf)

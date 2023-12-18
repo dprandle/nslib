@@ -229,7 +229,6 @@ struct vkr_rpass_cfg
 struct vkr_rpass
 {
     VkRenderPass hndl;
-    vkr_rpass_cfg cfg;
 };
 
 struct vkr_shader_stage
