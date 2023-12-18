@@ -1,4 +1,5 @@
 #include "binary_archive.h"
+#include "input_kmcodes.h"
 #include "string_archive.h"
 #include "robj_common.h"
 #include "platform.h"
@@ -52,6 +53,12 @@ struct app_data
     vkr_context vk;
     u32 vert_buf_ind;
     u32 ind_buf_ind;
+    uniform_buffer_object cvp;
+
+    int move_target{0};
+    int move_right{0};
+
+    vec3 cam_pos;
 };
 
 int load_platform_settings(platform_init_info *settings, app_data *app)
@@ -109,7 +116,7 @@ void setup_rendering(app_data *app, vkr_context *vk)
     info.set_layouts[0].bindings[0].descriptorCount = 1;
     ++info.set_layouts[0].bindings.size;
     ++info.set_layouts.size;
-    
+
     // Vertex binding:
     VkVertexInputBindingDescription binding_desc{};
     binding_desc.binding = 0;
@@ -220,18 +227,48 @@ void setup_rendering(app_data *app, vkr_context *vk)
     // Init and copy data to staging buffer, then copy staging buf to vert buffer, then delete staging buf
     vkr_stage_and_upload_buffer_data(&dev->buffers[app->ind_buf_ind], indices, b_cfg.buffer_size, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
 
-    // Create descriptor sets for each frame
+    // Create uniform buffers and descriptor sets pointing to them for each frame
     for (int i = 0; i < VKR_RENDER_FRAME_COUNT; ++i) {
-        vkr_add_descriptor_sets(&dev->rframes[i].desc_pool, vk, &dev->pipelines[pipe_ind].descriptor_layouts[0]);
-        
+        vkr_buffer_cfg buf_cfg{};
+        vkr_buffer uniform_buf{};
+        buf_cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+        buf_cfg.gpu_alloc = vk->inst.device.vma_alloc.hndl;
+        buf_cfg.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
+        buf_cfg.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+        buf_cfg.buffer_size = sizeof(uniform_buffer_object);
+        buf_cfg.alloc_flags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+
+        int err = vkr_init_buffer(&uniform_buf, &buf_cfg);
+        assert(err == err_code::VKR_NO_ERROR);
+        dev->rframes[i].uniform_buffer_ind = vkr_add_buffer(dev, uniform_buf);
+
+        auto desc_ind = vkr_add_descriptor_sets(&dev->rframes[i].desc_pool, vk, &dev->pipelines[pipe_ind].descriptor_layouts[0]);
+        assert(desc_ind.err_code == err_code::VKR_NO_ERROR);
+
         VkDescriptorBufferInfo buffer_info{};
-        //buffer_info.buffer = Buffers[i];
         buffer_info.offset = 0;
-        buffer_info.range = sizeof(UniformBufferObject);        
+        buffer_info.range = buf_cfg.buffer_size;
+        buffer_info.buffer = uniform_buf.hndl;
+
+        VkWriteDescriptorSet desc_write{};
+        desc_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        desc_write.dstSet = dev->rframes[i].desc_pool.desc_sets[desc_ind.begin].hndl;
+        desc_write.dstBinding = 0;
+        desc_write.dstArrayElement = 0;
+        desc_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        desc_write.descriptorCount = 1;
+        desc_write.pBufferInfo = &buffer_info;
+
+        vkUpdateDescriptorSets(dev->hndl, 1, &desc_write, 0, nullptr);
     }
 }
 
-void record_command_buffer(vkr_command_buffer *cmd_buf, vkr_framebuffer *fb, vkr_pipeline *pipeline, vkr_buffer *vert_buf, vkr_buffer *ind_buf)
+void record_command_buffer(vkr_command_buffer *cmd_buf,
+                           vkr_framebuffer *fb,
+                           vkr_pipeline *pipeline,
+                           vkr_buffer *vert_buf,
+                           vkr_buffer *ind_buf,
+                           vkr_descriptor_set *desc_set)
 {
     vkr_begin_cmd_buf(cmd_buf);
     vkr_cmd_begin_rpass(cmd_buf, fb);
@@ -258,7 +295,7 @@ void record_command_buffer(vkr_command_buffer *cmd_buf, vkr_framebuffer *fb, vkr
 
     vkCmdBindIndexBuffer(cmd_buf->hndl, ind_buf->hndl, 0, VK_INDEX_TYPE_UINT16);
 
-    vkCmdDraw(cmd_buf->hndl, vert_buf->mem_info.size, 1, 0, 0);
+    vkCmdBindDescriptorSets(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, 0, 1, &desc_set->hndl, 0, nullptr);
     vkCmdDrawIndexed(cmd_buf->hndl, 6, 1, 0, 0, 0);
 
     vkr_cmd_end_rpass(cmd_buf);
@@ -269,7 +306,7 @@ int app_init(platform_ctxt *ctxt, app_data *app)
 {
     ilog("App init");
     version_info v{1, 0, 0};
-    
+
     vkr_cfg vkii{"03 Triangle",
                  {1, 0, 0},
                  {},
@@ -283,12 +320,16 @@ int app_init(platform_ctxt *ctxt, app_data *app)
                  DEVICE_EXTENSION_COUNT,
                  VALIDATION_LAYERS,
                  VALIDATION_LAYER_COUNT};
-    
 
     if (vkr_init(&vkii, &app->vk) != err_code::VKR_NO_ERROR) {
         return err_code::PLATFORM_INIT;
     }
     setup_rendering(app, &app->vk);
+
+    vec2 fbsz(ctxt->fwind.fb_size);
+    app->cvp.proj = math::perspective(45.0f, fbsz.w / fbsz.h, 0.1f, 10.0f);
+    app->cam_pos = 2.0f;
+    app->cvp.view = math::look_at(app->cam_pos, {0.0f});
     return err_code::PLATFORM_NO_ERROR;
 }
 
@@ -300,7 +341,7 @@ int app_terminate(platform_ctxt *ctxt, app_data *app)
     return err_code::PLATFORM_NO_ERROR;
 }
 
-int app_run_frame(platform_ctxt *ctxt, app_data *app)
+int render_frame(platform_ctxt *ctxt, app_data *app)
 {
     auto dev = &app->vk.inst.device;
 
@@ -329,10 +370,15 @@ int app_run_frame(platform_ctxt *ctxt, app_data *app)
 
     vkResetFences(dev->hndl, 1, &cur_frame->in_flight);
 
+    // Update uniform buffer with some matrices
+    int ubo_ind = dev->rframes[im_ind].uniform_buffer_ind;
+    memcpy(dev->buffers[ubo_ind].mem_info.pMappedData, &app->cvp, sizeof(uniform_buffer_object));
+
     // We have the acquired image index, though we don't know when it will be ready to have ops submitted, we can record
     // the ops in the command buffer and submit once it is readyy
     auto fb = &dev->framebuffers[im_ind];
-    record_command_buffer(cmd_buf, fb, pipeline, vert_buf, ind_buf);
+    auto desc_set = &dev->rframes[im_ind].desc_pool.desc_sets[0];
+    record_command_buffer(cmd_buf, fb, pipeline, vert_buf, ind_buf, desc_set);
 
     // Get the info ready to submit our command buffer to the queue. We need to wait until the image avail semaphore has
     // signaled, and then we need to trigger the render finished signal once the the command buffer completes
@@ -361,6 +407,52 @@ int app_run_frame(platform_ctxt *ctxt, app_data *app)
     present_info.pResults = nullptr; // Optional - check for individual swaps
     vkQueuePresentKHR(dev->qfams[VKR_QUEUE_FAM_TYPE_PRESENT].qs[0].hndl, &present_info);
     return err_code::PLATFORM_NO_ERROR;
+}
+
+int app_run_frame(platform_ctxt *ctxt, app_data *app)
+{
+    for (int ie = 0; ie < ctxt->finp.events.size; ++ie) {
+        auto ev = &ctxt->finp.events[ie];
+        if (ev->type == platform_input_event_type::KEY_PRESS) {
+            if (ev->action == INPUT_ACTION_PRESS) {
+                if (ev->key_or_button == KEY_W) {
+                    app->move_target = 1;
+                }
+                if (ev->key_or_button == KEY_S) {
+                    app->move_target = -1;
+                }
+                if (ev->key_or_button == KEY_D) {
+                    app->move_right = 1;
+                }
+                if (ev->key_or_button == KEY_A) {
+                    app->move_right = -1;
+                }
+            }
+            else if (ev->action == INPUT_ACTION_RELEASE) {
+                if (ev->key_or_button == KEY_W || ev->key_or_button == KEY_S) {
+                    app->move_target = 0;
+                }
+                if (ev->key_or_button == KEY_D || ev->key_or_button == KEY_A) {
+                    app->move_right = 0;
+                }
+            }
+        }
+    }
+    if (app->move_target != 0) {
+        vec3 target_trans = app->cvp.view[VIEW_MATRIX_COL_TARGET].xyz;
+        target_trans += target_trans * app->move_target * ctxt->time_pts.dt * 0.1f;
+        math::set_mat_column(&app->cvp.view, VIEW_MATRIX_COL_TARGET, target_trans);
+        ilog("Target: %s", to_cstr(target_trans));
+    }
+    if (app->move_right != 0) {
+        vec3 right_trans = app->cvp.view[VIEW_MATRIX_COL_RIGHT].xyz;
+        right_trans += right_trans * app->move_right * ctxt->time_pts.dt * 0.1f;
+        math::set_mat_column(&app->cvp.view, VIEW_MATRIX_COL_RIGHT, right_trans);
+        ilog("Target: %s", to_cstr(right_trans));
+    }
+    //    ilog("View mat: %s",to_cstr(app->cvp.view));
+
+    return render_frame(ctxt, app);
 }
 
 DEFINE_APPLICATION_MAIN(app_data)

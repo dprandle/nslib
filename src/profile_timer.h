@@ -42,7 +42,14 @@ struct profile_timepoints
 
     // Time, in us, between current split point and previous split (updated with ptimer_split)
     u64 dt_ns;
+
+    // Time, in s, between current split point and previous split (updated with ptimer_split)
+    double dt;
 };
+
+inline double nanos_to_sec(u64 ns) {
+    return (double)ns / 1000000000.0;
+}
 
 ptimespec ptimer_cur(int ptype);
 

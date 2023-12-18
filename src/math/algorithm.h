@@ -417,8 +417,8 @@ T round(T item, i8 decimal_places)
 template<mat_type T, vec_type V>
 void set_mat_column(T *mat, sizet ind, const V &col)
 {
-    static_assert(T::size_ == V::size_);
-    for (i8 i{0}; i < T::size_; ++i)
+    static_assert(V::size_ <= T::size_);
+    for (i8 i{0}; i < V::size_; ++i)
         (*mat)[i][ind] = col[i];
 }
 

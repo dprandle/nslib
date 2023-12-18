@@ -55,6 +55,7 @@ void ptimer_split(profile_timepoints * ptimer)
     ptimespec cur = ptimer_cur(ptimer->ctype);
     ptimespec split_dt = ptimer_diff(&ptimer->split, &cur);
     ptimer->dt_ns = ptimer_nsec(&split_dt);
+    ptimer->dt = nanos_to_sec(ptimer->dt_ns);
     ptimer->split = cur;
 }
 
@@ -71,5 +72,6 @@ u64 ptimer_elapsed_dt(const profile_timepoints *ptimer)
     ptimespec split_dt = ptimer_diff(&ptimer->restart, &cur);
     return ptimer_nsec(&split_dt);
 }
+
 
 } // namespace nslib

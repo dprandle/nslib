@@ -5,6 +5,13 @@
 
 namespace nslib
 {
+enum view_matrix_col_ind
+{
+    VIEW_MATRIX_COL_RIGHT,
+    VIEW_MATRIX_COL_UP,
+    VIEW_MATRIX_COL_TARGET
+};
+
 template<class T>
 struct matrix3
 {

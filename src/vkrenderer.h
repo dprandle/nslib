@@ -193,6 +193,7 @@ struct vkr_descriptor_pool
 struct vkr_frame
 {
     vkr_cmd_buf_ind cmd_buf_ind;
+    sizet uniform_buffer_ind;
     vkr_descriptor_pool desc_pool;
     VkSemaphore image_avail;
     VkSemaphore render_finished;

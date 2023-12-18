@@ -71,6 +71,14 @@ struct matrix4
     };
 };
 
+pup_func_tt(matrix4)
+{
+    pup_member(row1);
+    pup_member(row2);
+    pup_member(row3);
+    pup_member(row4);
+}    
+
 // Enable type trait
 template<class U>
 struct is_mat<matrix4<U>>
