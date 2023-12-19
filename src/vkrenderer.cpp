@@ -380,9 +380,7 @@ int vkr_init_instance(const vkr_context *vk, vkr_instance *inst)
     create_inf.enabledExtensionCount = total_exts;
     create_inf.ppEnabledLayerNames = vk->cfg.validation_layer_names;
     create_inf.enabledLayerCount = vk->cfg.validation_layer_count;
-    
-    // TODO: Need to make the ability to pass in flags on creatnig instance - mac has extra layers required
-    //create_inf.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+    create_inf.flags = vk->cfg.inst_create_flags;
 
     int err = vkCreateInstance(&create_inf, &vk->alloc_cbs, &inst->hndl);
     if (err == VK_SUCCESS) {
@@ -491,7 +489,8 @@ int vkr_init_device(vkr_device *dev,
     arr_init(&dev->framebuffers, vk->cfg.arenas.persistent_arena);
     arr_init(&dev->pipelines, vk->cfg.arenas.persistent_arena);
     arr_init(&dev->buffers, vk->cfg.arenas.persistent_arena);
-
+    arr_init(&dev->rframes, vk->cfg.arenas.persistent_arena);
+    
     ilog("Creating vk device and queues");
     const vkr_queue_families *qfams = &vk->inst.pdev_info.qfams;
 
@@ -574,57 +573,6 @@ int vkr_init_device(vkr_device *dev,
             dev->qfams[i].transient_pool = pool_transient_ind;
         }
     }
-
-    // Create our rframes command buffers
-    auto gfx_fam = &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX];
-    auto buf_res = vkr_add_cmd_bufs(&gfx_fam->cmd_pools[gfx_fam->default_pool], vk, VKR_RENDER_FRAME_COUNT);
-    if (buf_res.err_code != err_code::VKR_NO_ERROR) {
-        vkr_terminate_device(dev, vk);
-        return buf_res.err_code;
-    }
-
-    // Create frame synchronization objects - start all fences as signalled already
-    for (u32 framei = 0; framei < VKR_RENDER_FRAME_COUNT; ++framei) {
-        VkSemaphoreCreateInfo sem_info{};
-        sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-        result = vkCreateSemaphore(dev->hndl, &sem_info, &vk->alloc_cbs, &dev->rframes[framei].image_avail);
-        if (result != VK_SUCCESS) {
-            elog("Failed to create image semaphore for frame %d with vk err code %d", framei, result);
-            vkr_terminate_device(dev, vk);
-            return err_code::VKR_CREATE_SEMAPHORE_FAIL;
-        }
-
-        result = vkCreateSemaphore(dev->hndl, &sem_info, &vk->alloc_cbs, &dev->rframes[framei].render_finished);
-        if (result != VK_SUCCESS) {
-            elog("Failed to create render semaphore for frame %d with vk err code %d", framei, result);
-            vkr_terminate_device(dev, vk);
-            return err_code::VKR_CREATE_SEMAPHORE_FAIL;
-        }
-
-        VkFenceCreateInfo fence_info{};
-        fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-        result = vkCreateFence(dev->hndl, &fence_info, &vk->alloc_cbs, &dev->rframes[framei].in_flight);
-        if (result != VK_SUCCESS) {
-            elog("Failed to create flight fence for frame %d with vk err code %d", framei, result);
-            vkr_terminate_device(dev, vk);
-            return err_code::VKR_CREATE_FENCE_FAIL;
-        }
-
-        // Assign the command buffer created earlier to this frame
-        dev->rframes[framei].cmd_buf_ind = {VKR_QUEUE_FAM_TYPE_GFX, gfx_fam->default_pool, buf_res.begin + framei};
-
-        // Get a count of the number of descriptors we are making avaialable for each desc type
-        result = vkr_init_descriptor_pool(&dev->rframes[framei].desc_pool, vk, vk->cfg.max_desc_sets_per_pool);
-        if (result != VK_SUCCESS) {
-            elog("Failed to create descriptor pool for frame %d - aborting init", framei);
-            vkr_terminate_device(dev, vk);
-            return result;
-        }
-    }
-    ilog("Successfully created vk device and queues");
 
     VmaDeviceMemoryCallbacks cb{};
     cb.pUserData = dev;
@@ -796,7 +744,7 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk, void *wind
     if (caps->maxImageCount != 0 && caps->maxImageCount < swap_create.minImageCount) {
         swap_create.minImageCount = caps->maxImageCount;
     }
-
+    
     // Basically if our present queue is different than our graphics queue then we enable concurrent sharing mode..
     // honestly not sure about that yet
     uint32_t queue_fam_inds[] = {qfams->qinfo[VKR_QUEUE_FAM_TYPE_GFX].index, qfams->qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].index};
@@ -894,7 +842,7 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk, void *wind
             return err_code::VKR_CREATE_IMAGE_VIEW_FAIL;
         }
     }
-    ilog("Successfully set up swapchain");
+    ilog("Successfully set up swapchain with %d image views", sw_info->image_views.size);
     return err_code::VKR_NO_ERROR;
 }
 
@@ -1006,6 +954,7 @@ int vkr_init_cmd_pool(const vkr_context *vk, u32 fam_ind, VkCommandPoolCreateFla
 {
     ilog("Initializing command pool");
     arr_init(&cpool->buffers, vk->cfg.arenas.persistent_arena);
+    
     VkCommandPoolCreateInfo pool_info{};
     pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     pool_info.flags = flags;
@@ -1562,6 +1511,76 @@ void vkr_terminate_surface(const vkr_context *vk, VkSurfaceKHR surface)
     vkDestroySurfaceKHR(vk->inst.hndl, surface, &vk->alloc_cbs);
 }
 
+void vkr_terminate_swapchain_frames(vkr_device *dev, const vkr_context *vk)
+{
+    for (int framei = 0; framei < dev->rframes.size; ++framei) {
+        vkr_terminate_descriptor_pool(&dev->rframes[framei].desc_pool, vk);
+        vkDestroySemaphore(dev->hndl, dev->rframes[framei].image_avail, &vk->alloc_cbs);
+        vkDestroySemaphore(dev->hndl, dev->rframes[framei].render_finished, &vk->alloc_cbs);
+        vkDestroyFence(dev->hndl, dev->rframes[framei].in_flight, &vk->alloc_cbs);
+    }
+    arr_terminate(&dev->rframes);
+}
+
+
+int vkr_init_swapchain_frames(vkr_device *dev, const vkr_context *vk)
+{
+    // Create our rframes
+    arr_resize(&dev->rframes, dev->swapchain.image_views.size, vkr_frame{});
+
+    // Create our rframes command buffers
+    auto gfx_fam = &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX];
+
+    // Add a command buffer for each frame - assign to the actual frames in the loop below
+    auto buf_res = vkr_add_cmd_bufs(&gfx_fam->cmd_pools[gfx_fam->default_pool], vk, dev->rframes.size);
+    assert(buf_res.err_code == err_code::VKR_NO_ERROR);
+    assert((buf_res.end - buf_res.begin) == dev->rframes.size);
+
+    // Create frame synchronization objects - start all fences as signalled already
+    for (u32 framei = 0; framei < dev->rframes.size; ++framei) {
+        VkSemaphoreCreateInfo sem_info{};
+        sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+        int err = vkCreateSemaphore(dev->hndl, &sem_info, &vk->alloc_cbs, &dev->rframes[framei].image_avail);
+        if (err != VK_SUCCESS) {
+            elog("Failed to create image semaphore for frame %d with vk err code %d", framei, err);
+            vkr_terminate_device(dev, vk);
+            return err_code::VKR_CREATE_SEMAPHORE_FAIL;
+        }
+
+        err = vkCreateSemaphore(dev->hndl, &sem_info, &vk->alloc_cbs, &dev->rframes[framei].render_finished);
+        if (err != VK_SUCCESS) {
+            elog("Failed to create render semaphore for frame %d with vk err code %d", framei, err);
+            vkr_terminate_device(dev, vk);
+            return err_code::VKR_CREATE_SEMAPHORE_FAIL;
+        }
+
+        VkFenceCreateInfo fence_info{};
+        fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+        err = vkCreateFence(dev->hndl, &fence_info, &vk->alloc_cbs, &dev->rframes[framei].in_flight);
+        if (err != VK_SUCCESS) {
+            elog("Failed to create flight fence for frame %d with vk err code %d", framei, err);
+            vkr_terminate_device(dev, vk);
+            return err_code::VKR_CREATE_FENCE_FAIL;
+        }
+
+        // Assign the command buffer created earlier to this frame
+        dev->rframes[framei].cmd_buf_ind = {VKR_QUEUE_FAM_TYPE_GFX, gfx_fam->default_pool, buf_res.begin + framei};
+
+        // Get a count of the number of descriptors we are making avaialable for each desc type
+        err = vkr_init_descriptor_pool(&dev->rframes[framei].desc_pool, vk, vk->cfg.max_desc_sets_per_pool);
+        if (err != VK_SUCCESS) {
+            elog("Failed to create descriptor pool for frame %d - aborting init", framei);
+            vkr_terminate_device(dev, vk);
+            return err;
+        }
+    }
+    ilog("Successfully initialized %lu renderframes", dev->rframes.size);
+    return err_code::VKR_NO_ERROR;
+}
+
 int vkr_init(const vkr_cfg *cfg, vkr_context *vk)
 {
     ilog("Initializing vulkan");
@@ -1619,6 +1638,12 @@ int vkr_init(const vkr_cfg *cfg, vkr_context *vk)
     }
 
     code = vkr_init_swapchain(&vk->inst.device.swapchain, vk, cfg->window);
+    if (code != err_code::VKR_NO_ERROR) {
+        vkr_terminate(vk);
+        return code;
+    }
+
+    code = vkr_init_swapchain_frames(&vk->inst.device, vk);
     if (code != err_code::VKR_NO_ERROR) {
         vkr_terminate(vk);
         return code;
@@ -1689,13 +1714,7 @@ void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
     }
 
     vkr_terminate_swapchain(&dev->swapchain, vk);
-
-    for (int framei = 0; framei < VKR_RENDER_FRAME_COUNT; ++framei) {
-        vkr_terminate_descriptor_pool(&dev->rframes[framei].desc_pool, vk);
-        vkDestroySemaphore(dev->hndl, dev->rframes[framei].image_avail, &vk->alloc_cbs);
-        vkDestroySemaphore(dev->hndl, dev->rframes[framei].render_finished, &vk->alloc_cbs);
-        vkDestroyFence(dev->hndl, dev->rframes[framei].in_flight, &vk->alloc_cbs);
-    }
+    vkr_terminate_swapchain_frames(dev, vk);
 
     vmaDestroyAllocator(dev->vma_alloc.hndl);
     vkDestroyDevice(dev->hndl, &vk->alloc_cbs);

@@ -37,14 +37,17 @@ intern const u32 VALIDATION_LAYER_COUNT = 1;
 intern const char *VALIDATION_LAYERS[VALIDATION_LAYER_COUNT] = {"VK_LAYER_KHRONOS_validation"};
 #endif
 
-intern const u32 ADDITIONAL_INST_EXTENSION_COUNT = 1;
-intern const char *ADDITIONAL_INST_EXTENSIONS[ADDITIONAL_INST_EXTENSION_COUNT] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME};
-//                                                                                  VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME};
-
 #if __APPLE__
+intern const VkInstanceCreateFlags INST_CREATE_FLAGS = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+intern const u32 ADDITIONAL_INST_EXTENSION_COUNT = 2;
+intern const char *ADDITIONAL_INST_EXTENSIONS[ADDITIONAL_INST_EXTENSION_COUNT] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME};
+                                                                                  VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME};
 intern const u32 DEVICE_EXTENSION_COUNT = 2;
 intern const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_portability_subset"};
 #else
+intern const VkInstanceCreateFlags INST_CREATE_FLAGS = {};
+intern const u32 ADDITIONAL_INST_EXTENSION_COUNT = 1;
+intern const char *ADDITIONAL_INST_EXTENSIONS[ADDITIONAL_INST_EXTENSION_COUNT] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME};
 intern const u32 DEVICE_EXTENSION_COUNT = 1;
 intern const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 #endif
@@ -112,12 +115,12 @@ void setup_rendering(app_data *app, vkr_context *vk)
     arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_SCISSOR);
 
     // Descripitor Set Layouts just a single uniform buffer for now
-    // info.set_layouts[0].bindings[0].binding = 0;
-    // info.set_layouts[0].bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    // info.set_layouts[0].bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    // info.set_layouts[0].bindings[0].descriptorCount = 1;
-    // ++info.set_layouts[0].bindings.size;
-    // ++info.set_layouts.size;
+    info.set_layouts[0].bindings[0].binding = 0;
+    info.set_layouts[0].bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    info.set_layouts[0].bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    info.set_layouts[0].bindings[0].descriptorCount = 1;
+    ++info.set_layouts[0].bindings.size;
+    ++info.set_layouts.size;
 
     // Vertex binding:
     VkVertexInputBindingDescription binding_desc{};
@@ -230,39 +233,39 @@ void setup_rendering(app_data *app, vkr_context *vk)
     vkr_stage_and_upload_buffer_data(&dev->buffers[app->ind_buf_ind], indices, b_cfg.buffer_size, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
 
     // Create uniform buffers and descriptor sets pointing to them for each frame
-    // for (int i = 0; i < VKR_RENDER_FRAME_COUNT; ++i) {
-    //     vkr_buffer_cfg buf_cfg{};
-    //     vkr_buffer uniform_buf{};
-    //     buf_cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
-    //     buf_cfg.gpu_alloc = vk->inst.device.vma_alloc.hndl;
-    //     buf_cfg.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
-    //     buf_cfg.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-    //     buf_cfg.buffer_size = sizeof(uniform_buffer_object);
-    //     buf_cfg.alloc_flags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+    for (int i = 0; i < dev->rframes.size; ++i) {
+        vkr_buffer_cfg buf_cfg{};
+        vkr_buffer uniform_buf{};
+        buf_cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+        buf_cfg.gpu_alloc = vk->inst.device.vma_alloc.hndl;
+        buf_cfg.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
+        buf_cfg.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+        buf_cfg.buffer_size = sizeof(uniform_buffer_object);
+        buf_cfg.alloc_flags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 
-    //     int err = vkr_init_buffer(&uniform_buf, &buf_cfg);
-    //     assert(err == err_code::VKR_NO_ERROR);
-    //     dev->rframes[i].uniform_buffer_ind = vkr_add_buffer(dev, uniform_buf);
+        int err = vkr_init_buffer(&uniform_buf, &buf_cfg);
+        assert(err == err_code::VKR_NO_ERROR);
+        dev->rframes[i].uniform_buffer_ind = vkr_add_buffer(dev, uniform_buf);
 
-    //     auto desc_ind = vkr_add_descriptor_sets(&dev->rframes[i].desc_pool, vk, &dev->pipelines[pipe_ind].descriptor_layouts[0]);
-    //     assert(desc_ind.err_code == err_code::VKR_NO_ERROR);
+        auto desc_ind = vkr_add_descriptor_sets(&dev->rframes[i].desc_pool, vk, &dev->pipelines[pipe_ind].descriptor_layouts[0]);
+        assert(desc_ind.err_code == err_code::VKR_NO_ERROR);
 
-    //     VkDescriptorBufferInfo buffer_info{};
-    //     buffer_info.offset = 0;
-    //     buffer_info.range = buf_cfg.buffer_size;
-    //     buffer_info.buffer = uniform_buf.hndl;
+        VkDescriptorBufferInfo buffer_info{};
+        buffer_info.offset = 0;
+        buffer_info.range = buf_cfg.buffer_size;
+        buffer_info.buffer = uniform_buf.hndl;
 
-    //     VkWriteDescriptorSet desc_write{};
-    //     desc_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    //     desc_write.dstSet = dev->rframes[i].desc_pool.desc_sets[desc_ind.begin].hndl;
-    //     desc_write.dstBinding = 0;
-    //     desc_write.dstArrayElement = 0;
-    //     desc_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    //     desc_write.descriptorCount = 1;
-    //     desc_write.pBufferInfo = &buffer_info;
+        VkWriteDescriptorSet desc_write{};
+        desc_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        desc_write.dstSet = dev->rframes[i].desc_pool.desc_sets[desc_ind.begin].hndl;
+        desc_write.dstBinding = 0;
+        desc_write.dstArrayElement = 0;
+        desc_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        desc_write.descriptorCount = 1;
+        desc_write.pBufferInfo = &buffer_info;
 
-    //     vkUpdateDescriptorSets(dev->hndl, 1, &desc_write, 0, nullptr);
-    // }
+        vkUpdateDescriptorSets(dev->hndl, 1, &desc_write, 0, nullptr);
+    }
 }
 
 void record_command_buffer(vkr_command_buffer *cmd_buf,
@@ -297,7 +300,7 @@ void record_command_buffer(vkr_command_buffer *cmd_buf,
 
     vkCmdBindIndexBuffer(cmd_buf->hndl, ind_buf->hndl, 0, VK_INDEX_TYPE_UINT16);
 
-    //    vkCmdBindDescriptorSets(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, 0, 1, &desc_set->hndl, 0, nullptr);
+    vkCmdBindDescriptorSets(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, 0, 1, &desc_set->hndl, 0, nullptr);
     vkCmdDrawIndexed(cmd_buf->hndl, 6, 1, 0, 0, 0);
 
     vkr_cmd_end_rpass(cmd_buf);
@@ -308,16 +311,16 @@ int app_init(platform_ctxt *ctxt, app_data *app)
 {
     ilog("App init");
     version_info v{1, 0, 0};
-
     
     mem_init_arena(100*MB_SIZE, mem_alloc_type::FREE_LIST, &app->vk_free_list);
     mem_init_arena(10*MB_SIZE, mem_alloc_type::LINEAR, &app->vk_frame_linear);
 
     vkr_cfg vkii{"03 Triangle",
                  {1, 0, 0},
-                 {},//.persistent_arena=&app->vk_free_list, .command_arena=&app->vk_frame_linear},
+                 {.persistent_arena=&app->vk_free_list, .command_arena=&app->vk_frame_linear},
                  LOG_TRACE,
                  ctxt->win_hndl,
+                 INST_CREATE_FLAGS,
                  {},
                  4,
                  ADDITIONAL_INST_EXTENSIONS,
@@ -330,6 +333,7 @@ int app_init(platform_ctxt *ctxt, app_data *app)
     if (vkr_init(&vkii, &app->vk) != err_code::VKR_NO_ERROR) {
         return err_code::PLATFORM_INIT;
     }
+
     setup_rendering(app, &app->vk);
 
     vec2 fbsz(ctxt->fwind.fb_size);
@@ -349,13 +353,14 @@ int app_terminate(platform_ctxt *ctxt, app_data *app)
 
 int render_frame(platform_ctxt *ctxt, app_data *app)
 {
+    mem_reset_arena(app->vk.cfg.arenas.command_arena);
     auto dev = &app->vk.inst.device;
 
     if (platform_framebuffer_resized(ctxt->win_hndl)) {
         vkr_recreate_swapchain(&app->vk.inst, &app->vk, ctxt->win_hndl, 0);
     }
 
-    int rframe_ind = ctxt->finished_frames % VKR_RENDER_FRAME_COUNT;
+    int rframe_ind = ctxt->finished_frames % dev->rframes.size;
     auto cur_frame = &dev->rframes[rframe_ind];
     auto buf_ind = cur_frame->cmd_buf_ind;
     auto cmd_buf = &dev->qfams[buf_ind.pool_ind.qfam_ind].cmd_pools[buf_ind.pool_ind.pool_ind].buffers[buf_ind.buffer_ind];
@@ -377,14 +382,14 @@ int render_frame(platform_ctxt *ctxt, app_data *app)
     vkResetFences(dev->hndl, 1, &cur_frame->in_flight);
 
     // Update uniform buffer with some matrices
-    // int ubo_ind = dev->rframes[im_ind].uniform_buffer_ind;
-    // memcpy(dev->buffers[ubo_ind].mem_info.pMappedData, &app->cvp, sizeof(uniform_buffer_object));
+    int ubo_ind = dev->rframes[im_ind].uniform_buffer_ind;
+    memcpy(dev->buffers[ubo_ind].mem_info.pMappedData, &app->cvp, sizeof(uniform_buffer_object));
 
     // We have the acquired image index, though we don't know when it will be ready to have ops submitted, we can record
     // the ops in the command buffer and submit once it is readyy
     auto fb = &dev->framebuffers[im_ind];
-    // auto desc_set = &dev->rframes[im_ind].desc_pool.desc_sets[0];
-    record_command_buffer(cmd_buf, fb, pipeline, vert_buf, ind_buf, nullptr);
+    auto desc_set = &dev->rframes[im_ind].desc_pool.desc_sets[0];
+    record_command_buffer(cmd_buf, fb, pipeline, vert_buf, ind_buf, desc_set);
 
     // Get the info ready to submit our command buffer to the queue. We need to wait until the image avail semaphore has
     // signaled, and then we need to trigger the render finished signal once the the command buffer completes
@@ -412,6 +417,7 @@ int render_frame(platform_ctxt *ctxt, app_data *app)
     present_info.pImageIndices = &im_ind;
     present_info.pResults = nullptr; // Optional - check for individual swaps
     vkQueuePresentKHR(dev->qfams[VKR_QUEUE_FAM_TYPE_PRESENT].qs[0].hndl, &present_info);
+
     return err_code::PLATFORM_NO_ERROR;
 }
 

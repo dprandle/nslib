@@ -1,9 +1,9 @@
 #version 450
-// layout(binding = 0) uniform uniform_buffer_object {
-//     mat4 model;
-//     mat4 view;
-//     mat4 proj;
-// } ubo;
+layout(binding = 0) uniform uniform_buffer_object {
+    mat4 model;
+    mat4 view;
+    mat4 proj;
+} ubo;
 
 layout(location = 0) in vec2 in_pos;
 layout(location = 1) in vec3 in_color;

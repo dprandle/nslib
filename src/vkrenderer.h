@@ -57,10 +57,10 @@ const u32 VKR_DESCRIPTOR_TYPE_COUNT = 11;
 
 inline constexpr const u32 MAX_QUEUE_REQUEST_COUNT = 32;
 inline constexpr const u32 VKR_MAX_EXTENSION_STR_LEN = 128;
-inline constexpr const u32 VKR_RENDER_FRAME_COUNT = 3;
 
 const u32 VKR_INVALID = (u32)-1;
 inline constexpr const u32 MEM_ALLOC_TYPE_COUNT = VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE + 1;
+inline constexpr sizet MAX_FRAME_COUNT = 3;
 
 struct vk_mem_alloc_stats
 {
@@ -370,7 +370,7 @@ struct vkr_device
     array<vkr_pipeline> pipelines;
     array<vkr_buffer> buffers;
     vkr_swapchain swapchain;
-    vkr_frame rframes[VKR_RENDER_FRAME_COUNT];
+    array<vkr_frame> rframes;
     vkr_gpu_allocator vma_alloc;
 };
 
@@ -397,6 +397,7 @@ struct vkr_cfg
     vk_arenas arenas;
     int log_verbosity;
     void *window;
+    VkInstanceCreateFlags inst_create_flags;
 
     vkr_max_descriptor_count max_desc_per_type_per_pool{};
     u32 max_desc_sets_per_pool{4};
