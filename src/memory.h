@@ -24,7 +24,7 @@ struct free_header
 struct alloc_header
 {
     sizet block_size;
-    sizet padding;
+    sizet algn_padding;
 };
 
 struct stack_alloc_header
