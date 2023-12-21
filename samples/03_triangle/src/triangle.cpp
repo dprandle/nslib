@@ -62,8 +62,6 @@ struct app_data
 
     int move_target{0};
     int move_right{0};
-
-    vec3 cam_pos;
 };
 
 int load_platform_settings(platform_init_info *settings, app_data *app)
@@ -337,9 +335,8 @@ int app_init(platform_ctxt *ctxt, app_data *app)
     setup_rendering(app, &app->vk);
 
     vec2 fbsz(ctxt->fwind.fb_size);
-    app->cvp.proj = math::perspective(45.0f, fbsz.w / fbsz.h, 0.1f, 10.0f);
-    app->cam_pos = 2.0f;
-    app->cvp.view = math::look_at(app->cam_pos, {0.0f});
+    app->cvp.proj = (math::perspective(45.0f, fbsz.w / fbsz.h, 0.1f, 10.0f));
+    app->cvp.view = (math::look_at(vec3{0.0f, 0.0f, -2.0f}, vec3{0.0f}, vec3{0.0f, 1.0f, 0.0f}));
     return err_code::PLATFORM_NO_ERROR;
 }
 
@@ -384,6 +381,7 @@ int render_frame(platform_ctxt *ctxt, app_data *app)
     // Update uniform buffer with some matrices
     int ubo_ind = dev->rframes[im_ind].uniform_buffer_ind;
     memcpy(dev->buffers[ubo_ind].mem_info.pMappedData, &app->cvp, sizeof(uniform_buffer_object));
+    
 
     // We have the acquired image index, though we don't know when it will be ready to have ops submitted, we can record
     // the ops in the command buffer and submit once it is readyy
@@ -423,10 +421,15 @@ int render_frame(platform_ctxt *ctxt, app_data *app)
 
 int app_run_frame(platform_ctxt *ctxt, app_data *app)
 {
+    vec3 dir = math::target(app->cvp.view);
+    vec3 right = math::right(app->cvp.view);
+    vec3 cur_pos = math::translation_component(app->cvp.view);
+    
     for (int ie = 0; ie < ctxt->finp.events.size; ++ie) {
         auto ev = &ctxt->finp.events[ie];
         if (ev->type == platform_input_event_type::KEY_PRESS) {
             if (ev->action == INPUT_ACTION_PRESS) {
+                ilog("Current pos on start:%s", to_cstr(cur_pos));                
                 if (ev->key_or_button == KEY_W) {
                     app->move_target = 1;
                 }
@@ -441,6 +444,7 @@ int app_run_frame(platform_ctxt *ctxt, app_data *app)
                 }
             }
             else if (ev->action == INPUT_ACTION_RELEASE) {
+                ilog("Current pos on release:%s", to_cstr(cur_pos));
                 if (ev->key_or_button == KEY_W || ev->key_or_button == KEY_S) {
                     app->move_target = 0;
                 }
@@ -451,19 +455,14 @@ int app_run_frame(platform_ctxt *ctxt, app_data *app)
         }
     }
     if (app->move_target != 0) {
-        vec3 target_trans = app->cvp.view[VIEW_MATRIX_COL_TARGET].xyz;
-        target_trans += target_trans * app->move_target * ctxt->time_pts.dt * 0.1f;
-        math::set_mat_column(&app->cvp.view, VIEW_MATRIX_COL_TARGET, target_trans);
-        ilog("Target: %s", to_cstr(target_trans));
+        cur_pos -= dir*ctxt->time_pts.dt*app->move_target;
+        math::set_mat_column(&app->cvp.view, VIEW_MATRIX_COL_POS, cur_pos);
     }
     if (app->move_right != 0) {
-        vec3 right_trans = app->cvp.view[VIEW_MATRIX_COL_RIGHT].xyz;
-        right_trans += right_trans * app->move_right * ctxt->time_pts.dt * 0.1f;
-        math::set_mat_column(&app->cvp.view, VIEW_MATRIX_COL_RIGHT, right_trans);
-        ilog("Target: %s", to_cstr(right_trans));
+        cur_pos -= right*ctxt->time_pts.dt*app->move_right;
+        math::set_mat_column(&app->cvp.view, VIEW_MATRIX_COL_POS, cur_pos);
     }
-    //    ilog("View mat: %s",to_cstr(app->cvp.view));
-//    return err_code::PLATFORM_NO_ERROR;
+    
     return render_frame(ctxt, app);
 }
 

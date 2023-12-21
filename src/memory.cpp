@@ -48,44 +48,44 @@ intern sizet calc_padding_with_header(sizet base_addr, sizet alignment, sizet he
     return padding;
 }
 
-void intern find_first(mem_free_list *mfl, sizet size, sizet alignment, sizet &padding, mem_node *&prev_node, mem_node *&found_node)
+intern void find_first(mem_free_list *mfl, sizet size, sizet alignment, sizet *padding, mem_node **prev_node, mem_node **found_node)
 {
     // Iterate list and return the first free block with a size >= than given size
     mem_node *it = mfl->free_list.head, *it_prev = nullptr;
 
     while (it != nullptr) {
-        padding = calc_padding_with_header((sizet)it, alignment, sizeof(alloc_header));
-        sizet required_space = size + padding;
+        *padding = calc_padding_with_header((sizet)it, alignment, sizeof(alloc_header));
+        sizet required_space = size + *padding;
         if (it->data.block_size >= required_space) {
             break;
         }
         it_prev = it;
         it = it->next;
     }
-    prev_node = it_prev;
-    found_node = it;
+    *prev_node = it_prev;
+    *found_node = it;
 }
 
-void intern find_best(mem_free_list *mfl, sizet size, sizet alignment, sizet &padding, mem_node *&prev_node, mem_node *&found_node)
+intern void find_best(mem_free_list *mfl, sizet size, sizet alignment, sizet *padding, mem_node **prev_node, mem_node **found_node)
 {
     // Iterate WHOLE list keeping a pointer to the best fit
     sizet smallest_diff = std::numeric_limits<sizet>::max();
     mem_node *best_block = nullptr;
     mem_node *it = mfl->free_list.head, *it_prev = nullptr;
     while (it != nullptr) {
-        padding = calc_padding_with_header((sizet)it, alignment, sizeof(alloc_header));
-        sizet required_space = size + padding;
+        *padding = calc_padding_with_header((sizet)it, alignment, sizeof(alloc_header));
+        sizet required_space = size + *padding;
         if (it->data.block_size >= required_space && (it->data.block_size - required_space < smallest_diff)) {
             best_block = it;
         }
         it_prev = it;
         it = it->next;
     }
-    prev_node = it_prev;
-    found_node = best_block;
+    *prev_node = it_prev;
+    *found_node = best_block;
 }
 
-intern void find(mem_free_list *mfl, sizet size, sizet alignment, sizet &padding, mem_node *&prev_node, mem_node *&found_node)
+intern void find(mem_free_list *mfl, sizet size, sizet alignment, sizet *padding, mem_node **prev_node, mem_node **found_node)
 {
     switch (mfl->p_policy) {
     case FIND_FIRST:
@@ -110,39 +110,56 @@ intern void coalescence(mem_free_list *mfl, mem_node *prev_node, mem_node *free_
     }
 }
 
-intern void *mem_free_list_alloc(mem_arena *arena, sizet size, sizet alignment)
+intern void *mem_free_list_alloc(mem_arena *arena, sizet size, sizet alignment_p)
 {
     sizet alloc_header_size = sizeof(alloc_header);
     if (size < sizeof(mem_node)) {
         size = sizeof(mem_node);
     }
+    sizet alignment(alignment_p);
     if (alignment < 8) {
         alignment = 8;
     }
 
-    // Search through the free list for a free block that has enough space to allocate our data
+    // Padding is the amount of padding we need considering the passed in alignment and the size of our header address
     sizet padding{};
-    mem_node *affected_node{}, *prev_node{};
-    find(&arena->mfl, size, alignment, padding, prev_node, affected_node);
-    assert(affected_node);
 
-    sizet alignment_padding = padding - alloc_header_size;
+    // Search through the free list for a free block that has enough space to allocate our data
+    mem_node *affected_node{}, *prev_node{};
+    find(&arena->mfl, size, alignment, &padding, &prev_node, &affected_node);
+    assert(affected_node && "Not enough memory");
+
+    // The total required size for this block (including header and alignment paddnig which are both included in padding)
     sizet required_size = size + padding;
+
+    // Alignment padding is the amount of memory in bytes at the end of the block to align our chunk to the passed in
+    // alignment requirements
+    sizet alignment_padding = padding - alloc_header_size;
+
+    // Now subtract our required block size from the chosen node block size - this is the remaining of the chunk that we
+    // don't need
     sizet rest = affected_node->data.block_size - required_size;
 
-    if (rest > sizeof(alloc_header)) {
+    // If the remainder is less than the header size, it is too small to be used as another block.. we need to add it to
+    // our required size or else 
+    if (rest > (sizeof(alloc_header))) {
         // We have to split the block into the data block and a free block of size 'rest'
         mem_node *new_free_node = (mem_node *)((sizet)affected_node + required_size);
         new_free_node->data.block_size = rest;
         ll_insert(&arena->mfl.free_list, affected_node, new_free_node);
     }
+    else {
+        required_size += rest;
+        rest = 0;
+    }
+
     ll_remove(&arena->mfl.free_list, prev_node, affected_node);
 
     // Setup data block
-    sizet header_addr = (sizet)affected_node + alignment_padding;
+    sizet header_addr = (sizet)affected_node;
     sizet data_addr = header_addr + alloc_header_size;
-    ((alloc_header *)header_addr)->block_size = required_size - alignment_padding;
-    ((alloc_header *)header_addr)->padding = alignment_padding;
+    ((alloc_header *)header_addr)->block_size = required_size - padding;
+    ((alloc_header *)header_addr)->padding = padding;
 
     arena->used += required_size;
     arena->peak = std::max(arena->peak, arena->used);

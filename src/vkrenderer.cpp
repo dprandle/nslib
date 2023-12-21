@@ -489,7 +489,6 @@ int vkr_init_device(vkr_device *dev,
     arr_init(&dev->framebuffers, vk->cfg.arenas.persistent_arena);
     arr_init(&dev->pipelines, vk->cfg.arenas.persistent_arena);
     arr_init(&dev->buffers, vk->cfg.arenas.persistent_arena);
-    arr_init(&dev->rframes, vk->cfg.arenas.persistent_arena);
     
     ilog("Creating vk device and queues");
     const vkr_queue_families *qfams = &vk->inst.pdev_info.qfams;
@@ -1526,6 +1525,7 @@ void vkr_terminate_swapchain_frames(vkr_device *dev, const vkr_context *vk)
 int vkr_init_swapchain_frames(vkr_device *dev, const vkr_context *vk)
 {
     // Create our rframes
+    arr_init(&dev->rframes, vk->cfg.arenas.persistent_arena);
     arr_resize(&dev->rframes, dev->swapchain.image_views.size, vkr_frame{});
 
     // Create our rframes command buffers

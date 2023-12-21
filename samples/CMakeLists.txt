@@ -7,7 +7,6 @@ function(create_sample TARGET_NAME)
 
   set_target_properties(${TARGET_NAME} PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY $<1:${CMAKE_BINARY_DIR}/lib>)
-
   set_target_properties(${TARGET_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY $<1:${CMAKE_BINARY_DIR}/bin>)
 

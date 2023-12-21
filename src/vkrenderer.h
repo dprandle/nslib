@@ -60,7 +60,6 @@ inline constexpr const u32 VKR_MAX_EXTENSION_STR_LEN = 128;
 
 const u32 VKR_INVALID = (u32)-1;
 inline constexpr const u32 MEM_ALLOC_TYPE_COUNT = VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE + 1;
-inline constexpr sizet MAX_FRAME_COUNT = 3;
 
 struct vk_mem_alloc_stats
 {

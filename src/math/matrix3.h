@@ -5,11 +5,12 @@
 
 namespace nslib
 {
-enum view_matrix_col_ind
+enum view_matrix_ind
 {
-    VIEW_MATRIX_COL_RIGHT,
-    VIEW_MATRIX_COL_UP,
-    VIEW_MATRIX_COL_TARGET
+    VIEW_MATRIX_ROW_RIGHT,
+    VIEW_MATRIX_ROW_UP,
+    VIEW_MATRIX_ROW_TARGET,
+    VIEW_MATRIX_COL_POS
 };
 
 template<class T>

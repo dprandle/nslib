@@ -222,7 +222,7 @@ matrix4<T> ortho(T left, T right, T top, T bottom, T near, T far)
 template<floating_pt T>
 matrix4<T> perspective(T fov, T aspect_ratio, T z_near, T z_far)
 {
-    T z_range = z_far- z_near;
+    T z_range = z_far - z_near;
     T height = 1 / math::tan((fov*T(0.5)) * TO_RADS);
     matrix4<T> ret;
     ret[0][0] = height * (1 / aspect_ratio);
