@@ -47,29 +47,6 @@ struct platform_window_flags
     };
 };
 
-struct platform_window_init_info
-{
-    i16 win_flags{platform_window_flags::VISIBLE | platform_window_flags::DECORATED | platform_window_flags::INTIALLY_FOCUSED};
-    ivec2 resolution;
-    const char *title;
-};
-
-struct platform_memory_init_info
-{
-    sizet free_list_size{500 * MB_SIZE};
-    sizet stack_size{100 * MB_SIZE};
-    sizet frame_linear_size{100 * MB_SIZE};
-};
-
-struct platform_init_info
-{
-    int argc;
-    char **argv{};
-    platform_window_init_info wind;
-    platform_memory_init_info mem;
-    int default_log_level{LOG_TRACE};
-};
-
 enum struct platform_input_event_type
 {
     INVALID = -1,
@@ -164,7 +141,40 @@ struct platform_file_err_desc
     const char *str;
 };
 
-int platform_init(const platform_init_info *settings, platform_ctxt *ctxt);
+struct platform_window_init_info
+{
+    i16 win_flags{platform_window_flags::VISIBLE | platform_window_flags::DECORATED | platform_window_flags::INTIALLY_FOCUSED};
+    ivec2 resolution;
+    const char *title;
+};
+
+struct platform_memory_init_info
+{
+    sizet free_list_size{500 * MB_SIZE};
+    sizet stack_size{100 * MB_SIZE};
+    sizet frame_linear_size{100 * MB_SIZE};
+};
+
+using platform_user_cb = int(platform_ctxt *ctxt, void *user_data);
+
+struct platform_user_callbacks
+{
+    platform_user_cb *init;
+    platform_user_cb *run_frame;
+    platform_user_cb *terminate;
+};
+
+struct platform_init_info
+{
+    int argc;
+    char **argv;
+    platform_user_callbacks user_cb;
+    platform_window_init_info wind;
+    platform_memory_init_info mem;
+    int default_log_level{LOG_TRACE};
+};
+
+int platform_init(const platform_init_info *config, platform_ctxt *ctxt);
 int platform_terminate(platform_ctxt *ctxt);
 
 void *platform_alloc(sizet byte_size);
@@ -173,7 +183,7 @@ void platform_free(void *block);
 void platform_start_frame(platform_ctxt *ctxt);
 void platform_end_frame(platform_ctxt *ctxt);
 
-void *platform_create_window(const platform_window_init_info *settings);
+void *platform_create_window(const platform_window_init_info *pf_config);
 
 ivec2 platform_window_size(void *window_hndl);
 ivec2 platform_framebuffer_size(void *window_hndl);
@@ -232,42 +242,50 @@ sizet platform_write_file(const char *fname, const byte_array *data, sizet byte_
 
 } // namespace nslib
 
-#define DEFINE_APPLICATION_MAIN(client_app_data_type)                                                                                      \
+// int config_platform_func(nslib::platform_cfg *config, client_app_data_type *user_data);
+#define __MAIN_BLOCK__(config_platform_func)                                                                                               \
+    using namespace nslib;                                                                                                                 \
+    bool run_loop{true};                                                                                                                   \
+    platform_init_info pf_config{argc, argv};                                                                                              \
+    if (config_platform_func(&pf_config, &user_data) != err_code::PLATFORM_NO_ERROR) {                                                     \
+        return err_code::PLATFORM_INIT;                                                                                                    \
+    }                                                                                                                                      \
+    ctxt.argc = pf_config.argc;                                                                                                            \
+    ctxt.argv = pf_config.argv;                                                                                                            \
+    if (platform_init(&pf_config, &ctxt) != err_code::PLATFORM_NO_ERROR) {                                                                 \
+        return err_code::PLATFORM_INIT;                                                                                                    \
+    }                                                                                                                                      \
+    if (pf_config.user_cb.init && pf_config.user_cb.init(&ctxt, &user_data) != err_code::PLATFORM_NO_ERROR) {                              \
+        return err_code::PLATFORM_INIT;                                                                                                    \
+    }                                                                                                                                      \
+    ptimer_restart(&ctxt.time_pts);                                                                                                        \
+    while (run_loop && !platform_window_should_close(ctxt.win_hndl)) {                                                                     \
+        platform_start_frame(&ctxt);                                                                                                       \
+        if (pf_config.user_cb.run_frame && pf_config.user_cb.run_frame(&ctxt, &user_data) != err_code::PLATFORM_NO_ERROR) {                \
+            run_loop = false;                                                                                                              \
+        }                                                                                                                                  \
+        platform_end_frame(&ctxt);                                                                                                         \
+    }                                                                                                                                      \
+    if (pf_config.user_cb.terminate && pf_config.user_cb.terminate(&ctxt, &user_data) != err_code::PLATFORM_NO_ERROR) {                    \
+        return err_code::PLATFORM_TERMINATE;                                                                                               \
+    }                                                                                                                                      \
+    if (platform_terminate(&ctxt) != err_code::PLATFORM_NO_ERROR) {                                                                        \
+        return err_code::PLATFORM_TERMINATE;                                                                                               \
+    }                                                                                                                                      \
+    return err_code::PLATFORM_NO_ERROR;
+
+#define DEFINE_APPLICATION_MAIN_STATIC(user_type, config_platform_func)                                                                    \
+    user_type user_data{};                                                                                                                 \
     nslib::platform_ctxt ctxt{};                                                                                                           \
-    client_app_data_type client_app_data{};                                                                                                \
-    int load_platform_settings(nslib::platform_init_info *settings, client_app_data_type *client_app_data);                                \
-    int app_init(nslib::platform_ctxt *ctxt, client_app_data_type *client_app_data);                                                       \
-    int app_terminate(nslib::platform_ctxt *ctxt, client_app_data_type *client_app_data);                                                  \
-    int app_run_frame(nslib::platform_ctxt *ctxt, client_app_data_type *client_app_data);                                                  \
     int main(int argc, char **argv)                                                                                                        \
     {                                                                                                                                      \
-        using namespace nslib;                                                                                                             \
-        bool run_loop{true};                                                                                                               \
-        platform_init_info settings{argc, argv};                                                                                           \
-        if (load_platform_settings(&settings, &client_app_data) != err_code::PLATFORM_NO_ERROR) {                                          \
-            return err_code::PLATFORM_INIT;                                                                                                \
-        }                                                                                                                                  \
-        ctxt.argc = settings.argc;                                                                                                         \
-        ctxt.argv = settings.argv;                                                                                                         \
-        if (platform_init(&settings, &ctxt) != err_code::PLATFORM_NO_ERROR) {                                                              \
-            return err_code::PLATFORM_INIT;                                                                                                \
-        }                                                                                                                                  \
-        if (app_init(&ctxt, &client_app_data) != err_code::PLATFORM_NO_ERROR) {                                                            \
-            return err_code::PLATFORM_INIT;                                                                                                \
-        }                                                                                                                                  \
-        ptimer_restart(&ctxt.time_pts);                                                                                                    \
-        while (run_loop && !platform_window_should_close(ctxt.win_hndl)) {                                                                 \
-            platform_start_frame(&ctxt);                                                                                                   \
-            if (app_run_frame(&ctxt, &client_app_data) != err_code::PLATFORM_NO_ERROR) {                                                   \
-                run_loop = false;                                                                                                          \
-            }                                                                                                                              \
-            platform_end_frame(&ctxt);                                                                                                     \
-        }                                                                                                                                  \
-        if (app_terminate(&ctxt, &client_app_data) != err_code::PLATFORM_NO_ERROR) {                                                       \
-            return err_code::PLATFORM_TERMINATE;                                                                                           \
-        }                                                                                                                                  \
-        if (platform_terminate(&ctxt) != err_code::PLATFORM_NO_ERROR) {                                                                    \
-            return err_code::PLATFORM_TERMINATE;                                                                                           \
-        }                                                                                                                                  \
-        return err_code::PLATFORM_NO_ERROR;                                                                                                \
+        __MAIN_BLOCK__(config_platform_func)                                                                                               \
+    }
+
+#define DEFINE_APPLICATION_MAIN(user_type, config_platform_func)                                                                           \
+    int main(int argc, char **argv)                                                                                                        \
+    {                                                                                                                                      \
+        user_type user_data{};                                                                                                             \
+        nslib::platform_ctxt ctxt{};                                                                                                       \
+        __MAIN_BLOCK__(config_platform_func)                                                                                               \
     }

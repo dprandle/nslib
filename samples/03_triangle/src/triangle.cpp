@@ -64,13 +64,6 @@ struct app_data
     int move_right{0};
 };
 
-int load_platform_settings(platform_init_info *settings, app_data *app)
-{
-    settings->wind.resolution = {1920, 1080};
-    settings->wind.title = "03 Triangle";
-    return err_code::PLATFORM_NO_ERROR;
-}
-
 void setup_rendering(app_data *app, vkr_context *vk)
 {
     ilog("Setting up default rendering...");
@@ -305,8 +298,9 @@ void record_command_buffer(vkr_command_buffer *cmd_buf,
     vkr_end_cmd_buf(cmd_buf);
 }
 
-int app_init(platform_ctxt *ctxt, app_data *app)
+int app_init(platform_ctxt *ctxt, void *user_data)
 {
+    auto app = (app_data*)user_data;
     ilog("App init");
     version_info v{1, 0, 0};
     
@@ -340,8 +334,9 @@ int app_init(platform_ctxt *ctxt, app_data *app)
     return err_code::PLATFORM_NO_ERROR;
 }
 
-int app_terminate(platform_ctxt *ctxt, app_data *app)
+int app_terminate(platform_ctxt *ctxt, void *user_data)
 {
+    auto app = (app_data*)user_data;
     ilog("App terminate");
     auto dev = &app->vk.inst.device;
     vkr_terminate(&app->vk);
@@ -419,8 +414,9 @@ int render_frame(platform_ctxt *ctxt, app_data *app)
     return err_code::PLATFORM_NO_ERROR;
 }
 
-int app_run_frame(platform_ctxt *ctxt, app_data *app)
+int app_run_frame(platform_ctxt *ctxt, void *user_data)
 {
+    auto app = (app_data*)user_data;
     vec3 dir = math::target(app->cvp.view);
     vec3 right = math::right(app->cvp.view);
     vec3 cur_pos = math::translation_component(app->cvp.view);
@@ -466,4 +462,14 @@ int app_run_frame(platform_ctxt *ctxt, app_data *app)
     return render_frame(ctxt, app);
 }
 
-DEFINE_APPLICATION_MAIN(app_data)
+int configure_platform(platform_init_info *settings, app_data *app)
+{
+    settings->wind.resolution = {1920, 1080};
+    settings->wind.title = "03 Triangle";
+    settings->user_cb.init = app_init;
+    settings->user_cb.run_frame = app_run_frame;
+    settings->user_cb.terminate = app_terminate;
+    return err_code::PLATFORM_NO_ERROR;
+}
+
+DEFINE_APPLICATION_MAIN(app_data, configure_platform)

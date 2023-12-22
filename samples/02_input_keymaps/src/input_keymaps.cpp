@@ -12,15 +12,9 @@ struct app_data
     input_keymap_stack stack{};
 };
 
-int load_platform_settings(platform_init_info *settings, app_data *app)
+int app_init(platform_ctxt *ctxt, void *user_data)
 {
-    settings->wind.resolution = {1920, 1080};
-    settings->wind.title = "02 Input Keymaps";
-    return err_code::PLATFORM_NO_ERROR;
-}
-
-int app_init(platform_ctxt *ctxt, app_data *app)
-{
+    auto app = (app_data*)user_data;
     ilog("App init");
 
     // Create three different keymaps which well add some entries in
@@ -143,8 +137,9 @@ int app_init(platform_ctxt *ctxt, app_data *app)
     return err_code::PLATFORM_NO_ERROR;
 }
 
-int app_terminate(platform_ctxt *ctxt, app_data *app)
+int app_terminate(platform_ctxt *ctxt, void *user_data)
 {
+    auto app = (app_data*)user_data;
     ilog("App terminate");
     input_terminate_keymap(&app->km1);
     input_terminate_keymap(&app->km2);
@@ -152,11 +147,22 @@ int app_terminate(platform_ctxt *ctxt, app_data *app)
     return err_code::PLATFORM_NO_ERROR;
 }
 
-int app_run_frame(platform_ctxt *ctxt, app_data *app)
+int app_run_frame(platform_ctxt *ctxt, void *user_data)
 {
+    auto app = (app_data*)user_data;
     // Use our context stack to map the platform input to callback functions
     input_map_frame(&ctxt->finp, &app->stack);
     return err_code::PLATFORM_NO_ERROR;
 }
 
-DEFINE_APPLICATION_MAIN(app_data)
+int configure_platform(platform_init_info *settings, app_data *app)
+{
+    settings->wind.resolution = {1920, 1080};
+    settings->wind.title = "02 Input Keymaps";
+    settings->user_cb.init = app_init;
+    settings->user_cb.terminate = app_terminate;
+    settings->user_cb.run_frame = app_run_frame;
+    return err_code::PLATFORM_NO_ERROR;
+}
+
+DEFINE_APPLICATION_MAIN(app_data, configure_platform)

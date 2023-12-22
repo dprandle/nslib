@@ -71,13 +71,6 @@ string to_str(const custom_type_2 &item)
     return ret;
 }
 
-int load_platform_settings(platform_init_info *settings, app_data *app)
-{
-    settings->wind.resolution = {1920, 1080};
-    settings->wind.title = "04 Containers";
-    return err_code::PLATFORM_NO_ERROR;
-}
-
 void test_strings()
 {
     dlog("Starting string test");
@@ -191,7 +184,7 @@ void test_hashmaps()
     ilog("HS4 %s", to_cstr(hs4));
 }
 
-int app_init(platform_ctxt *ctxt, app_data *app)
+int app_init(platform_ctxt *ctxt, void *)
 {
     test_strings();
     test_arrays();
@@ -199,15 +192,12 @@ int app_init(platform_ctxt *ctxt, app_data *app)
     return err_code::PLATFORM_NO_ERROR;
 }
 
-int app_terminate(platform_ctxt *ctxt, app_data *app)
+int configure_platform(platform_init_info *config, app_data *app)
 {
-
+    config->wind.resolution = {1920, 1080};
+    config->wind.title = "04 Containers";
+    config->user_cb.init = app_init;
     return err_code::PLATFORM_NO_ERROR;
 }
 
-int app_run_frame(platform_ctxt *ctxt, app_data *app)
-{
-    return err_code::PLATFORM_TERMINATE;
-}
-
-DEFINE_APPLICATION_MAIN(app_data)
+DEFINE_APPLICATION_MAIN(app_data, configure_platform)

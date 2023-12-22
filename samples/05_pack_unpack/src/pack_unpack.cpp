@@ -213,16 +213,9 @@ void clear_data(data_to_pup *data)
     hashmap_clear(&data->hm_no_simp, true);
 }
 
-int load_platform_settings(platform_init_info *settings, app_data *app)
+int app_init(platform_ctxt *ctxt, void *user_data)
 {
-    settings->wind.resolution = {1920, 1080};
-    settings->wind.title = "05 Pack Unpack";
-    settings->default_log_level = LOG_DEBUG;
-    return err_code::PLATFORM_NO_ERROR;
-}
-
-int app_init(platform_ctxt *ctxt, app_data *app)
-{
+    auto app = (app_data*)user_data;
     ilog("App init");
     data_to_pup data{};
     hashmap_init(&data.hm);
@@ -311,15 +304,13 @@ int app_init(platform_ctxt *ctxt, app_data *app)
     return err_code::PLATFORM_NO_ERROR;
 }
 
-int app_terminate(platform_ctxt *ctxt, app_data *app)
+int configure_platform(platform_init_info *settings, app_data *app)
 {
-    ilog("App terminate");
+    settings->wind.resolution = {1920, 1080};
+    settings->wind.title = "05 Pack Unpack";
+    settings->default_log_level = LOG_DEBUG;
+    settings->user_cb.init = app_init;
     return err_code::PLATFORM_NO_ERROR;
 }
 
-int app_run_frame(platform_ctxt *ctxt, app_data *app)
-{
-    return err_code::PLATFORM_NO_ERROR;
-}
-
-DEFINE_APPLICATION_MAIN(app_data)
+DEFINE_APPLICATION_MAIN(app_data, configure_platform)
