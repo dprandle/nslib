@@ -4,7 +4,7 @@
 #include <cstring>
 
 #include "math/algorithm.h"
-#include "vkrenderer.h"
+#include "vk_context.h"
 #include "logging.h"
 #include "memory.h"
 
@@ -547,6 +547,26 @@ int vkr_init_device(vkr_device *dev,
         return err_code::VKR_CREATE_DEVICE_FAIL;
     }
 
+    VmaDeviceMemoryCallbacks cb{};
+    cb.pUserData = dev;
+    cb.pfnAllocate = vk_gpu_alloc_cb;
+    cb.pfnFree = vk_gpu_free_cb;
+
+    // Create the vk mem allocator
+    VmaAllocatorCreateInfo cr_info{};
+    cr_info.device = dev->hndl;
+    cr_info.physicalDevice = vk->inst.pdev_info.hndl;
+    cr_info.instance = vk->inst.hndl;
+    cr_info.pDeviceMemoryCallbacks = &cb;
+    cr_info.pAllocationCallbacks = &vk->alloc_cbs;
+    cr_info.vulkanApiVersion = VK_API_VERSION_1_3;
+    cr_info.preferredLargeHeapBlockSize = 0; // This defaults to 256 MB
+    int err = vmaCreateAllocator(&cr_info, &dev->vma_alloc.hndl);
+    if (err != VK_SUCCESS) {
+        elog("Failed to create vma allocator with code %d", err);
+        return err_code::VKR_CREATE_VMA_ALLOCATOR_FAIL;
+    }
+
     // Create command pools for each family
     for (int i = 0; i < VKR_QUEUE_FAM_TYPE_COUNT; ++i) {
         arr_init(&dev->qfams[i].qs, vk->cfg.arenas.persistent_arena);
@@ -573,22 +593,18 @@ int vkr_init_device(vkr_device *dev,
         }
     }
 
-    VmaDeviceMemoryCallbacks cb{};
-    cb.pUserData = dev;
-    cb.pfnAllocate = vk_gpu_alloc_cb;
-    cb.pfnFree = vk_gpu_free_cb;
+    err = vkr_init_swapchain(&dev->swapchain, vk);
+    if (err != err_code::VKR_NO_ERROR) {
+        return err;
+    }
 
-    // Create the vk mem allocator
-    VmaAllocatorCreateInfo cr_info{};
-    cr_info.device = dev->hndl;
-    cr_info.physicalDevice = vk->inst.pdev_info.hndl;
-    cr_info.instance = vk->inst.hndl;
-    cr_info.pDeviceMemoryCallbacks = &cb;
-    cr_info.pAllocationCallbacks = &vk->alloc_cbs;
-    cr_info.vulkanApiVersion = VK_API_VERSION_1_3;
-    cr_info.preferredLargeHeapBlockSize = 0; // This defaults to 256 MB
-    vmaCreateAllocator(&cr_info, &dev->vma_alloc.hndl);
+    vkr_add_swapchain_framebuffers(dev);
 
+    err = vkr_init_render_frames(dev, vk);
+    if (err != err_code::VKR_NO_ERROR) {
+        return err;
+    }
+    
     return err_code::VKR_NO_ERROR;
 }
 
@@ -718,7 +734,7 @@ void vkr_fill_pdevice_swapchain_support(VkPhysicalDevice pdevice, VkSurfaceKHR s
     vkGetPhysicalDeviceSurfacePresentModesKHR(pdevice, surface, &present_mode_count, ssup->present_modes.data);
 }
 
-int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk, void *window)
+int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
 {
     ilog("Setting up swapchain");
     arr_init(&sw_info->image_views, vk->cfg.arenas.persistent_arena);
@@ -783,7 +799,7 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk, void *wind
     // swap_create.imageExtent = caps->currentExtent;
     // if (caps->currentExtent.width == VKR_INVALID) {
     int width, height;
-    glfwGetFramebufferSize((GLFWwindow *)window, &width, &height);
+    glfwGetFramebufferSize((GLFWwindow *)vk->cfg.window, &width, &height);
     swap_create.imageExtent = {(u32)width, (u32)height};
     // swap_create.imageExtent.width = std::clamp(swap_create.imageExtent.width, caps->minImageExtent.width, caps->maxImageExtent.width);
     // swap_create.imageExtent.height = std::clamp(swap_create.imageExtent.height, caps->minImageExtent.height,
@@ -845,14 +861,14 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk, void *wind
     return err_code::VKR_NO_ERROR;
 }
 
-void vkr_recreate_swapchain(vkr_instance *inst, const vkr_context *vk, void *window, sizet rpass_ind)
+void vkr_recreate_swapchain(vkr_instance *inst, const vkr_context *vk, sizet rpass_ind)
 {
     vkDeviceWaitIdle(inst->device.hndl);
     vkr_terminate_swapchain_framebuffers(&inst->device, vk);
     vkr_terminate_swapchain(&inst->device.swapchain, vk);
     vkr_terminate_surface(vk, inst->surface);
-    vkr_init_surface(vk, window, &inst->surface);
-    vkr_init_swapchain(&inst->device.swapchain, vk, window);
+    vkr_init_surface(vk, &inst->surface);
+    vkr_init_swapchain(&inst->device.swapchain, vk);
     vkr_init_swapchain_framebuffers(&inst->device, vk, &inst->device.render_passes[rpass_ind], nullptr);
 }
 
@@ -1488,12 +1504,12 @@ void vkr_terminate_swapchain_framebuffers(vkr_device *device, const vkr_context 
 }
 
 // Initialize surface in the vk_context from the window - the instance must have been created already
-int vkr_init_surface(const vkr_context *vk, void *window, VkSurfaceKHR *surface)
+int vkr_init_surface(const vkr_context *vk, VkSurfaceKHR *surface)
 {
     ilog("Initializing window surface");
-    assert(window);
+    assert(vk->cfg.window);
     // Create surface
-    int ret = glfwCreateWindowSurface(vk->inst.hndl, (GLFWwindow *)window, &vk->alloc_cbs, surface);
+    int ret = glfwCreateWindowSurface(vk->inst.hndl, (GLFWwindow *)vk->cfg.window, &vk->alloc_cbs, surface);
     if (ret != VK_SUCCESS) {
         elog("Failed to create surface with err code %d", ret);
         return err_code::VKR_CREATE_SURFACE_FAIL;
@@ -1510,7 +1526,7 @@ void vkr_terminate_surface(const vkr_context *vk, VkSurfaceKHR surface)
     vkDestroySurfaceKHR(vk->inst.hndl, surface, &vk->alloc_cbs);
 }
 
-void vkr_terminate_swapchain_frames(vkr_device *dev, const vkr_context *vk)
+void vkr_terminate_render_frames(vkr_device *dev, const vkr_context *vk)
 {
     for (int framei = 0; framei < dev->rframes.size; ++framei) {
         vkr_terminate_descriptor_pool(&dev->rframes[framei].desc_pool, vk);
@@ -1518,16 +1534,12 @@ void vkr_terminate_swapchain_frames(vkr_device *dev, const vkr_context *vk)
         vkDestroySemaphore(dev->hndl, dev->rframes[framei].render_finished, &vk->alloc_cbs);
         vkDestroyFence(dev->hndl, dev->rframes[framei].in_flight, &vk->alloc_cbs);
     }
-    arr_terminate(&dev->rframes);
 }
 
-
-int vkr_init_swapchain_frames(vkr_device *dev, const vkr_context *vk)
+int vkr_init_render_frames(vkr_device *dev, const vkr_context *vk)
 {
-    // Create our rframes
-    arr_init(&dev->rframes, vk->cfg.arenas.persistent_arena);
-    arr_resize(&dev->rframes, dev->swapchain.image_views.size, vkr_frame{});
-
+    dev->rframes.size = dev->rframes.capacity;
+    
     // Create our rframes command buffers
     auto gfx_fam = &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX];
 
@@ -1577,7 +1589,7 @@ int vkr_init_swapchain_frames(vkr_device *dev, const vkr_context *vk)
             return err;
         }
     }
-    ilog("Successfully initialized %lu renderframes", dev->rframes.size);
+    ilog("Successfully initialized %lu render frames in flight", dev->rframes.size);
     return err_code::VKR_NO_ERROR;
 }
 
@@ -1607,7 +1619,7 @@ int vkr_init(const vkr_cfg *cfg, vkr_context *vk)
     }
 
     if (cfg->window) {
-        code = vkr_init_surface(vk, cfg->window, &vk->inst.surface);
+        code = vkr_init_surface(vk, &vk->inst.surface);
         if (code != err_code::VKR_NO_ERROR) {
             vkr_terminate(vk);
             return code;
@@ -1636,20 +1648,6 @@ int vkr_init(const vkr_cfg *cfg, vkr_context *vk)
         vkr_terminate(vk);
         return code;
     }
-
-    code = vkr_init_swapchain(&vk->inst.device.swapchain, vk, cfg->window);
-    if (code != err_code::VKR_NO_ERROR) {
-        vkr_terminate(vk);
-        return code;
-    }
-
-    code = vkr_init_swapchain_frames(&vk->inst.device, vk);
-    if (code != err_code::VKR_NO_ERROR) {
-        vkr_terminate(vk);
-        return code;
-    }
-
-    vkr_add_swapchain_framebuffers(&vk->inst.device);
     return err_code::VKR_NO_ERROR;
 }
 
@@ -1679,12 +1677,13 @@ void vkr_terminate_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
 
 void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
 {
-    ilog("Waiting for sync objects before terminating device...");
-
     // TODO: Make this wait on our semaphores and fences more explicitly
+    ilog("Waiting for sync objects before terminating device...");    
     vkDeviceWaitIdle(dev->hndl);
     ilog("Terminating vkr device");
-
+    vkr_terminate_render_frames(dev, vk);
+    vkr_terminate_swapchain(&dev->swapchain, vk);
+    
     for (int i = 0; i < dev->pipelines.size; ++i) {
         vkr_terminate_pipeline(vk, &dev->pipelines[i]);
     }
@@ -1712,9 +1711,7 @@ void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
         }
         arr_terminate(&cur_fam->cmd_pools);
     }
-
-    vkr_terminate_swapchain(&dev->swapchain, vk);
-    vkr_terminate_swapchain_frames(dev, vk);
+    
 
     vmaDestroyAllocator(dev->vma_alloc.hndl);
     vkDestroyDevice(dev->hndl, &vk->alloc_cbs);
@@ -1743,7 +1740,6 @@ void vkr_terminate_instance(const vkr_context *vk, vkr_instance *inst)
     vkr_terminate_pdevice_swapchain_support(&inst->pdev_info.swap_support);
     vkr_terminate_surface(vk, inst->surface);
     inst->ext_funcs.destroy_debug_utils_messenger(inst->hndl, inst->dbg_messenger, &vk->alloc_cbs);
-
     // Destroying the instance calls more vk alloc calls
     vkDestroyInstance(inst->hndl, &vk->alloc_cbs);
 }

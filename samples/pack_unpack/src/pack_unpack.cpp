@@ -307,7 +307,7 @@ int app_init(platform_ctxt *ctxt, void *user_data)
 int configure_platform(platform_init_info *settings, app_data *app)
 {
     settings->wind.resolution = {1920, 1080};
-    settings->wind.title = "05 Pack Unpack";
+    settings->wind.title = "Pack Unpack";
     settings->default_log_level = LOG_DEBUG;
     settings->user_cb.init = app_init;
     return err_code::PLATFORM_NO_ERROR;

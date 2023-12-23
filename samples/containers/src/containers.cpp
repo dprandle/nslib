@@ -195,7 +195,7 @@ int app_init(platform_ctxt *ctxt, void *)
 int configure_platform(platform_init_info *config, app_data *app)
 {
     config->wind.resolution = {1920, 1080};
-    config->wind.title = "04 Containers";
+    config->wind.title = "Containers";
     config->user_cb.init = app_init;
     return err_code::PLATFORM_NO_ERROR;
 }

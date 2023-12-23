@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.11.0)
 
 project(nslib)
+set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
+include(shaders)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -46,6 +48,9 @@ target_compile_definitions(${NSLIB_TARGET_NAME} PUBLIC
 )
 target_include_directories(${NSLIB_TARGET_NAME} PRIVATE ${GLFW_INCLUDE} PUBLIC ${Vulkan_INCLUDE_DIRS})
 target_link_libraries(${NSLIB_TARGET_NAME} PRIVATE glfw PUBLIC ${Vulkan_LIBRARIES})
+
+# Compile engine shaders
+add_compile_shaders_target(src/shaders bin/shaders)
 
 # Add samples
 add_subdirectory(${SAMPLES_DIR})

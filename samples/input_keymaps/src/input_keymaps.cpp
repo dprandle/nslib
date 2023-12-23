@@ -158,7 +158,7 @@ int app_run_frame(platform_ctxt *ctxt, void *user_data)
 int configure_platform(platform_init_info *settings, app_data *app)
 {
     settings->wind.resolution = {1920, 1080};
-    settings->wind.title = "02 Input Keymaps";
+    settings->wind.title = "Input Keymaps";
     settings->user_cb.init = app_init;
     settings->user_cb.terminate = app_terminate;
     settings->user_cb.run_frame = app_run_frame;

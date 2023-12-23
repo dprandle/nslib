@@ -37,7 +37,8 @@
 #pragma warning(disable : 4001)
 #endif
 
-#include "logging.h"
+#include "../logging.h"
+
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
@@ -57,7 +58,7 @@
 #pragma GCC visibility pop
 #endif
 
-#include "cJSON.h"
+#include "cjson.h"
 
 /* define our own boolean type */
 #ifdef true
@@ -118,7 +119,7 @@ CJSON_PUBLIC(double) json_get_number_value(const json_obj *const item)
 
 /* This is a safeguard to prevent copy-pasters from using incompatible C and header files */
 #if (CJSON_VERSION_MAJOR != 1) || (CJSON_VERSION_MINOR != 7) || (CJSON_VERSION_PATCH != 16)
-#error cJSON.h and cJSON.c have different versions. Make sure that both have the same.
+#error cjson.h and cJSON.c have different versions. Make sure that both have the same.
 #endif
 
 CJSON_PUBLIC(const char *) json_version(void)

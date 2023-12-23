@@ -6,7 +6,7 @@
 #include "input_kmcodes.h"
 #include "platform.h"
 #include "logging.h"
-#include "cJSON.h"
+#include "containers/cjson.h"
 
 namespace nslib
 {

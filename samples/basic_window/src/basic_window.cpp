@@ -9,7 +9,7 @@ struct app_data
 int configure_platform(platform_init_info *settings, app_data *app)
 {
     settings->wind.resolution = {800,600};
-    settings->wind.title = "01 Basic Window";
+    settings->wind.title = "Basic Window";
     return err_code::PLATFORM_NO_ERROR;
 }
 

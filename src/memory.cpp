@@ -503,7 +503,12 @@ void mem_terminate_arena(mem_arena *arena)
          arena->total_size,
          arena->peak);
     mem_reset_arena(arena);
-    platform_free(arena->start);
+    if (arena->upstream_allocator) {
+        mem_free(arena->start, arena->upstream_allocator);
+    }
+    else {
+        platform_free(arena->start);
+    }
     arena->start = nullptr;
 }
 

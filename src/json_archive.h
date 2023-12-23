@@ -2,7 +2,7 @@
 
 #include "archive_common.h"
 
-#include "cJSON.h"
+#include "containers/cjson.h"
 #include "containers/string.h"
 #include "containers/hashset.h"
 #include "containers/hashmap.h"
