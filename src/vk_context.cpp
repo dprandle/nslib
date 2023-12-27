@@ -489,7 +489,10 @@ int vkr_init_device(vkr_device *dev,
     arr_init(&dev->framebuffers, vk->cfg.arenas.persistent_arena);
     arr_init(&dev->pipelines, vk->cfg.arenas.persistent_arena);
     arr_init(&dev->buffers, vk->cfg.arenas.persistent_arena);
-    
+    arr_init(&dev->images, vk->cfg.arenas.persistent_arena);
+    arr_init(&dev->image_views, vk->cfg.arenas.persistent_arena);
+    arr_init(&dev->samplers, vk->cfg.arenas.persistent_arena);
+
     ilog("Creating vk device and queues");
     const vkr_queue_families *qfams = &vk->inst.pdev_info.qfams;
 
@@ -529,6 +532,7 @@ int vkr_init_device(vkr_device *dev,
 
     // For now we will leave this blank - but probably enable geometry shaders later
     VkPhysicalDeviceFeatures features{};
+    features.samplerAnisotropy = vk->inst.pdev_info.features.samplerAnisotropy;
     ilog("Creating %d queues", create_size);
 
     VkDeviceCreateInfo create_inf{};
@@ -604,7 +608,7 @@ int vkr_init_device(vkr_device *dev,
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
-    
+
     return err_code::VKR_NO_ERROR;
 }
 
@@ -622,8 +626,9 @@ int vkr_select_best_graphics_physical_device(const vkr_context *vk, vkr_phys_dev
     }
 
     // This is used just so we can log which device we select without having to grab the info again
-    VkPhysicalDeviceProperties sel_dev{};
-
+    VkPhysicalDeviceProperties sel_dev_props{};
+    VkPhysicalDeviceFeatures sel_dev_features{};
+    
     // These are cached so we don't have to retreive the count again
     int high_score = -1;
 
@@ -681,6 +686,12 @@ int vkr_select_best_graphics_physical_device(const vkr_context *vk, vkr_phys_dev
         if (features.tessellationShader) {
             cur_score += 3;
         }
+        if (features.samplerAnisotropy) {
+            cur_score += 3;
+        }
+        else {
+            cur_score -= 3;
+        }
 
         ilog("PhysDevice ID:%d Name:%s Type:%s VendorID:%d DriverVersion:%d GeomShader:%s TessShader:%s - total score:%d",
              props.deviceID,
@@ -698,14 +709,17 @@ int vkr_select_best_graphics_physical_device(const vkr_context *vk, vkr_phys_dev
             dev_info->qfams = fams;
             vkr_fill_pdevice_swapchain_support(dev_info->hndl, vk->inst.surface, &dev_info->swap_support);
             high_score = cur_score;
-            sel_dev = props;
+            sel_dev_props = props;
+            sel_dev_features = features;
         }
     }
-    ilog("Selected device id:%d  name:%s  type:%s", sel_dev.deviceID, sel_dev.deviceName, vkr_physical_device_type_str(sel_dev.deviceType));
+    ilog("Selected device id:%d  name:%s  type:%s", sel_dev_props.deviceID, sel_dev_props.deviceName, vkr_physical_device_type_str(sel_dev_props.deviceType));
     if (high_score == -1) {
         return err_code::VKR_NO_SUITABLE_PHYSICAL_DEVICE;
     }
-
+    dev_info->props = sel_dev_props;
+    dev_info->features = sel_dev_features;
+    
     // Fill in the queue index offsets based on the fam index from vulkan - if our queue fams have the same index then
     // the queues coming from the later fams need to have an offset index set
     for (u32 i = 0; i < VKR_QUEUE_FAM_TYPE_COUNT; ++i) {
@@ -759,7 +773,7 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
     if (caps->maxImageCount != 0 && caps->maxImageCount < swap_create.minImageCount) {
         swap_create.minImageCount = caps->maxImageCount;
     }
-    
+
     // Basically if our present queue is different than our graphics queue then we enable concurrent sharing mode..
     // honestly not sure about that yet
     uint32_t queue_fam_inds[] = {qfams->qinfo[VKR_QUEUE_FAM_TYPE_GFX].index, qfams->qinfo[VKR_QUEUE_FAM_TYPE_PRESENT].index};
@@ -838,16 +852,8 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
         iview_create.image = sw_info->images[i];
         iview_create.viewType = VK_IMAGE_VIEW_TYPE_2D;
         iview_create.format = sw_info->format;
-
-        iview_create.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-        iview_create.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-        iview_create.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-        iview_create.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-
         iview_create.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        iview_create.subresourceRange.baseMipLevel = 0;
         iview_create.subresourceRange.levelCount = 1;
-        iview_create.subresourceRange.baseArrayLayer = 0;
         iview_create.subresourceRange.layerCount = 1;
         VkResult res = vkCreateImageView(vk->inst.device.hndl, &iview_create, &vk->alloc_cbs, &sw_info->image_views[i]);
         if (res != VK_SUCCESS) {
@@ -969,7 +975,7 @@ int vkr_init_cmd_pool(const vkr_context *vk, u32 fam_ind, VkCommandPoolCreateFla
 {
     ilog("Initializing command pool");
     arr_init(&cpool->buffers, vk->cfg.arenas.persistent_arena);
-    
+
     VkCommandPoolCreateInfo pool_info{};
     pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     pool_info.flags = flags;
@@ -1358,7 +1364,7 @@ u32 vkr_find_mem_type(u32 type_flags, VkMemoryPropertyFlags property_flags, cons
 int vkr_init_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk, u32 max_sets)
 {
     arr_init(&desc_pool->desc_sets, vk->cfg.arenas.persistent_arena);
-    
+
     // Get a count of the number of descriptors we are making avaialable for each desc type
     VkDescriptorPoolSize psize[VKR_DESCRIPTOR_TYPE_COUNT] = {};
     u32 desc_size_count{};
@@ -1379,7 +1385,7 @@ int vkr_init_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *
     pool_info.poolSizeCount = desc_size_count;
     pool_info.pPoolSizes = psize;
     pool_info.maxSets = vk->cfg.max_desc_sets_per_pool;
-    
+
     int err = vkCreateDescriptorPool(vk->inst.device.hndl, &pool_info, &vk->alloc_cbs, &desc_pool->hndl);
     if (err != VK_SUCCESS) {
         elog("Failed to create descriptor pool with vk err code %d", err);
@@ -1394,6 +1400,46 @@ void vkr_terminate_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_con
     arr_terminate(&desc_pool->desc_sets);
 }
 
+void *vkr_map_buffer(vkr_buffer *buf, const vkr_gpu_allocator *vma)
+{
+    void *ret;
+    vmaMapMemory(vma->hndl, buf->mem_hndl, &ret);
+    return ret;
+}
+
+void vkr_unmap_buffer(vkr_buffer *buf, const vkr_gpu_allocator *vma)
+{
+    vmaUnmapMemory(vma->hndl, buf->mem_hndl);
+}
+
+int vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
+                                     const void *src_data,
+                                     sizet src_data_size,
+                                     vkr_device_queue_fam_info *cmd_q,
+                                     const vkr_context *vk)
+{
+    vkr_buffer staging_buf{};
+    vkr_buffer_cfg buf_cfg{};
+    buf_cfg.buffer_size = src_data_size;
+    buf_cfg.alloc_flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+    buf_cfg.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    buf_cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+    buf_cfg.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
+    buf_cfg.vma_alloc = &vk->inst.device.vma_alloc;
+    int err = vkr_init_buffer(&staging_buf, &buf_cfg);
+    if (err != err_code::VKR_NO_ERROR) {
+        return err;
+    }
+
+    void *mem = vkr_map_buffer(&staging_buf, &vk->inst.device.vma_alloc);
+    memcpy(mem, src_data, src_data_size);
+    vkr_unmap_buffer(&staging_buf, &vk->inst.device.vma_alloc);
+
+    err = vkr_copy_buffer(dest_buffer, &staging_buf, cmd_q, vk);
+    vkr_terminate_buffer(&staging_buf, vk);
+    return err;
+}
+
 sizet vkr_add_buffer(vkr_device *device, const vkr_buffer &copy)
 {
     ilog("Adding buffer to device");
@@ -1402,48 +1448,16 @@ sizet vkr_add_buffer(vkr_device *device, const vkr_buffer &copy)
     return ind;
 }
 
-void *vkr_map_buffer(vkr_buffer *buf)
-{
-    void *ret;
-    vmaMapMemory(buf->cfg.gpu_alloc, buf->mem_hndl, &ret);
-    return ret;
-}
-
-void vkr_unmap_buffer(vkr_buffer *buf)
-{
-    vmaUnmapMemory(buf->cfg.gpu_alloc, buf->mem_hndl);
-}
-
-void vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
-                                      const void *src_data,
-                                      sizet src_data_size,
-                                      vkr_device_queue_fam_info *cmd_q,
-                                      const vkr_context *vk)
-{
-    vkr_buffer staging_buf{};
-    auto buf_cfg = dest_buffer->cfg;
-    buf_cfg.alloc_flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-    buf_cfg.usage &= ~VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    buf_cfg.usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    buf_cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
-    vkr_init_buffer(&staging_buf, &buf_cfg);
-
-    void *mem = vkr_map_buffer(&staging_buf);
-    memcpy(mem, src_data, src_data_size);
-    vkr_unmap_buffer(&staging_buf);
-
-    vkr_copy_buffer(dest_buffer, &staging_buf, cmd_q, vk);
-    vkr_terminate_buffer(&staging_buf, vk);
-}
-
 int vkr_init_buffer(vkr_buffer *buffer, const vkr_buffer_cfg *cfg)
 {
-    buffer->cfg = *cfg;
+    assert(cfg->vma_alloc);
+
     VkBufferCreateInfo cinfo{};
     cinfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     cinfo.size = cfg->buffer_size;
     cinfo.usage = cfg->usage;
     cinfo.sharingMode = cfg->sharing_mode;
+    cinfo.flags = cfg->buf_create_flags;
 
     VmaAllocationCreateInfo alloc_info = {};
     alloc_info.flags = cfg->alloc_flags;
@@ -1451,7 +1465,7 @@ int vkr_init_buffer(vkr_buffer *buffer, const vkr_buffer_cfg *cfg)
     alloc_info.requiredFlags = cfg->required_flags;
     alloc_info.preferredFlags = cfg->preferred_flags;
 
-    int err = vmaCreateBuffer(cfg->gpu_alloc, &cinfo, &alloc_info, &buffer->hndl, &buffer->mem_hndl, &buffer->mem_info);
+    int err = vmaCreateBuffer(cfg->vma_alloc->hndl, &cinfo, &alloc_info, &buffer->hndl, &buffer->mem_hndl, &buffer->mem_info);
     if (err != VK_SUCCESS) {
         elog("Failed in creating buffer with vk err %d", err);
         return err_code::VKR_CREATE_BUFFER_FAIL;
@@ -1459,10 +1473,196 @@ int vkr_init_buffer(vkr_buffer *buffer, const vkr_buffer_cfg *cfg)
     return err_code::VKR_NO_ERROR;
 }
 
-void vkr_terminate_buffer(const vkr_buffer *buffer, const vkr_context *vk)
+void vkr_terminate_buffer(vkr_buffer *buffer, const vkr_context *vk)
 {
     ilog("Terminating buffer");
     vmaDestroyBuffer(vk->inst.device.vma_alloc.hndl, buffer->hndl, buffer->mem_hndl);
+}
+
+sizet vkr_add_image(vkr_device *device, const vkr_image &copy)
+{
+    ilog("Adding image to device");
+    sizet ind = device->images.size;
+    arr_push_back(&device->images, copy);
+    return ind;
+}
+
+int vkr_init_image(vkr_image *image, const vkr_image_cfg *cfg)
+{
+    assert(cfg->vma_alloc);
+    VkImageCreateInfo cinfo{};
+    cinfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    cinfo.imageType = cfg->type;
+    cinfo.extent.width = cfg->dims.x;
+    cinfo.extent.height = cfg->dims.y;
+    cinfo.extent.depth = cfg->dims.z;
+    cinfo.mipLevels = cfg->mip_levels;
+    cinfo.arrayLayers = cfg->array_layers;
+    cinfo.flags = cfg->im_create_flags;
+    cinfo.initialLayout = cfg->initial_layout;
+    cinfo.format = cfg->format;
+    cinfo.tiling = cfg->tiling;
+    cinfo.usage = cfg->usage;
+    cinfo.sharingMode = cfg->sharing_mode;
+    cinfo.samples = cfg->samples;
+
+    VmaAllocationCreateInfo alloc_info = {};
+    alloc_info.flags = cfg->alloc_flags;
+    alloc_info.usage = cfg->mem_usage;
+    alloc_info.requiredFlags = cfg->required_flags;
+    alloc_info.preferredFlags = cfg->preferred_flags;
+
+    image->format = cinfo.format;
+    image->dims = cfg->dims;
+
+    int err = vmaCreateImage(cfg->vma_alloc->hndl, &cinfo, &alloc_info, &image->hndl, &image->mem_hndl, &image->mem_info);
+    if (err != VK_SUCCESS) {
+        elog("Failed in creating image with vk err %d", err);
+        return err_code::VKR_CREATE_IMAGE_FAIL;
+    }
+    return err_code::VKR_NO_ERROR;
+}
+
+void vkr_terminate_image(vkr_image *image, const vkr_context *vk)
+{
+    ilog("Terminating image");
+    vmaDestroyImage(vk->inst.device.vma_alloc.hndl, image->hndl, image->mem_hndl);
+}
+
+sizet vkr_add_image_view(vkr_device *device, const vkr_image_view &copy)
+{
+    ilog("Adding image view to device");
+    sizet ind = device->image_views.size;
+    arr_push_back(&device->image_views, copy);
+    return ind;
+}
+
+int vkr_init_image_view(vkr_image_view *iview, const vkr_image_view_cfg *cfg, const vkr_context *vk)
+{
+    assert(cfg->image);
+    VkImageViewCreateInfo create_info{};
+    create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    create_info.image = cfg->image->hndl;
+    create_info.viewType = cfg->view_type;
+    create_info.components = cfg->components;
+    create_info.flags = cfg->create_flags;
+    create_info.format = cfg->image->format;
+    create_info.subresourceRange = cfg->srange;
+
+    int err = vkCreateImageView(vk->inst.device.hndl, &create_info, &vk->alloc_cbs, &iview->hndl);
+    if (err != VK_SUCCESS) {
+        wlog("Failed creating image view with vk error code %d", err);
+        return err_code::VKR_CREATE_IMAGE_VIEW_FAIL;
+    }
+    return err_code::VKR_NO_ERROR;
+}
+
+void vkr_terminate_image_view(vkr_image_view *iview, const vkr_context *vk)
+{
+    ilog("Terminating image view");
+    vkDestroyImageView(vk->inst.device.hndl, iview->hndl, &vk->alloc_cbs);
+}
+
+sizet vkr_add_sampler(vkr_device *device, const vkr_sampler &copy)
+{
+    ilog("Adding image sampler to device");
+    sizet ind = device->samplers.size;
+    arr_push_back(&device->samplers, copy);
+    return ind;
+}
+
+int vkr_init_sampler(vkr_sampler *sampler, const vkr_sampler_cfg *cfg, const vkr_context *vk)
+{
+    VkSamplerCreateInfo create_info{};
+    create_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    create_info.addressModeU = cfg->address_mode_uvw[0];
+    create_info.addressModeV = cfg->address_mode_uvw[1];
+    create_info.addressModeW = cfg->address_mode_uvw[2];
+    create_info.magFilter = cfg->mag_filter;
+    create_info.minFilter = cfg->min_filter;
+    create_info.mipmapMode = cfg->mipmap_mode;
+    create_info.flags = cfg->flags;
+    create_info.mipLodBias = cfg->mip_lod_bias;
+    create_info.anisotropyEnable = cfg->anisotropy_enable;
+    create_info.maxAnisotropy = cfg->max_anisotropy;
+    create_info.compareEnable = cfg->compare_enable;
+    create_info.compareOp = cfg->compare_op;
+    create_info.minLod = cfg->min_lod;
+    create_info.maxLod = cfg->max_lod;
+    create_info.borderColor = cfg->border_color;
+    create_info.unnormalizedCoordinates = cfg->unnormalized_coords;
+    if (!vk->inst.pdev_info.features.samplerAnisotropy) {
+        create_info.anisotropyEnable = false;
+        create_info.maxAnisotropy = 1.0f;
+    }
+
+    int err = vkCreateSampler(vk->inst.device.hndl, &create_info, &vk->alloc_cbs, &sampler->hndl);
+    if (err != VK_SUCCESS) {
+        wlog("Failed creating sampler with vk error code %d", err);
+        return err_code::VKR_CREATE_SAMPLER_FAIL;
+    }
+    return err_code::VKR_NO_ERROR;
+}
+
+void vkr_terminate_sampler(vkr_sampler *sampler, const vkr_context *vk)
+{
+    ilog("Terminating image view");
+    vkDestroySampler(vk->inst.device.hndl, sampler->hndl, &vk->alloc_cbs);
+}
+
+
+int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
+                                    const void *src_data,
+                                    sizet src_data_size,
+                                    vkr_device_queue_fam_info *cmd_q,
+                                    const vkr_context *vk)
+{
+    vkr_buffer staging_buf{};
+    vkr_buffer_cfg buf_cfg{};
+    buf_cfg.buffer_size = src_data_size;
+    buf_cfg.alloc_flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+    buf_cfg.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    buf_cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+    buf_cfg.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
+    buf_cfg.vma_alloc = &vk->inst.device.vma_alloc;
+    int err = vkr_init_buffer(&staging_buf, &buf_cfg);
+    if (err != err_code::VKR_NO_ERROR) {
+        return err;
+    }
+
+    void *mem = vkr_map_buffer(&staging_buf, &vk->inst.device.vma_alloc);
+    memcpy(mem, src_data, src_data_size);
+    vkr_unmap_buffer(&staging_buf, &vk->inst.device.vma_alloc);
+
+    // Tranition image to correct layout
+    vkr_image_transition_cfg trans_cfg{};
+    trans_cfg.old_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    trans_cfg.new_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    trans_cfg.srange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    trans_cfg.srange.layerCount = 1;
+    trans_cfg.srange.levelCount = 1;
+    
+    err = vkr_transition_image_layout(dest_buffer, &trans_cfg, cmd_q, vk);
+    if (err != err_code::VKR_NO_ERROR) {
+        vkr_terminate_buffer(&staging_buf, vk);
+        return err;
+    }
+
+    VkBufferImageCopy region{};
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.layerCount = 1;
+    region.imageExtent = {dest_buffer->dims.x, dest_buffer->dims.y, dest_buffer->dims.z};
+    err = vkr_copy_buffer_to_image(dest_buffer, &staging_buf, &region, cmd_q, vk);
+    if (err != err_code::VKR_NO_ERROR) {
+        vkr_terminate_buffer(&staging_buf, vk);
+        return err;
+    }
+
+    trans_cfg.old_layout = trans_cfg.new_layout;
+    trans_cfg.new_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    err = vkr_transition_image_layout(dest_buffer, &trans_cfg, cmd_q, vk);
+    vkr_terminate_buffer(&staging_buf, vk);
+    return err;
 }
 
 sizet vkr_add_swapchain_framebuffers(vkr_device *device)
@@ -1539,7 +1739,7 @@ void vkr_terminate_render_frames(vkr_device *dev, const vkr_context *vk)
 int vkr_init_render_frames(vkr_device *dev, const vkr_context *vk)
 {
     dev->rframes.size = dev->rframes.capacity;
-    
+
     // Create our rframes command buffers
     auto gfx_fam = &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX];
 
@@ -1678,12 +1878,12 @@ void vkr_terminate_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
 void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
 {
     // TODO: Make this wait on our semaphores and fences more explicitly
-    ilog("Waiting for sync objects before terminating device...");    
+    ilog("Waiting for sync objects before terminating device...");
     vkDeviceWaitIdle(dev->hndl);
     ilog("Terminating vkr device");
     vkr_terminate_render_frames(dev, vk);
     vkr_terminate_swapchain(&dev->swapchain, vk);
-    
+
     for (int i = 0; i < dev->pipelines.size; ++i) {
         vkr_terminate_pipeline(vk, &dev->pipelines[i]);
     }
@@ -1696,11 +1896,21 @@ void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
     for (int i = 0; i < dev->buffers.size; ++i) {
         vkr_terminate_buffer(&dev->buffers[i], vk);
     }
+    for (int i = 0; i < dev->images.size; ++i) {
+        vkr_terminate_image(&dev->images[i], vk);
+    }
+    for (int i = 0; i < dev->image_views.size; ++i) {
+        vkr_terminate_image_view(&dev->image_views[i], vk);
+    }
+    for (int i = 0; i < dev->samplers.size; ++i) {
+        vkr_terminate_sampler(&dev->samplers[i], vk);
+    }
 
     arr_terminate(&dev->render_passes);
     arr_terminate(&dev->pipelines);
     arr_terminate(&dev->framebuffers);
     arr_terminate(&dev->buffers);
+    arr_terminate(&dev->images);
 
     for (sizet qfam_i = 0; qfam_i < VKR_QUEUE_FAM_TYPE_COUNT; ++qfam_i) {
         auto cur_fam = &dev->qfams[qfam_i];
@@ -1711,7 +1921,6 @@ void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
         }
         arr_terminate(&cur_fam->cmd_pools);
     }
-    
 
     vmaDestroyAllocator(dev->vma_alloc.hndl);
     vkDestroyDevice(dev->hndl, &vk->alloc_cbs);
@@ -1719,18 +1928,13 @@ void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
 
 intern void log_mem_stats(const char *type, const vk_mem_alloc_stats *stats)
 {
-    ilog("%s alloc_count:%d free_count:%d realloc_count:%d",
-         type,
-         stats->alloc_count,
-         stats->free_count,
-         stats->realloc_count);
+    ilog("%s alloc_count:%d free_count:%d realloc_count:%d", type, stats->alloc_count, stats->free_count, stats->realloc_count);
     ilog("%s req_alloc:%lu req_free:%lu actual_alloc:%lu actual_free:%lu",
          type,
          stats->req_alloc,
          stats->req_free,
          stats->actual_alloc,
          stats->actual_free);
-    
 }
 
 void vkr_terminate_instance(const vkr_context *vk, vkr_instance *inst)
@@ -1751,7 +1955,11 @@ void vkr_terminate(vkr_context *vk)
     for (int i = 0; i < MEM_ALLOC_TYPE_COUNT; ++i) {
         log_mem_stats(alloc_scope_str(i), &vk->cfg.arenas.stats[i]);
     }
-    ilog("Persistant mem size:%lu peak:%lu  Command mem size:%lu peak:%lu", vk->cfg.arenas.persistent_arena->total_size, vk->cfg.arenas.persistent_arena->peak, vk->cfg.arenas.command_arena->total_size, vk->cfg.arenas.command_arena->peak);
+    ilog("Persistant mem size:%lu peak:%lu  Command mem size:%lu peak:%lu",
+         vk->cfg.arenas.persistent_arena->total_size,
+         vk->cfg.arenas.persistent_arena->peak,
+         vk->cfg.arenas.command_arena->total_size,
+         vk->cfg.arenas.command_arena->peak);
 }
 
 int vkr_begin_cmd_buf(const vkr_command_buffer *buf)
@@ -1804,36 +2012,121 @@ void vkr_cmd_end_rpass(const vkr_command_buffer *cmd_buf)
     vkCmdEndRenderPass(cmd_buf->hndl);
 }
 
-int vkr_copy_buffer(vkr_buffer *dest, const vkr_buffer *src, vkr_device_queue_fam_info *cmd_q, const vkr_context *vk, VkBufferCopy region)
+intern vkr_add_result cmd_buf_begin(vkr_command_pool *pool, vkr_device_queue_fam_info *cmd_q, const vkr_context *vk)
 {
-    auto pool = &cmd_q->cmd_pools[cmd_q->transient_pool];
     vkr_add_result tmp_buf = vkr_add_cmd_bufs(pool, vk);
     if (tmp_buf.err_code != err_code::VKR_NO_ERROR) {
-        return tmp_buf.err_code;
+        return tmp_buf;
     }
-    auto tmp_buf_hndl = pool->buffers[tmp_buf.begin].hndl;
-
-    if (region.size == 0) {
-        region.size = src->mem_info.size;
-    }
-
     VkCommandBufferBeginInfo beg_info{};
     beg_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beg_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    vkBeginCommandBuffer(tmp_buf_hndl, &beg_info);
-    vkCmdCopyBuffer(tmp_buf_hndl, src->hndl, dest->hndl, 1, &region);
-    vkEndCommandBuffer(tmp_buf_hndl);
+    tmp_buf.err_code = vkBeginCommandBuffer(pool->buffers[tmp_buf.begin].hndl, &beg_info);
+    if (tmp_buf.err_code != VK_SUCCESS) {
+        tmp_buf.err_code = err_code::VKR_COPY_BUFFER_BEGIN_FAIL;
+    }
+    return tmp_buf;
+}
+
+intern int cmd_buf_end(vkr_add_result tmp_buf, vkr_command_pool *pool, vkr_device_queue_fam_info *cmd_q, const vkr_context *vk)
+{
+    vkEndCommandBuffer(pool->buffers[tmp_buf.begin].hndl);
 
     VkSubmitInfo submit_info{};
     submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &tmp_buf_hndl;
+    submit_info.pCommandBuffers = &pool->buffers[tmp_buf.begin].hndl;
 
-    vkQueueSubmit(cmd_q->qs[0].hndl, 1, &submit_info, VK_NULL_HANDLE);
-    vkQueueWaitIdle(cmd_q->qs[0].hndl);
+    int err = vkQueueSubmit(cmd_q->qs[0].hndl, 1, &submit_info, VK_NULL_HANDLE);
+    if (err != VK_SUCCESS) {
+        wlog("Failed to submit queue with vulkan error %d", err);
+        vkr_remove_cmd_bufs(pool, vk, tmp_buf.begin);
+        return err_code::VKR_COPY_BUFFER_SUBMIT_FAIL;
+    }
 
+    err = vkQueueWaitIdle(cmd_q->qs[0].hndl);
+    if (err != VK_SUCCESS) {
+        wlog("Failed to wait idle with vulkan error %d", err);
+        vkr_remove_cmd_bufs(pool, vk, tmp_buf.begin);
+        return err_code::VKR_COPY_BUFFER_WAIT_IDLE_FAIL;
+    }
     vkr_remove_cmd_bufs(pool, vk, tmp_buf.begin);
     return err_code::VKR_NO_ERROR;
+}
+
+int vkr_copy_buffer(vkr_buffer *dest, const vkr_buffer *src, vkr_device_queue_fam_info *cmd_q, const vkr_context *vk, VkBufferCopy region)
+{
+    ilog("Starting buffer copy");
+    if (region.size == 0) {
+        region.size = src->mem_info.size;
+    }
+    auto pool = &cmd_q->cmd_pools[cmd_q->transient_pool];
+    auto tmp_buf = cmd_buf_begin(pool, cmd_q, vk);
+    if (tmp_buf.err_code == err_code::VKR_NO_ERROR) {
+        vkCmdCopyBuffer(pool->buffers[tmp_buf.begin].hndl, src->hndl, dest->hndl, 1, &region);
+        ilog("Finished copying buffer");
+        return cmd_buf_end(tmp_buf, pool, cmd_q, vk);
+    }
+    return tmp_buf.err_code;
+}
+
+int vkr_copy_buffer_to_image(vkr_image *dest,
+                             const vkr_buffer *src,
+                             const VkBufferImageCopy *region,
+                             vkr_device_queue_fam_info *cmd_q,
+                             const vkr_context *vk)
+{
+    ilog("Copying buffer to image");
+    auto pool = &cmd_q->cmd_pools[cmd_q->transient_pool];
+    auto tmp_buf = cmd_buf_begin(pool, cmd_q, vk);
+    if (tmp_buf.err_code == err_code::VKR_NO_ERROR) {
+        vkCmdCopyBufferToImage(pool->buffers[tmp_buf.begin].hndl, src->hndl, dest->hndl, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, region);
+        ilog("Finished copying buffer to image");
+        return cmd_buf_end(tmp_buf, pool, cmd_q, vk);
+    }
+    return tmp_buf.err_code;
+}
+
+int vkr_transition_image_layout(const vkr_image *image,
+                                const vkr_image_transition_cfg *cfg,
+                                vkr_device_queue_fam_info *cmd_q,
+                                const vkr_context *vk)
+{
+    ilog("Transitioning image layout");
+    auto pool = &cmd_q->cmd_pools[cmd_q->transient_pool];
+    auto tmp_buf = cmd_buf_begin(pool, cmd_q, vk);
+    if (tmp_buf.err_code == err_code::VKR_NO_ERROR) {
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = cfg->old_layout;
+        barrier.newLayout = cfg->new_layout;
+        barrier.srcQueueFamilyIndex = cfg->src_fam_index;
+        barrier.dstQueueFamilyIndex = cfg->dest_fam_index;
+        barrier.image = image->hndl;
+        barrier.subresourceRange = cfg->srange;
+
+        VkPipelineStageFlags source_stage;
+        VkPipelineStageFlags dest_stage;
+        if (cfg->old_layout == VK_IMAGE_LAYOUT_UNDEFINED && cfg->new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            source_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            dest_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        }
+        else if (cfg->old_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && cfg->new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            source_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            dest_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+        else {
+            return err_code::VKR_TRANSITION_IMAGE_UNSUPPORTED_LAYOUT;
+        }
+        vkCmdPipelineBarrier(pool->buffers[tmp_buf.begin].hndl, source_stage, dest_stage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+        ilog("Finished transitioning image layout");
+        return cmd_buf_end(tmp_buf, pool, cmd_q, vk);
+    }
+    return tmp_buf.err_code;
 }
 
 } // namespace nslib

@@ -297,7 +297,6 @@ using u8mat2 = matrix2<u8>;
 using u16mat2 = matrix2<u16>;
 using umat2 = matrix2<u32>;
 using u64mat2 = matrix2<u64>;
-using mat2 = matrix2<float>;
-using dmat2 = matrix2<double>;
-using ldmat2 = matrix2<ldouble>;
+using mat2 = matrix2<f32>;
+using dmat2 = matrix2<f64>;
 } // namespace nslib

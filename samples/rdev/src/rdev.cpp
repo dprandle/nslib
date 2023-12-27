@@ -1,5 +1,6 @@
 #include "platform.h"
 #include "renderer.h"
+#include "vk_context.h"
 
 using namespace nslib;
 
@@ -10,7 +11,7 @@ struct app_data
 
 int init(platform_ctxt *ctxt, void*user_data)
 {
-    auto app = (app_data*)user_data;
+    auto app = (app_data*)user_data;    
     return renderer_init(&app->rndr, ctxt->win_hndl, &ctxt->arenas.free_list);
 }
 

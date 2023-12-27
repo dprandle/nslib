@@ -15,14 +15,25 @@ function(create_sample TARGET_NAME)
 endfunction()
 
 function(add_sample_compile_shaders_target TARGET_NAME)
-  add_compile_shaders_target(${TARGET_NAME}/src/shaders bin/shaders)
+  add_compile_shaders_target(${TARGET_NAME}/src/shaders bin/data/shaders)
+endfunction()
+
+function(add_copy_data_command TARGET_NAME)
+  add_copy_data_dir_command(${TARGET_NAME} ${TARGET_NAME}/data bin/data)
 endfunction()
 
 create_sample(basic_window)
+
 create_sample(input_keymaps)
+
 create_sample(triangle)
 add_sample_compile_shaders_target(triangle)
+
 create_sample(containers)
+
 create_sample(pack_unpack)
+
 create_sample(rdev)
+add_sample_compile_shaders_target(rdev)
+add_copy_data_command(rdev)
 

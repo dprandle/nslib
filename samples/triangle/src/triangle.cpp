@@ -61,7 +61,7 @@ struct app_data
     int move_right{0};
 };
 
-void setup_rendering(app_data *app)
+int setup_rendering(app_data *app)
 {
     auto vk = &app->vk;
     ilog("Setting up default rendering...");
@@ -177,20 +177,23 @@ void setup_rendering(app_data *app)
     arr_push_back(&info.col_blend.attachments, col_blnd_att);
 
     // Our basic shaders
-    const char *fnames[] = {"shaders/triangle.vert.spv", "shaders/triangle.frag.spv"};
+    const char *fnames[] = {"data/shaders/triangle.vert.spv", "data/shaders/triangle.frag.spv"};
     for (int i = 0; i <= VKR_SHADER_STAGE_FRAG; ++i) {
         platform_file_err_desc err{};
         platform_read_file(fnames[i], &info.shader_stages[i].code, 0, &err);
         if (err.code != err_code::PLATFORM_NO_ERROR) {
             wlog("Error reading file %s from disk (code %d): %s", fnames[i], err.code, err.str);
-            return;
+            return err.code;
         }
         info.shader_stages[i].entry_point = "main";
     }
 
     info.rpass = &vk->inst.device.render_passes[rpass_ind];
     sizet pipe_ind = vkr_add_pipeline(&vk->inst.device, {});
-    vkr_init_pipeline(vk, &info, &vk->inst.device.pipelines[pipe_ind]);
+    int err = vkr_init_pipeline(vk, &info, &vk->inst.device.pipelines[pipe_ind]);
+    if (err != err_code::PLATFORM_NO_ERROR) {
+        return err;
+    }
     vkr_init_swapchain_framebuffers(&vk->inst.device, vk, info.rpass, nullptr);
 
     auto dev = &vk->inst.device;
@@ -202,13 +205,16 @@ void setup_rendering(app_data *app)
 
     // Common to all buffer options
     b_cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-    b_cfg.gpu_alloc = vk->inst.device.vma_alloc.hndl;
     b_cfg.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
+    b_cfg.vma_alloc = &dev->vma_alloc;
 
     // Vert buffer
     b_cfg.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     b_cfg.buffer_size = sizeof(vertex) * 3;
-    vkr_init_buffer(&dev->buffers[app->vert_buf_ind], &b_cfg);
+    err = vkr_init_buffer(&dev->buffers[app->vert_buf_ind], &b_cfg);
+    if (err != err_code::VKR_NO_ERROR) {
+        return err;
+    }
 
     // Init and copy data to staging buffer, then copy staging buf to vert buffer, then delete staging buf
     vkr_stage_and_upload_buffer_data(&dev->buffers[app->vert_buf_ind], verts, b_cfg.buffer_size, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
@@ -216,7 +222,10 @@ void setup_rendering(app_data *app)
     // Ind buffer
     b_cfg.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     b_cfg.buffer_size = sizeof(u32) * 3;
-    vkr_init_buffer(&dev->buffers[app->ind_buf_ind], &b_cfg);
+    err = vkr_init_buffer(&dev->buffers[app->ind_buf_ind], &b_cfg);
+    if (err != err_code::VKR_NO_ERROR) {
+        return err;
+    }
 
     // Init and copy data to staging buffer, then copy staging buf to vert buffer, then delete staging buf
     vkr_stage_and_upload_buffer_data(&dev->buffers[app->ind_buf_ind], indices, b_cfg.buffer_size, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
@@ -226,18 +235,22 @@ void setup_rendering(app_data *app)
         vkr_buffer_cfg buf_cfg{};
         vkr_buffer uniform_buf{};
         buf_cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
-        buf_cfg.gpu_alloc = vk->inst.device.vma_alloc.hndl;
+        buf_cfg.vma_alloc = &dev->vma_alloc;
         buf_cfg.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
         buf_cfg.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
         buf_cfg.buffer_size = sizeof(uniform_buffer_object);
         buf_cfg.alloc_flags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 
         int err = vkr_init_buffer(&uniform_buf, &buf_cfg);
-        assert(err == err_code::VKR_NO_ERROR);
+        if (err != err_code::VKR_NO_ERROR) {
+            return err;
+        }
         dev->rframes[i].uniform_buffer_ind = vkr_add_buffer(dev, uniform_buf);
 
         auto desc_ind = vkr_add_descriptor_sets(&dev->rframes[i].desc_pool, vk, &dev->pipelines[pipe_ind].descriptor_layouts[0]);
-        assert(desc_ind.err_code == err_code::VKR_NO_ERROR);
+        if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
+            return desc_ind.err_code;
+        }
 
         VkDescriptorBufferInfo buffer_info{};
         buffer_info.offset = 0;
@@ -255,16 +268,20 @@ void setup_rendering(app_data *app)
 
         vkUpdateDescriptorSets(dev->hndl, 1, &desc_write, 0, nullptr);
     }
+    return err_code::VKR_NO_ERROR;
 }
 
-void record_command_buffer(vkr_command_buffer *cmd_buf,
-                           vkr_framebuffer *fb,
-                           vkr_pipeline *pipeline,
-                           vkr_buffer *vert_buf,
-                           vkr_buffer *ind_buf,
-                           vkr_descriptor_set *desc_set)
+int record_command_buffer(vkr_command_buffer *cmd_buf,
+                          vkr_framebuffer *fb,
+                          vkr_pipeline *pipeline,
+                          vkr_buffer *vert_buf,
+                          vkr_buffer *ind_buf,
+                          vkr_descriptor_set *desc_set)
 {
-    vkr_begin_cmd_buf(cmd_buf);
+    int err = vkr_begin_cmd_buf(cmd_buf);
+    if (err != err_code::VKR_NO_ERROR) {
+        return err;
+    }
     vkr_cmd_begin_rpass(cmd_buf, fb);
 
     vkCmdBindPipeline(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->hndl);
@@ -293,7 +310,11 @@ void record_command_buffer(vkr_command_buffer *cmd_buf,
     vkCmdDrawIndexed(cmd_buf->hndl, 6, 1, 0, 0, 0);
 
     vkr_cmd_end_rpass(cmd_buf);
-    vkr_end_cmd_buf(cmd_buf);
+    err = vkr_end_cmd_buf(cmd_buf);
+    if (err != err_code::VKR_NO_ERROR) {
+        return err;
+    }
+    return err_code::VKR_NO_ERROR;
 }
 
 int app_init(platform_ctxt *ctxt, void *user_data)
@@ -321,10 +342,13 @@ int app_init(platform_ctxt *ctxt, void *user_data)
                  VALIDATION_LAYER_COUNT};
 
     if (vkr_init(&vkii, &app->vk) != err_code::VKR_NO_ERROR) {
-        return err_code::PLATFORM_INIT;
+        return err_code::PLATFORM_INIT_FAIL;
     }
 
-    setup_rendering(app);
+    int err = setup_rendering(app) != err_code::PLATFORM_NO_ERROR;
+    if (err != err_code::VKR_NO_ERROR) {
+        return err;
+    }
 
     vec2 fbsz(ctxt->fwind.fb_size);
     app->cvp.proj = (math::perspective(45.0f, fbsz.w / fbsz.h, 0.1f, 10.0f));
@@ -379,7 +403,10 @@ int render_frame(platform_ctxt *ctxt, app_data *app)
     // the ops in the command buffer and submit once it is readyy
     auto fb = &dev->framebuffers[im_ind];
     auto desc_set = &cur_frame->desc_pool.desc_sets[0];
-    record_command_buffer(cmd_buf, fb, pipeline, vert_buf, ind_buf, desc_set);
+    int err = record_command_buffer(cmd_buf, fb, pipeline, vert_buf, ind_buf, desc_set);
+    if (err != err_code::VKR_NO_ERROR) {
+        return err;
+    }
 
     // Get the info ready to submit our command buffer to the queue. We need to wait until the image avail semaphore has
     // signaled, and then we need to trigger the render finished signal once the the command buffer completes
@@ -394,7 +421,7 @@ int render_frame(platform_ctxt *ctxt, app_data *app)
     submit_info.signalSemaphoreCount = 1;
     submit_info.pSignalSemaphores = &cur_frame->render_finished;
     if (vkQueueSubmit(dev->qfams[VKR_QUEUE_FAM_TYPE_GFX].qs[0].hndl, 1, &submit_info, cur_frame->in_flight) != VK_SUCCESS) {
-        return err_code::PLATFORM_RUN_FRAME;
+        return err_code::PLATFORM_RUN_FRAME_FAIL;
     }
 
     // Once the rendering signal has fired, present the image (show it on screen)

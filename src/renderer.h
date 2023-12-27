@@ -29,14 +29,15 @@ struct uniform_buffer_object
 
 struct vertex
 {
-    vec2 pos;
+    vec3 pos;
     vec3 color;
+    vec2 tex_coord;
 };
 
-const vertex verts[] = {{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-                        {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-                        {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-                        {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}};
+const vertex verts[] = {{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+                        {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+                        {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+                        {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}};
 
 const u16 indices[] = {0, 1, 2, 2, 3, 0};
 
@@ -50,8 +51,14 @@ struct renderer
     mem_arena vk_free_list;
     mem_arena vk_frame_linear;
 
-    u32 vert_buf_ind;
-    u32 ind_buf_ind;
+    sizet render_pass_ind;
+    sizet pipeline_ind;
+    sizet vert_buf_ind;
+    sizet ind_buf_ind;
+    
+    sizet default_image_ind;
+    sizet default_image_view_ind;
+    sizet default_sampler_ind;
     uniform_buffer_object cvp;
 };
 

@@ -55,6 +55,4 @@ using uicube = cube_base<u32>;
 using ui64cube = cube_base<u64>;
 using cube = cube_base<float>;
 using dcube = cube_base<double>;
-using ldcube = cube_base<ldouble>;
-
 }

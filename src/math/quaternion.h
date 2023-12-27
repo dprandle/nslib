@@ -351,7 +351,6 @@ quaternion<T> operator/(const quaternion<T> &lhs, const quaternion<T> &rhs)
     return lhs * math::inverse(rhs);
 }
 
-using quat = quaternion<float>;
-using dquat = quaternion<double>;
-using ldquat = quaternion<ldouble>;
+using quat = quaternion<f32>;
+using dquat = quaternion<f64>;
 } // namespace nslib

@@ -255,13 +255,13 @@ int platform_init(const platform_init_info *settings, platform_ctxt *ctxt)
 
     if (!glfwInit()) {
         elog("GLFW init failed - closing");
-        return err_code::PLATFORM_INIT;
+        return err_code::PLATFORM_INIT_FAIL;
     }
 
     ctxt->win_hndl = platform_create_window(&settings->wind);
     if (!ctxt->win_hndl) {
         elog("Failed to create window");
-        return err_code::PLATFORM_INIT;
+        return err_code::PLATFORM_INIT_FAIL;
     }
 
     glfwGetFramebufferSize((GLFWwindow*)ctxt->win_hndl, &ctxt->fwind.fb_size.x, &ctxt->fwind.fb_size.y);

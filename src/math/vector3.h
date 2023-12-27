@@ -205,5 +205,4 @@ using uvec3 = vector3<u32>;
 using u64vec3 = vector3<u64>;
 using vec3 = vector3<float>;
 using dvec3 = vector3<double>;
-using ldvec3 = vector3<ldouble>;
 } // namespace nslib

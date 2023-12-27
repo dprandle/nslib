@@ -575,7 +575,6 @@ using u8mat3 = matrix3<u8>;
 using u16mat3 = matrix3<u16>;
 using umat3 = matrix3<u32>;
 using u64mat3 = matrix3<u64>;
-using mat3 = matrix3<float>;
-using dmat3 = matrix3<double>;
-using ldmat3 = matrix3<ldouble>;
+using mat3 = matrix3<f32>;
+using dmat3 = matrix3<f64>;
 } // namespace nslib

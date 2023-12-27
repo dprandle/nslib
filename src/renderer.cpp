@@ -1,3 +1,4 @@
+#include "stb_image.h"
 #include "platform.h"
 #include "vk_context.h"
 #include "renderer.h"
@@ -27,14 +28,11 @@ intern const u32 DEVICE_EXTENSION_COUNT = 1;
 intern const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 #endif
 
-intern int setup_rendering(renderer *rndr)
+intern int setup_render_pass(renderer *rndr)
 {
-    ilog("Setting up default rendering...");
     auto vk = rndr->vk;
-    sizet rpass_ind = vkr_add_render_pass(&vk->inst.device, {});
-
+    rndr->render_pass_ind = vkr_add_render_pass(&vk->inst.device, {});
     vkr_rpass_cfg rp_cfg{};
-
     VkAttachmentDescription col_att{};
     col_att.format = vk->inst.device.swapchain.format;
     col_att.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -62,23 +60,32 @@ intern int setup_rendering(renderer *rndr)
     sp_dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     arr_push_back(&rp_cfg.subpass_dependencies, sp_dep);
 
-    int err = vkr_init_render_pass(vk, &rp_cfg, &vk->inst.device.render_passes[rpass_ind]);
-    if (err != err_code::VKR_NO_ERROR) {
-        return err;
-    }
+    return vkr_init_render_pass(vk, &rp_cfg, &vk->inst.device.render_passes[rndr->render_pass_ind]);
+}
 
+intern int setup_pipeline(renderer *rndr)
+{
+    auto vk = rndr->vk;
     vkr_pipeline_cfg info{};
-
     arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_VIEWPORT);
     arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_SCISSOR);
 
-    // Descripitor Set Layouts just a single uniform buffer for now
+    // Descripitor Set Layouts - Just one layout for the moment with a binding at 0 for uniforms and a binding at 1 for
+    // image sampler
+    ++info.set_layouts.size;
+    info.set_layouts[0].bindings.size = 2;
+
+    // Uniform buffer
     info.set_layouts[0].bindings[0].binding = 0;
     info.set_layouts[0].bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     info.set_layouts[0].bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     info.set_layouts[0].bindings[0].descriptorCount = 1;
-    ++info.set_layouts[0].bindings.size;
-    ++info.set_layouts.size;
+
+    // Image sampler
+    info.set_layouts[0].bindings[1].binding = 1;
+    info.set_layouts[0].bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    info.set_layouts[0].bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    info.set_layouts[0].bindings[1].descriptorCount = 1;
 
     // Vertex binding:
     VkVertexInputBindingDescription binding_desc{};
@@ -87,18 +94,26 @@ intern int setup_rendering(renderer *rndr)
     binding_desc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
     arr_push_back(&info.vert_binding_desc, binding_desc);
 
-    // Attribute Descriptions - so far we just have two
+    // Attribute Descriptions - so far we just have three
     VkVertexInputAttributeDescription attrib_desc{};
     attrib_desc.binding = 0;
     attrib_desc.location = 0;
-    attrib_desc.format = VK_FORMAT_R32G32_SFLOAT;
+    attrib_desc.format = VK_FORMAT_R32G32B32_SFLOAT;
     attrib_desc.offset = offsetof(vertex, pos);
     arr_push_back(&info.vert_attrib_desc, attrib_desc);
+
     attrib_desc.binding = 0;
     attrib_desc.location = 1;
     attrib_desc.format = VK_FORMAT_R32G32B32_SFLOAT;
     attrib_desc.offset = offsetof(vertex, color);
     arr_push_back(&info.vert_attrib_desc, attrib_desc);
+    
+    attrib_desc.binding = 0;
+    attrib_desc.location = 2;
+    attrib_desc.format = VK_FORMAT_R32G32_SFLOAT;
+    attrib_desc.offset = offsetof(vertex, tex_coord);
+    arr_push_back(&info.vert_attrib_desc, attrib_desc);
+    
 
     // Viewports and scissors
     VkViewport viewport{};
@@ -146,7 +161,7 @@ intern int setup_rendering(renderer *rndr)
     arr_push_back(&info.col_blend.attachments, col_blnd_att);
 
     // Our basic shaders
-    const char *fnames[] = {"shaders/rdev.vert.spv", "shaders/rdev.frag.spv"};
+    const char *fnames[] = {"data/shaders/rdev.vert.spv", "data/shaders/rdev.frag.spv"};
     for (int i = 0; i <= VKR_SHADER_STAGE_FRAG; ++i) {
         platform_file_err_desc err{};
         platform_read_file(fnames[i], &info.shader_stages[i].code, 0, &err);
@@ -157,16 +172,16 @@ intern int setup_rendering(renderer *rndr)
         info.shader_stages[i].entry_point = "main";
     }
 
-    info.rpass = &vk->inst.device.render_passes[rpass_ind];
-    sizet pipe_ind = vkr_add_pipeline(&vk->inst.device, {});
-    err = vkr_init_pipeline(vk, &info, &vk->inst.device.pipelines[pipe_ind]);
-    if (err != err_code::VKR_NO_ERROR) {
-        return err;
-    }
-    vkr_init_swapchain_framebuffers(&vk->inst.device, vk, info.rpass, nullptr);
+    info.rpass = &vk->inst.device.render_passes[rndr->render_pass_ind];
+    rndr->pipeline_ind = vkr_add_pipeline(&vk->inst.device, {});
+    return vkr_init_pipeline(vk, &info, &vk->inst.device.pipelines[rndr->pipeline_ind]);
+}
 
+intern int create_vertex_indice_buffers(renderer *rndr)
+{
+    auto vk = rndr->vk;
     auto dev = &vk->inst.device;
-
+    
     // Create vertex buffer on GPU
     vkr_buffer_cfg b_cfg{};
     rndr->vert_buf_ind = vkr_add_buffer(dev, {});
@@ -174,13 +189,13 @@ intern int setup_rendering(renderer *rndr)
 
     // Common to all buffer options
     b_cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-    b_cfg.gpu_alloc = vk->inst.device.vma_alloc.hndl;
     b_cfg.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
+    b_cfg.vma_alloc = &dev->vma_alloc;
 
     // Vert buffer
     b_cfg.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     b_cfg.buffer_size = sizeof(vertex) * 4;
-    err = vkr_init_buffer(&dev->buffers[rndr->vert_buf_ind], &b_cfg);
+    int err = vkr_init_buffer(&dev->buffers[rndr->vert_buf_ind], &b_cfg);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
@@ -198,17 +213,127 @@ intern int setup_rendering(renderer *rndr)
 
     // Init and copy data to staging buffer, then copy staging buf to vert buffer, then delete staging buf
     vkr_stage_and_upload_buffer_data(&dev->buffers[rndr->ind_buf_ind], indices, b_cfg.buffer_size, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
+    return err_code::VKR_NO_ERROR;
+}
 
-    // Create uniform buffers and descriptor sets pointing to them for each frame
+intern int load_default_image_and_sampler(renderer *rndr)
+{
+    auto vk = rndr->vk;
+    auto dev = &rndr->vk->inst.device;
+    
+    /////////////////////////////////
+    // Load the image for sampling //
+    /////////////////////////////////
+    int tex_channels;
+    ivec2 tex_dims;
+    stbi_uc *pixels = stbi_load("data/textures/texture.jpg", &tex_dims.w, &tex_dims.h, &tex_channels, STBI_rgb_alpha);
+    if (!pixels) {
+        return err_code::PLATFORM_INIT_FAIL;
+    }
+
+    rndr->default_image_ind = vkr_add_image(dev, {});
+    auto dest_image = &dev->images[rndr->default_image_ind];
+
+    vkr_image_cfg cfg{};
+    cfg.dims = {tex_dims, 1};
+    cfg.mip_levels = 1;
+    cfg.type = VK_IMAGE_TYPE_2D;
+    cfg.array_layers = 1;
+    cfg.format = VK_FORMAT_R8G8B8A8_SRGB;
+    cfg.tiling = VK_IMAGE_TILING_OPTIMAL;
+    cfg.initial_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    cfg.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    cfg.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
+    cfg.samples = VK_SAMPLE_COUNT_1_BIT;
+    cfg.vma_alloc = &dev->vma_alloc;
+
+    int err = vkr_init_image(dest_image, &cfg);
+    if (err != err_code::VKR_NO_ERROR) {
+        stbi_image_free(pixels);        
+        return err;
+    }
+
+    sizet imsize = cfg.dims.x*cfg.dims.y*cfg.dims.z*4;
+    vkr_stage_and_upload_image_data(dest_image, pixels, imsize, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
+
+    stbi_image_free(pixels);
+
+    ///////////////////////////////////////
+    // Create the image view and sampler //
+    ///////////////////////////////////////
+    vkr_image_view_cfg iview_cfg{};
+    iview_cfg.view_type = VK_IMAGE_VIEW_TYPE_2D;
+    iview_cfg.image = dest_image;
+    iview_cfg.srange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    iview_cfg.srange.layerCount = 1;
+    iview_cfg.srange.levelCount = 1;
+    
+    rndr->default_image_view_ind = vkr_add_image_view(dev);
+    auto iview_ptr = &dev->image_views[rndr->default_image_view_ind];
+    err = vkr_init_image_view(iview_ptr, &iview_cfg, vk);
+    if (err != err_code::VKR_NO_ERROR) {
+        return err;
+    }
+
+    vkr_sampler_cfg samp_cfg{};
+    for (int i = 0; i < 3; ++i) {
+        samp_cfg.address_mode_uvw[i] = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    }
+    samp_cfg.mag_filter = VK_FILTER_LINEAR;
+    samp_cfg.min_filter = VK_FILTER_LINEAR;
+    samp_cfg.anisotropy_enable = true;
+    samp_cfg.max_anisotropy = vk->inst.pdev_info.props.limits.maxSamplerAnisotropy;
+    samp_cfg.border_color = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    samp_cfg.compare_op = VK_COMPARE_OP_ALWAYS;
+    samp_cfg.mipmap_mode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    rndr->default_sampler_ind = vkr_add_sampler(dev);
+    auto samp_ptr = &dev->samplers[rndr->default_sampler_ind];
+    err = vkr_init_sampler(samp_ptr, &samp_cfg, vk);
+    return err;
+}
+
+
+intern int setup_rendering(renderer *rndr)
+{
+    ilog("Setting up default rendering...");
+    auto vk = rndr->vk;
+    auto dev = &rndr->vk->inst.device;
+    
+    int err = setup_render_pass(rndr);
+    if (err != err_code::VKR_NO_ERROR) {
+        return err;
+    }
+
+    err = setup_pipeline(rndr);
+    if (err != err_code::VKR_NO_ERROR) {
+        return err;
+    }
+
+    vkr_init_swapchain_framebuffers(dev, vk, &dev->render_passes[rndr->render_pass_ind], nullptr);
+
+    err = create_vertex_indice_buffers(rndr);
+    if (err != err_code::VKR_NO_ERROR) {
+        return err;
+    }
+
+    err = load_default_image_and_sampler(rndr);
+    if (err != err_code::VKR_NO_ERROR) {
+        return err;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////
+    // Create uniform buffers and descriptor sets pointing to them for each frame //
+    ////////////////////////////////////////////////////////////////////////////////
     for (int i = 0; i < dev->rframes.size; ++i) {
+        // Create a uniform buffer for each frame
         vkr_buffer_cfg buf_cfg{};
         vkr_buffer uniform_buf{};
         buf_cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
-        buf_cfg.gpu_alloc = vk->inst.device.vma_alloc.hndl;
         buf_cfg.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
         buf_cfg.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
         buf_cfg.buffer_size = sizeof(uniform_buffer_object);
         buf_cfg.alloc_flags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+        buf_cfg.vma_alloc = &dev->vma_alloc;
 
         int err = vkr_init_buffer(&uniform_buf, &buf_cfg);
         if (err != err_code::VKR_NO_ERROR) {
@@ -216,7 +341,8 @@ intern int setup_rendering(renderer *rndr)
         }
         dev->rframes[i].uniform_buffer_ind = vkr_add_buffer(dev, uniform_buf);
 
-        auto desc_ind = vkr_add_descriptor_sets(&dev->rframes[i].desc_pool, vk, &dev->pipelines[pipe_ind].descriptor_layouts[0]);
+        // Add descriptor sets for this frame - we are running a single set with two bindings at the moment
+        auto desc_ind = vkr_add_descriptor_sets(&dev->rframes[i].desc_pool, vk, &dev->pipelines[rndr->pipeline_ind].descriptor_layouts[0], 1);
         if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
             return desc_ind.err_code;
         }
@@ -226,16 +352,29 @@ intern int setup_rendering(renderer *rndr)
         buffer_info.range = buf_cfg.buffer_size;
         buffer_info.buffer = uniform_buf.hndl;
 
-        VkWriteDescriptorSet desc_write{};
-        desc_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        desc_write.dstSet = dev->rframes[i].desc_pool.desc_sets[desc_ind.begin].hndl;
-        desc_write.dstBinding = 0;
-        desc_write.dstArrayElement = 0;
-        desc_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        desc_write.descriptorCount = 1;
-        desc_write.pBufferInfo = &buffer_info;
+        VkDescriptorImageInfo image_info{};
+        image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        image_info.imageView = dev->image_views[rndr->default_image_view_ind].hndl;
+        image_info.sampler = dev->samplers[rndr->default_sampler_ind].hndl;
 
-        vkUpdateDescriptorSets(dev->hndl, 1, &desc_write, 0, nullptr);
+        VkWriteDescriptorSet desc_write[2]{};
+        desc_write[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        desc_write[0].dstSet = dev->rframes[i].desc_pool.desc_sets[desc_ind.begin].hndl;
+        desc_write[0].dstBinding = 0;
+        desc_write[0].dstArrayElement = 0;
+        desc_write[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        desc_write[0].descriptorCount = 1;
+        desc_write[0].pBufferInfo = &buffer_info;
+
+        desc_write[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        desc_write[1].dstSet = dev->rframes[i].desc_pool.desc_sets[desc_ind.begin].hndl;
+        desc_write[1].dstBinding = 1;
+        desc_write[1].dstArrayElement = 0;
+        desc_write[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        desc_write[1].descriptorCount = 1;
+        desc_write[1].pImageInfo = &image_info;
+
+        vkUpdateDescriptorSets(dev->hndl, 2, desc_write, 0, nullptr);
     }
     return err_code::VKR_NO_ERROR;
 }
@@ -311,7 +450,7 @@ int renderer_init(renderer *rndr, void *win_hndl, mem_arena *fl_arena)
     int err = setup_rendering(rndr);
     if (err != err_code::VKR_NO_ERROR) {
         elog("Failed to initialize renderer with code %d", err);
-        renderer_terminate(rndr);
+        return err;
     }
 
     vec2 fbsz = platform_framebuffer_size(win_hndl);

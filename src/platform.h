@@ -13,9 +13,9 @@ namespace err_code
 enum platform
 {
     PLATFORM_NO_ERROR,
-    PLATFORM_INIT,
-    PLATFORM_RUN_FRAME,
-    PLATFORM_TERMINATE
+    PLATFORM_INIT_FAIL,
+    PLATFORM_RUN_FRAME_FAIL,
+    PLATFORM_TERMINATE_FAIL
 };
 
 enum file
@@ -248,15 +248,19 @@ sizet platform_write_file(const char *fname, const byte_array *data, sizet byte_
     bool run_loop{true};                                                                                                                   \
     platform_init_info pf_config{argc, argv};                                                                                              \
     if (config_platform_func(&pf_config, &user_data) != err_code::PLATFORM_NO_ERROR) {                                                     \
-        return err_code::PLATFORM_INIT;                                                                                                    \
+        return err_code::PLATFORM_INIT_FAIL;                                                                                               \
     }                                                                                                                                      \
     ctxt.argc = pf_config.argc;                                                                                                            \
     ctxt.argv = pf_config.argv;                                                                                                            \
     if (platform_init(&pf_config, &ctxt) != err_code::PLATFORM_NO_ERROR) {                                                                 \
-        return err_code::PLATFORM_INIT;                                                                                                    \
+        return err_code::PLATFORM_INIT_FAIL;                                                                                               \
     }                                                                                                                                      \
-    if (pf_config.user_cb.init && pf_config.user_cb.init(&ctxt, &user_data) != err_code::PLATFORM_NO_ERROR) {                              \
-        return err_code::PLATFORM_INIT;                                                                                                    \
+    if (pf_config.user_cb.init) {                                                                                                          \
+        int err = pf_config.user_cb.init(&ctxt, &user_data);                                                                               \
+        if (err != err_code::PLATFORM_NO_ERROR) {                                                                                          \
+            elog("User init failed with code %d", err);                                                                                    \
+            return platform_terminate(&ctxt);                                                                                              \
+        }                                                                                                                                  \
     }                                                                                                                                      \
     ptimer_restart(&ctxt.time_pts);                                                                                                        \
     while (run_loop && !platform_window_should_close(ctxt.win_hndl)) {                                                                     \
@@ -266,13 +270,13 @@ sizet platform_write_file(const char *fname, const byte_array *data, sizet byte_
         }                                                                                                                                  \
         platform_end_frame(&ctxt);                                                                                                         \
     }                                                                                                                                      \
-    if (pf_config.user_cb.terminate && pf_config.user_cb.terminate(&ctxt, &user_data) != err_code::PLATFORM_NO_ERROR) {                    \
-        return err_code::PLATFORM_TERMINATE;                                                                                               \
+    if (pf_config.user_cb.terminate) {                                                                                                     \
+        int err = pf_config.user_cb.terminate(&ctxt, &user_data);                                                                          \
+        if (err != err_code::PLATFORM_NO_ERROR) {                                                                                          \
+            elog("User terminate failed with code %d", err);                                                                               \
+        }                                                                                                                                  \
     }                                                                                                                                      \
-    if (platform_terminate(&ctxt) != err_code::PLATFORM_NO_ERROR) {                                                                        \
-        return err_code::PLATFORM_TERMINATE;                                                                                               \
-    }                                                                                                                                      \
-    return err_code::PLATFORM_NO_ERROR;
+    return platform_terminate(&ctxt);
 
 #define DEFINE_APPLICATION_MAIN_STATIC(user_type, config_platform_func)                                                                    \
     user_type user_data{};                                                                                                                 \

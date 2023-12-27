@@ -54,7 +54,8 @@ using c32 = char32_t;
 using sizet = std::size_t;
 using f32 = float;
 using f64 = double;
-using ldouble = long double;
+using f128 = long double;
+using b32 = bool;
 
 const int KB_SIZE = 1024;
 const int MB_SIZE = 1024 * KB_SIZE;
