@@ -182,13 +182,22 @@ intern void *mem_free_list_alloc(mem_arena *arena, sizet size, sizet alignment_p
     return (void *)aligned_data_addr;
 }
 
-intern sizet mem_free_list_block_size(void *ptr)
+intern sizet mem_free_list_linear_block_size(void *ptr)
 {
     // Insert it in a sorted position by the address number
     sizet current_addr = (sizet)ptr;
     sizet header_addr = current_addr - sizeof(alloc_header);
     auto aheader = (alloc_header *)header_addr;
     return aheader->block_size;
+}
+
+intern sizet mem_free_list_linear_block_user_size(void *ptr)
+{
+    // Insert it in a sorted position by the address number
+    sizet current_addr = (sizet)ptr;
+    sizet header_addr = current_addr - sizeof(alloc_header);
+    auto aheader = (alloc_header *)header_addr;
+    return aheader->block_size - (aheader->algn_padding + sizeof(alloc_header));
 }
 
 intern void mem_free_list_free(mem_arena *arena, void *ptr)
@@ -286,20 +295,29 @@ intern void mem_stack_free(mem_arena *arena, void *ptr)
 
 intern void *mem_linear_alloc(mem_arena *arena, sizet size, sizet alignment)
 {
-    sizet padding = 0;
-    sizet current_addr = (sizet)arena->start + arena->mlin.offset;
+    sizet header_size = sizeof(alloc_header);
+    sizet padding = header_size;
+    sizet block_addr = (sizet)arena->start + arena->mlin.offset;
 
     // Alignment is required. Find the next aligned memory address and update offset
-    if ((alignment != 0) && ((arena->mlin.offset % alignment) != 0))
-        padding = calc_padding(current_addr, alignment);
+    if ((alignment != 0) && (((arena->mlin.offset + header_size) % alignment) != 0)) {
+        padding = calc_padding_with_header(block_addr, alignment, header_size);
+    }
 
-    if (arena->mlin.offset + padding + size > arena->total_size)
-        return nullptr;
+    assert(arena->mlin.offset + padding + size <= arena->total_size);
 
+    // Setting up a block header is purely to make realloc work with a linear allocator
+    auto alignment_padding = padding - header_size;
+    auto hdr_address = block_addr + alignment_padding;
+    auto hdr = (alloc_header*)hdr_address;
+    hdr->algn_padding = alignment_padding;
+    hdr->block_size = padding + size;
+    
     arena->mlin.offset += padding + size;
-    sizet next_addr = current_addr + padding;
+    sizet next_addr = hdr_address + header_size;
     arena->used = arena->mlin.offset;
     arena->peak = std::max(arena->peak, arena->used);
+
 #if DO_DEBUG_LINEAR_ALLOC
     dlog("Dptr:%p BlckS:%lu Mused:%lu", (void *)next_addr, padding + size, arena->used);
 #endif
@@ -350,8 +368,8 @@ void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment)
 
 sizet mem_block_size(void *ptr, mem_arena *arena)
 {
-    if (arena->alloc_type == mem_alloc_type::FREE_LIST) {
-        return mem_free_list_block_size(ptr);
+    if (arena->alloc_type == mem_alloc_type::FREE_LIST || arena->alloc_type == mem_alloc_type::LINEAR) {
+        return mem_free_list_linear_block_size(ptr);
     }
     else if (arena->alloc_type == mem_alloc_type::POOL) {
         return mem_pool_block_size(arena, ptr);
@@ -361,8 +379,8 @@ sizet mem_block_size(void *ptr, mem_arena *arena)
 
 sizet mem_block_user_size(void *ptr, mem_arena *arena)
 {
-    if (arena->alloc_type == mem_alloc_type::FREE_LIST) {
-        return mem_free_list_block_size(ptr) - sizeof(alloc_header);
+    if (arena->alloc_type == mem_alloc_type::FREE_LIST || arena->alloc_type == mem_alloc_type::LINEAR) {
+        return mem_free_list_linear_block_user_size(ptr);
     }
     else if (arena->alloc_type == mem_alloc_type::POOL) {
         return mem_pool_block_size(arena, ptr);

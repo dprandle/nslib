@@ -19,7 +19,8 @@ struct matrix4
         : row1(row1_), row2(row2_), row3(row3_), row4(row4_)
     {}
 
-    matrix4(const matrix3<T> &basis) : row1(basis[0], 0), row2(basis[1], 0), row3(basis[2], 0), row4(basis[3], 1)
+    matrix4(const matrix3<T> &basis, const vector3<T> &col4 = {}, const vector4<T> &row4_ = {0, 0, 0, 1})
+        : row1(basis[0], col4[0]), row2(basis[1], col4[1]), row3(basis[2], col4[2]), row4(row4_)
     {}
 
     matrix4(T data_[16])
@@ -77,7 +78,7 @@ pup_func_tt(matrix4)
     pup_member(row2);
     pup_member(row3);
     pup_member(row4);
-}    
+}
 
 // Enable type trait
 template<class U>
@@ -160,7 +161,8 @@ matrix4<T> inverse(const matrix4<T> &mat)
     ret.data[1][0] = -(v5 * mat.data[1][0] - v2 * mat.data[1][2] + v1 * mat.data[1][3]);
     ret.data[2][0] = (v4 * mat.data[1][0] - v2 * mat.data[1][1] + v0 * mat.data[1][3]);
     ret.data[3][0] = -(v3 * mat.data[1][0] - v1 * mat.data[1][1] + v0 * mat.data[1][2]);
-    T det = (ret.data[0][0] * mat.data[0][0] + ret.data[1][0] * mat.data[0][1] + ret.data[2][0] * mat.data[0][2] + ret.data[3][0] * mat.data[0][3]);
+    T det = (ret.data[0][0] * mat.data[0][0] + ret.data[1][0] * mat.data[0][1] + ret.data[2][0] * mat.data[0][2] +
+             ret.data[3][0] * mat.data[0][3]);
 
     T inv_det = (T)1 / det;
 
@@ -223,7 +225,7 @@ template<floating_pt T>
 matrix4<T> perspective(T fov, T aspect_ratio, T z_near, T z_far)
 {
     T z_range = z_far - z_near;
-    T height = 1 / math::tan((fov*T(0.5)) * TO_RADS);
+    T height = 1 / math::tan((fov * T(0.5)) * TO_RADS);
     matrix4<T> ret;
     ret[0][0] = height * (1 / aspect_ratio);
     ret[1][1] = height;
@@ -235,7 +237,7 @@ matrix4<T> perspective(T fov, T aspect_ratio, T z_near, T z_far)
 }
 
 template<floating_pt T>
-matrix4<T> look_at(const vector3<T> &eye_pos, const vector3<T> &target_pos, const vector3<T> &up_dir = {0,1,0})
+matrix4<T> look_at(const vector3<T> &eye_pos, const vector3<T> &target_pos, const vector3<T> &up_dir = {0, 1, 0})
 {
     matrix4<T> trans;
     // target
@@ -252,20 +254,28 @@ matrix4<T> look_at(const vector3<T> &eye_pos, const vector3<T> &target_pos, cons
     return trans;
 }
 
+template<floating_pt T>
+matrix4<T> model_tform(const vector3<T> &pos={}, const quaternion<T> & orientation={}, const vector3<T> &scale={1})
+{
+    matrix4<T> ret{math::rotation(orientation), pos};
+    compwise_mult_rows(&ret, vec4{scale, 1});
+    return ret;
+}
+
 template<class T>
-vector3<T> right(const matrix4<T> &mat)
+vector3<T> right_vec(const matrix4<T> &mat)
 {
     return normalize(mat(0).xyz);
 }
 
 template<class T>
-vector3<T> target(const matrix4<T> &mat)
+vector3<T> target_vec(const matrix4<T> &mat)
 {
     return normalize(mat(2).xyz);
 }
 
 template<class T>
-vector3<T> up(const matrix4<T> &mat)
+vector3<T> up_vec(const matrix4<T> &mat)
 {
     return normalize(mat(1).xyz);
 }

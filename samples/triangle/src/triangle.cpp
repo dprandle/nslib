@@ -282,7 +282,9 @@ int record_command_buffer(vkr_command_buffer *cmd_buf,
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
-    vkr_cmd_begin_rpass(cmd_buf, fb);
+    
+    VkClearValue att_clear_vals[] = {{.color{0.0f,0.0f,1.0f,1.0f}}};
+    vkr_cmd_begin_rpass(cmd_buf, fb, att_clear_vals, 1);
 
     vkCmdBindPipeline(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->hndl);
 
@@ -371,7 +373,8 @@ int render_frame(platform_ctxt *ctxt, app_data *app)
     auto dev = &app->vk.inst.device;
 
     if (platform_framebuffer_resized(ctxt->win_hndl)) {
-        vkr_recreate_swapchain(&app->vk.inst, &app->vk, 0);
+        vkr_recreate_swapchain(&app->vk.inst, &app->vk);
+        vkr_init_swapchain_framebuffers(dev, &app->vk, &dev->render_passes[0], nullptr);
     }
 
     int rframe_ind = ctxt->finished_frames % dev->rframes.size;
@@ -441,8 +444,8 @@ int render_frame(platform_ctxt *ctxt, app_data *app)
 int app_run_frame(platform_ctxt *ctxt, void *user_data)
 {
     auto app = (app_data *)user_data;
-    vec3 dir = math::target(app->cvp.view);
-    vec3 right = math::right(app->cvp.view);
+    vec3 dir = math::target_vec(app->cvp.view);
+    vec3 right = math::right_vec(app->cvp.view);
     vec3 cur_pos = math::translation_component(app->cvp.view);
 
     for (int ie = 0; ie < ctxt->finp.events.size; ++ie) {

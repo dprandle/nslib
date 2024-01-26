@@ -104,7 +104,7 @@ struct vkr_buffer_cfg
     sizet buffer_size;
     VkBufferUsageFlags usage;
     VkBufferCreateFlags buf_create_flags;
-    VkSharingMode sharing_mode;
+    VkSharingMode sharing_mode{VK_SHARING_MODE_EXCLUSIVE};
     VmaMemoryUsage mem_usage;
     VmaAllocationCreateFlags alloc_flags;
     VkMemoryPropertyFlags required_flags;
@@ -122,18 +122,18 @@ struct vkr_buffer
 struct vkr_image_cfg
 {
     uvec3 dims;
-    VkImageType type;
+    VkImageType type{VK_IMAGE_TYPE_2D};
     VkFormat format;
-    VkImageTiling tiling;
+    VkImageTiling tiling{VK_IMAGE_TILING_OPTIMAL};
     VkImageUsageFlags usage;
     VkImageCreateFlags im_create_flags;
     VmaMemoryUsage mem_usage;
     VmaAllocationCreateFlags alloc_flags;
-    VkSampleCountFlagBits samples;
-    VkImageLayout initial_layout;
-    VkSharingMode sharing_mode;
-    int mip_levels;
-    int array_layers;
+    VkSampleCountFlagBits samples{VK_SAMPLE_COUNT_1_BIT};
+    VkImageLayout initial_layout{VK_IMAGE_LAYOUT_UNDEFINED};
+    VkSharingMode sharing_mode{VK_SHARING_MODE_EXCLUSIVE};
+    int mip_levels{1};
+    int array_layers{1};
     VkMemoryPropertyFlags required_flags;
     VkMemoryPropertyFlags preferred_flags;
     const vkr_gpu_allocator *vma_alloc;
@@ -146,12 +146,13 @@ struct vkr_image
     uvec3 dims;
     VmaAllocation mem_hndl;
     VmaAllocationInfo mem_info;
+    const vkr_gpu_allocator *vma_alloc;
 };
 
 struct vkr_image_view_cfg
 {
-    VkImageSubresourceRange srange;
-    VkImageViewType view_type;
+    VkImageSubresourceRange srange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    VkImageViewType view_type{VK_IMAGE_VIEW_TYPE_2D};
     VkImageViewCreateFlags create_flags;
     VkComponentMapping components;
     const vkr_image *image;
@@ -160,6 +161,12 @@ struct vkr_image_view_cfg
 struct vkr_image_view
 {
     VkImageView hndl;
+};
+
+struct vkr_framebuffer_attachment
+{
+    vkr_image_view iview;
+    VkClearValue cv;
 };
 
 struct vkr_sampler_cfg
@@ -278,13 +285,14 @@ struct vkr_frame
 
 struct vkr_swapchain
 {
-    array<VkImage> images;
-    array<VkImageView> image_views;
+    array<vkr_image> images;
+    array<vkr_image_view> image_views;
+    array<array<vkr_framebuffer_attachment>> other_attachments;
     VkFormat format;
     VkExtent2D extent;
     VkSwapchainKHR swapchain;
 };
-
+ 
 struct vkr_rpass_cfg_subpass
 {
     VkPipelineBindPoint pipeline_bind_point{};
@@ -361,6 +369,20 @@ struct vkr_descriptor_set_layout_desc
     static_array<VkDescriptorSetLayoutBinding, 16> bindings;
 };
 
+struct vkr_pipeline_cfg_depth_stencil
+{
+    VkPipelineDepthStencilStateCreateFlags flags;
+    b32 depth_test_enable;
+    b32 depth_write_enable;
+    VkCompareOp depth_compare_op;
+    b32 depth_bounds_test_enable;
+    b32 stencil_test_enable;
+    VkStencilOpState front;
+    VkStencilOpState back;
+    f32 min_depth_bounds;
+    f32 max_depth_bounds;
+};
+
 struct vkr_pipeline_cfg
 {
     vkr_shader_stage shader_stages[VKR_SHADER_STAGE_COUNT];
@@ -370,18 +392,18 @@ struct vkr_pipeline_cfg
     u32 subpass{};
 
     // Dynamic states
-    static_array<VkDynamicState, 32> dynamic_states{};
+    static_array<VkDynamicState, 32> dynamic_states;
 
     // Vertex Input
-    static_array<VkVertexInputBindingDescription, 32> vert_binding_desc{};
-    static_array<VkVertexInputAttributeDescription, 32> vert_attrib_desc{};
+    static_array<VkVertexInputBindingDescription, 32> vert_binding_desc;
+    static_array<VkVertexInputAttributeDescription, 32> vert_attrib_desc;
 
     // Default Scissor/Viewport
-    static_array<VkViewport, 16> viewports{};
-    static_array<VkRect2D, 16> scissors{};
+    static_array<VkViewport, 16> viewports;
+    static_array<VkRect2D, 16> scissors;
 
     // Input assembly
-    vkr_pipeline_cfg_input_assembly input_assembly{};
+    vkr_pipeline_cfg_input_assembly input_assembly;
 
     // Rasterization
     vkr_pipeline_cfg_raster raster;
@@ -390,7 +412,10 @@ struct vkr_pipeline_cfg
     vkr_pipeline_cfg_multisample multisampling;
 
     // Color blending
-    vkr_pipeline_cfg_color_blending col_blend{};
+    vkr_pipeline_cfg_color_blending col_blend;
+
+    // Depth stencil state
+    vkr_pipeline_cfg_depth_stencil depth_stencil;
 
     // Descriptor Sets and push constants
     static_array<vkr_descriptor_set_layout_desc, 4> set_layouts;
@@ -410,7 +435,7 @@ struct vkr_framebuffer_cfg
     uvec2 size;
     u32 layers{1};
     const vkr_rpass *rpass;
-    const VkImageView *attachments;
+    const vkr_framebuffer_attachment *attachments;
     u32 attachment_count;
 };
 
@@ -419,7 +444,7 @@ struct vkr_framebuffer
     uvec2 size;
     u32 layers;
     vkr_rpass rpass;
-    array<VkImageView> attachments;
+    array<vkr_framebuffer_attachment> attachments;
     VkFramebuffer hndl;
 };
 
@@ -575,7 +600,7 @@ int vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
 // Images
 sizet vkr_add_image(vkr_device *device, const vkr_image &copy = {});
 int vkr_init_image(vkr_image *image, const vkr_image_cfg *cfg);
-void vkr_terminate_image(vkr_image *image, const vkr_context *vk);
+void vkr_terminate_image(vkr_image *image);
 int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
                                     const void *src_data,
                                     sizet src_data_size,
@@ -590,16 +615,38 @@ void vkr_terminate_sampler(vkr_sampler *sampler, const vkr_context *vk);
 
 // Returns the index if the first swapchain framebuffer added
 sizet vkr_add_swapchain_framebuffers(vkr_device *device);
+
+// Initialize the swapchain framebuffers (there is one for each color image in the swapchain)
+// The other_attachment image view will be added to each framebuffer (so make sure that is okay)
 void vkr_init_swapchain_framebuffers(vkr_device *device,
                                      const vkr_context *vk,
                                      const vkr_rpass *rpass,
-                                     const array<array<VkImageView>> *other_attachments,
+                                     const vkr_framebuffer_attachment &other_attachment,
                                      sizet fb_offset = 0);
+
+// Initialize the swapchain framebuffers (there is one for each color image in the swapchain)
+// The other_attachments image views will be added to each framebuffer (so make sure that is okay)
+void vkr_init_swapchain_framebuffers(vkr_device *device,
+                                     const vkr_context *vk,
+                                     const vkr_rpass *rpass,
+                                     const array<vkr_framebuffer_attachment> &other_attachments,
+                                     sizet fb_offset = 0);
+
+// Initialize the swapchain framebuffers (there is one for each color image in the swapchain)
+// The other_attachments should be an array of image view arrays, where each of the image view arrays contain
+// attachments for the corresponding framebuffer - IE the outer most array (other attachments) should be the same size
+// as the swapchain images array.
+void vkr_init_swapchain_framebuffers(vkr_device *device,
+                                     const vkr_context *vk,
+                                     const vkr_rpass *rpass,
+                                     const array<array<vkr_framebuffer_attachment>> *other_attachments,
+                                     sizet fb_offset = 0);
+
 void vkr_terminate_swapchain_framebuffers(vkr_device *device, const vkr_context *vk, sizet fb_offset = 0);
 
 // The device should be created before calling this
 int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk);
-void vkr_recreate_swapchain(vkr_instance *inst, const vkr_context *vk, sizet rpass_ind);
+void vkr_recreate_swapchain(vkr_instance *inst, const vkr_context *vk);
 void vkr_terminate_swapchain(vkr_swapchain *sw_info, const vkr_context *vk);
 
 int vkr_init_render_frames(vkr_device *dev, const vkr_context *vk);
@@ -630,7 +677,7 @@ void vkr_terminate(vkr_context *vk);
 int vkr_begin_cmd_buf(const vkr_command_buffer *buf);
 int vkr_end_cmd_buf(const vkr_command_buffer *buf);
 
-void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf, const vkr_framebuffer *fb);
+void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf, const vkr_framebuffer *fb, const VkClearValue *att_clear_vals, sizet clear_val_size);
 void vkr_cmd_end_rpass(const vkr_command_buffer *cmd_buf);
 
 struct vkr_image_transition_cfg

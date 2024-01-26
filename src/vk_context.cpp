@@ -628,7 +628,7 @@ int vkr_select_best_graphics_physical_device(const vkr_context *vk, vkr_phys_dev
     // This is used just so we can log which device we select without having to grab the info again
     VkPhysicalDeviceProperties sel_dev_props{};
     VkPhysicalDeviceFeatures sel_dev_features{};
-    
+
     // These are cached so we don't have to retreive the count again
     int high_score = -1;
 
@@ -713,13 +713,16 @@ int vkr_select_best_graphics_physical_device(const vkr_context *vk, vkr_phys_dev
             sel_dev_features = features;
         }
     }
-    ilog("Selected device id:%d  name:%s  type:%s", sel_dev_props.deviceID, sel_dev_props.deviceName, vkr_physical_device_type_str(sel_dev_props.deviceType));
+    ilog("Selected device id:%d  name:%s  type:%s",
+         sel_dev_props.deviceID,
+         sel_dev_props.deviceName,
+         vkr_physical_device_type_str(sel_dev_props.deviceType));
     if (high_score == -1) {
         return err_code::VKR_NO_SUITABLE_PHYSICAL_DEVICE;
     }
     dev_info->props = sel_dev_props;
     dev_info->features = sel_dev_features;
-    
+
     // Fill in the queue index offsets based on the fam index from vulkan - if our queue fams have the same index then
     // the queues coming from the later fams need to have an offset index set
     for (u32 i = 0; i < VKR_QUEUE_FAM_TYPE_COUNT; ++i) {
@@ -838,26 +841,30 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
         return err_code::VKR_GET_SWAPCHAIN_IMAGES_FAIL;
     }
 
-    arr_resize(&sw_info->images, image_count);
-    res = vkGetSwapchainImagesKHR(vk->inst.device.hndl, sw_info->swapchain, &image_count, sw_info->images.data);
+    array<VkImage> simages;
+    arr_init(&simages, vk->cfg.arenas.command_arena);
+    arr_resize(&simages, image_count);
+    arr_resize(&sw_info->images, image_count, vkr_image{});
+    
+    res = vkGetSwapchainImagesKHR(vk->inst.device.hndl, sw_info->swapchain, &image_count, simages.data);
     if (res != VK_SUCCESS) {
         elog("Failed to get swapchain images with code %d", res);
         return err_code::VKR_GET_SWAPCHAIN_IMAGES_FAIL;
     }
+    for (int i = 0; i < sw_info->images.size; ++i) {
+        sw_info->images[i].dims = {sw_info->extent.width, sw_info->extent.height, 1};
+        sw_info->images[i].format = sw_info->format;
+        sw_info->images[i].hndl = simages[i];
+    }
+    arr_terminate(&simages);
 
     arr_resize(&sw_info->image_views, image_count);
     for (int i = 0; i < sw_info->image_views.size; ++i) {
-        VkImageViewCreateInfo iview_create{};
-        iview_create.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        iview_create.image = sw_info->images[i];
-        iview_create.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        iview_create.format = sw_info->format;
-        iview_create.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        iview_create.subresourceRange.levelCount = 1;
-        iview_create.subresourceRange.layerCount = 1;
-        VkResult res = vkCreateImageView(vk->inst.device.hndl, &iview_create, &vk->alloc_cbs, &sw_info->image_views[i]);
-        if (res != VK_SUCCESS) {
-            elog("Failed to create image view at index %d - vk err code %d", i, res);
+        vkr_image_view_cfg iview_create{};
+        iview_create.image = &sw_info->images[i];
+        int err = vkr_init_image_view(&sw_info->image_views[i], &iview_create, vk);
+        if (err != err_code::VKR_NO_ERROR) {
+            elog("Failed to create image view at index %d", i);
             arr_terminate(&sw_info->images);
             arr_terminate(&sw_info->image_views);
             return err_code::VKR_CREATE_IMAGE_VIEW_FAIL;
@@ -867,7 +874,8 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
     return err_code::VKR_NO_ERROR;
 }
 
-void vkr_recreate_swapchain(vkr_instance *inst, const vkr_context *vk, sizet rpass_ind)
+
+void vkr_recreate_swapchain(vkr_instance *inst, const vkr_context *vk)
 {
     vkDeviceWaitIdle(inst->device.hndl);
     vkr_terminate_swapchain_framebuffers(&inst->device, vk);
@@ -875,7 +883,6 @@ void vkr_recreate_swapchain(vkr_instance *inst, const vkr_context *vk, sizet rpa
     vkr_terminate_surface(vk, inst->surface);
     vkr_init_surface(vk, &inst->surface);
     vkr_init_swapchain(&inst->device.swapchain, vk);
-    vkr_init_swapchain_framebuffers(&inst->device, vk, &inst->device.render_passes[rpass_ind], nullptr);
 }
 
 vkr_add_result vkr_add_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, sizet count)
@@ -1214,6 +1221,20 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
         col_blend_state.blendConstants[i] = cfg->col_blend.blend_constants[i];
     }
 
+    // Depth Stencil
+    VkPipelineDepthStencilStateCreateInfo depth_stencil{};
+    depth_stencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depth_stencil.flags = cfg->depth_stencil.flags;
+    depth_stencil.depthTestEnable = cfg->depth_stencil.depth_test_enable;
+    depth_stencil.depthWriteEnable = cfg->depth_stencil.depth_write_enable;
+    depth_stencil.depthCompareOp = cfg->depth_stencil.depth_compare_op;
+    depth_stencil.depthBoundsTestEnable = cfg->depth_stencil.depth_bounds_test_enable;
+    depth_stencil.stencilTestEnable = cfg->depth_stencil.stencil_test_enable;
+    depth_stencil.front = cfg->depth_stencil.front;
+    depth_stencil.back = cfg->depth_stencil.back;
+    depth_stencil.minDepthBounds = cfg->depth_stencil.min_depth_bounds;
+    depth_stencil.maxDepthBounds = cfg->depth_stencil.max_depth_bounds;
+
     // Create the descriptor set layouts
     for (int desc_i = 0; desc_i < cfg->set_layouts.size; ++desc_i) {
         VkDescriptorSetLayoutCreateInfo ci{};
@@ -1261,7 +1282,7 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
     pipeline_info.pViewportState = &viewport_state;
     pipeline_info.pRasterizationState = &rstr;
     pipeline_info.pMultisampleState = &multisampling;
-    pipeline_info.pDepthStencilState = nullptr; // Optional
+    pipeline_info.pDepthStencilState = &depth_stencil;
     pipeline_info.pColorBlendState = &col_blend_state;
     pipeline_info.pDynamicState = &dyn_state;
 
@@ -1313,17 +1334,28 @@ void vkr_terminate_pipeline(const vkr_context *vk, const vkr_pipeline *pipe_info
 int vkr_init_framebuffer(const vkr_context *vk, const vkr_framebuffer_cfg *cfg, vkr_framebuffer *fb)
 {
     ilog("Initializing framebuffer");
+    assert(cfg->rpass);
+    assert(cfg->attachments);
+    
     arr_init(&fb->attachments, vk->cfg.arenas.persistent_arena);
     fb->size = cfg->size;
     fb->rpass = *cfg->rpass;
     fb->layers = fb->layers;
+    
     arr_copy(&fb->attachments, cfg->attachments, cfg->attachment_count);
+
+    array<VkImageView> att;
+    arr_init(&att, vk->cfg.arenas.command_arena);
+    arr_resize(&att, cfg->attachment_count);
+    for (int i = 0; i < att.size; ++i) {
+        att[i] = cfg->attachments[i].iview.hndl;
+    }
 
     VkFramebufferCreateInfo create_info{};
     create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     create_info.renderPass = cfg->rpass->hndl;
-    create_info.pAttachments = cfg->attachments;
-    create_info.attachmentCount = cfg->attachment_count;
+    create_info.pAttachments = att.data;
+    create_info.attachmentCount = att.size;
     create_info.width = cfg->size.x;
     create_info.height = cfg->size.y;
     create_info.layers = cfg->layers;
@@ -1333,6 +1365,7 @@ int vkr_init_framebuffer(const vkr_context *vk, const vkr_framebuffer_cfg *cfg, 
         return err_code::VKR_CREATE_FRAMEBUFFER_FAIL;
     }
     ilog("Successfully initialized framebuffer");
+    arr_terminate(&att);
     return err_code::VKR_NO_ERROR;
 }
 
@@ -1514,6 +1547,7 @@ int vkr_init_image(vkr_image *image, const vkr_image_cfg *cfg)
 
     image->format = cinfo.format;
     image->dims = cfg->dims;
+    image->vma_alloc = cfg->vma_alloc;
 
     int err = vmaCreateImage(cfg->vma_alloc->hndl, &cinfo, &alloc_info, &image->hndl, &image->mem_hndl, &image->mem_info);
     if (err != VK_SUCCESS) {
@@ -1523,10 +1557,10 @@ int vkr_init_image(vkr_image *image, const vkr_image_cfg *cfg)
     return err_code::VKR_NO_ERROR;
 }
 
-void vkr_terminate_image(vkr_image *image, const vkr_context *vk)
+void vkr_terminate_image(vkr_image *image)
 {
     ilog("Terminating image");
-    vmaDestroyImage(vk->inst.device.vma_alloc.hndl, image->hndl, image->mem_hndl);
+    vmaDestroyImage(image->vma_alloc->hndl, image->hndl, image->mem_hndl);
 }
 
 sizet vkr_add_image_view(vkr_device *device, const vkr_image_view &copy)
@@ -1610,7 +1644,6 @@ void vkr_terminate_sampler(vkr_sampler *sampler, const vkr_context *vk)
     vkDestroySampler(vk->inst.device.hndl, sampler->hndl, &vk->alloc_cbs);
 }
 
-
 int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
                                     const void *src_data,
                                     sizet src_data_size,
@@ -1641,7 +1674,7 @@ int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
     trans_cfg.srange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     trans_cfg.srange.layerCount = 1;
     trans_cfg.srange.levelCount = 1;
-    
+
     err = vkr_transition_image_layout(dest_buffer, &trans_cfg, cmd_q, vk);
     if (err != err_code::VKR_NO_ERROR) {
         vkr_terminate_buffer(&staging_buf, vk);
@@ -1675,24 +1708,69 @@ sizet vkr_add_swapchain_framebuffers(vkr_device *device)
 void vkr_init_swapchain_framebuffers(vkr_device *device,
                                      const vkr_context *vk,
                                      const vkr_rpass *rpass,
-                                     const array<array<VkImageView>> *other_attachments,
+                                     const array<array<vkr_framebuffer_attachment>> *other_attachments,
                                      sizet fb_offset)
 {
     for (int i = 0; i < vk->inst.device.swapchain.image_views.size; ++i) {
         vkr_framebuffer_cfg cfg{};
         cfg.size = {vk->inst.device.swapchain.extent.width, vk->inst.device.swapchain.extent.height};
         cfg.rpass = rpass;
-        array<VkImageView> iviews;
-        arr_init(&iviews, vk->cfg.arenas.command_arena);
-        arr_push_back(&iviews, device->swapchain.image_views[i]);
+        array<vkr_framebuffer_attachment> atts;
+        arr_init(&atts, vk->cfg.arenas.command_arena);
+
+        vkr_framebuffer_attachment col_att{};
+        col_att.iview = device->swapchain.image_views[i];
+        arr_push_back(&atts, col_att);
         if (other_attachments) {
-            arr_append(&iviews, (*other_attachments)[i].data, other_attachments[i].size);
+            arr_append(&atts, (*other_attachments)[i].data, (*other_attachments)[i].size);
         }
-        cfg.attachment_count = iviews.size;
-        cfg.attachments = iviews.data;
+        cfg.attachment_count = atts.size;
+        cfg.attachments = atts.data;
         vkr_init_framebuffer(vk, &cfg, &device->framebuffers[fb_offset + i]);
-        arr_terminate(&iviews);
+        arr_terminate(&atts);
     }
+}
+
+
+void vkr_init_swapchain_framebuffers(vkr_device *device,
+                                     const vkr_context *vk,
+                                     const vkr_rpass *rpass,
+                                     const vkr_framebuffer_attachment &other_attachment,
+                                     sizet fb_offset)
+{
+    array<array<vkr_framebuffer_attachment>> other_atts;
+    arr_init(&other_atts, vk->cfg.arenas.command_arena);
+    arr_resize(&other_atts, device->swapchain.image_views.size);
+    for (int i = 0; i < other_atts.size; ++i) {
+        arr_init(&other_atts[i], vk->cfg.arenas.command_arena);
+        arr_emplace_back(&other_atts[i], other_attachment);
+    }
+    vkr_init_swapchain_framebuffers(device, vk, rpass, &other_atts, fb_offset);
+    for (int i = 0; i < other_atts.size; ++i) {
+        arr_terminate(&other_atts[i]);
+    }
+    arr_terminate(&other_atts);
+}
+
+void vkr_init_swapchain_framebuffers(vkr_device *device,
+                                     const vkr_context *vk,
+                                     const vkr_rpass *rpass,
+                                     const array<vkr_framebuffer_attachment> &other_attachments,
+                                     sizet fb_offset)
+{
+    array<array<vkr_framebuffer_attachment>> other_atts;
+    arr_init(&other_atts, vk->cfg.arenas.command_arena);
+    arr_resize(&other_atts, device->swapchain.image_views.size);
+    for (int i = 0; i < other_atts.size; ++i) {
+        arr_init(&other_atts[i], vk->cfg.arenas.command_arena);
+        arr_append(&other_atts[i], other_attachments.data, other_attachments.size);
+    }
+    vkr_init_swapchain_framebuffers(device, vk, rpass, &other_atts, fb_offset);
+    for (int i = 0; i < other_atts.size; ++i) {
+        arr_terminate(&other_atts[i]);
+    }
+    arr_terminate(&other_atts);
+    
 }
 
 void vkr_terminate_swapchain_framebuffers(vkr_device *device, const vkr_context *vk, sizet fb_offset)
@@ -1868,7 +1946,7 @@ void vkr_terminate_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
 {
     ilog("Terminating swapchain");
     for (int i = 0; i < sw_info->image_views.size; ++i) {
-        vkDestroyImageView(vk->inst.device.hndl, sw_info->image_views[i], &vk->alloc_cbs);
+        vkr_terminate_image_view(&sw_info->image_views[i], vk);
     }
     vkDestroySwapchainKHR(vk->inst.device.hndl, sw_info->swapchain, &vk->alloc_cbs);
     arr_terminate(&sw_info->images);
@@ -1897,7 +1975,7 @@ void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
         vkr_terminate_buffer(&dev->buffers[i], vk);
     }
     for (int i = 0; i < dev->images.size; ++i) {
-        vkr_terminate_image(&dev->images[i], vk);
+        vkr_terminate_image(&dev->images[i]);
     }
     for (int i = 0; i < dev->image_views.size; ++i) {
         vkr_terminate_image_view(&dev->image_views[i], vk);
@@ -1987,7 +2065,7 @@ int vkr_end_cmd_buf(const vkr_command_buffer *buf)
     return err_code::VKR_NO_ERROR;
 }
 
-void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf, const vkr_framebuffer *fb)
+void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf, const vkr_framebuffer *fb, const VkClearValue *att_clear_vals, sizet clear_val_size)
 {
     VkRenderPassBeginInfo info{};
     info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1999,10 +2077,9 @@ void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf, const vkr_framebuffe
     // Viewport.. ImageView extent.. framebuffer size.. render area..
     info.renderArea.offset = {0, 0};
 
-    // TODO: Move this in to the render pass - the attachment clearing values
-    VkClearValue v = {{{0.0f, 0.0f, 1.0f, 1.0}}};
-    info.clearValueCount = 1;
-    info.pClearValues = &v;
+    // Set the clear values
+    info.clearValueCount = clear_val_size;
+    info.pClearValues = att_clear_vals;
 
     vkCmdBeginRenderPass(cmd_buf->hndl, &info, VK_SUBPASS_CONTENTS_INLINE);
 }
@@ -2118,6 +2195,11 @@ int vkr_transition_image_layout(const vkr_image *image,
             barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
             source_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             dest_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+        else if (cfg->old_layout == VK_IMAGE_LAYOUT_UNDEFINED &&
+                 cfg->new_layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL) {
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         }
         else {
             return err_code::VKR_TRANSITION_IMAGE_UNSUPPORTED_LAYOUT;

@@ -144,7 +144,7 @@ vector3<T> target(const matrix3<T> &mat)
 }
 
 template<floating_pt T>
-matrix3<T> &rotation(const vector4<T> &axis_angle)
+matrix3<T> rotation(const vector4<T> &axis_angle)
 {
     matrix3<T> ret;
 

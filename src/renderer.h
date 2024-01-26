@@ -6,7 +6,8 @@
 
 namespace nslib
 {
-
+#define INVALID_IND ((sizet)-1)
+    
 struct vkr_context;
 
 namespace err_code
@@ -34,12 +35,31 @@ struct vertex
     vec2 tex_coord;
 };
 
-const vertex verts[] = {{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-                        {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-                        {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-                        {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}};
+const vertex verts[] = {
+    {{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
+    {{-0.5f, -0.5f, 0.5f}, {0.0f, 0.0f, 5.0f}, {0.0f, 0.0f}},
+    {{0.5f, -0.5f, 0.5f}, {1.0f, 0.0f, 5.0f}, {1.0f, 0.0f}},
+    {{0.5f, 0.5f, 0.5f}, {1.0f, 1.0f, 5.0f}, {1.0f, 1.0f}},
+    {{-0.5f, 0.5f, 0.5f}, {0.0f, 1.0f, 5.0f}, {0.0f, 1.0f}}
+    };
 
-const u16 indices[] = {0, 1, 2, 2, 3, 0};
+const u16 indices[] = {
+    0,
+    1,
+    2,
+    2,
+    3,
+    0,
+    4,
+    5,
+    6,
+    6,
+    7,
+    4
+    };
 
 struct renderer
 {
@@ -59,11 +79,19 @@ struct renderer
     sizet default_image_ind;
     sizet default_image_view_ind;
     sizet default_sampler_ind;
+    
+    sizet swapchain_fb_depth_stencil_iview_ind{INVALID_IND};
+    sizet swapchain_fb_depth_stencil_im_ind{INVALID_IND};
+    
     uniform_buffer_object cvp;
+
+    vec3 world_pos;
+    quat orientation;
+    vec3 scale;
 };
 
 int renderer_init(renderer *rndr, void *win_hndl, mem_arena *fl_arena);
-int render_frame(renderer *rndr, int finished_frame_count);
+int render_frame(renderer *rndr, const struct profile_timepoints *tp, int finished_frame_count);
 void renderer_terminate(renderer *rndr);
 
 } // namespace nslib

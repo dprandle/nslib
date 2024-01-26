@@ -18,7 +18,7 @@ int init(platform_ctxt *ctxt, void*user_data)
 int run_frame(platform_ctxt *ctxt, void*user_data)
 {
     auto app = (app_data*)user_data;
-    return render_frame(&app->rndr, ctxt->finished_frames);
+    return render_frame(&app->rndr, &ctxt->time_pts, ctxt->finished_frames);
 }
 
 int terminate(platform_ctxt *ctxt, void*user_data)

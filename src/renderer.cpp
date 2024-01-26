@@ -1,3 +1,6 @@
+#include "string_archive.h"
+#include "containers/string.h"
+#include "math/quaternion.h"
 #include "stb_image.h"
 #include "platform.h"
 #include "vk_context.h"
@@ -17,7 +20,8 @@ intern const char *VALIDATION_LAYERS[VALIDATION_LAYER_COUNT] = {"VK_LAYER_KHRONO
 #if __APPLE__
 intern const VkInstanceCreateFlags INST_CREATE_FLAGS = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 intern const u32 ADDITIONAL_INST_EXTENSION_COUNT = 2;
-intern const char *ADDITIONAL_INST_EXTENSIONS[ADDITIONAL_INST_EXTENSION_COUNT] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME};
+intern const char *ADDITIONAL_INST_EXTENSIONS[ADDITIONAL_INST_EXTENSION_COUNT] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+                                                                                  VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME};
 intern const u32 DEVICE_EXTENSION_COUNT = 2;
 intern const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_portability_subset"};
 #else
@@ -33,31 +37,43 @@ intern int setup_render_pass(renderer *rndr)
     auto vk = rndr->vk;
     rndr->render_pass_ind = vkr_add_render_pass(&vk->inst.device, {});
     vkr_rpass_cfg rp_cfg{};
-    VkAttachmentDescription col_att{};
-    col_att.format = vk->inst.device.swapchain.format;
-    col_att.samples = VK_SAMPLE_COUNT_1_BIT;
-    col_att.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    col_att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    col_att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    col_att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    col_att.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    col_att.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    arr_push_back(&rp_cfg.attachments, col_att);
+    
+    VkAttachmentDescription att{};
+    att.format = vk->inst.device.swapchain.format;
+    att.samples = VK_SAMPLE_COUNT_1_BIT;
+    att.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    att.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    att.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    arr_push_back(&rp_cfg.attachments, att);
+
+    att.format = VK_FORMAT_D32_SFLOAT_S8_UINT;
+    att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    att.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    arr_push_back(&rp_cfg.attachments, att);
 
     vkr_rpass_cfg_subpass subpass{};
+
     VkAttachmentReference att_ref{};
     att_ref.attachment = 0;
     att_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     arr_push_back(&subpass.color_attachments, att_ref);
+    
+    att_ref.attachment = 1;
+    att_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    subpass.depth_stencil_attachment = &att_ref;
+    
     arr_push_back(&rp_cfg.subpasses, subpass);
 
     VkSubpassDependency sp_dep{};
     sp_dep.srcSubpass = VK_SUBPASS_EXTERNAL;
     sp_dep.dstSubpass = 0;
-    sp_dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    sp_dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
     sp_dep.srcAccessMask = 0;
-    sp_dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    sp_dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    sp_dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    sp_dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     arr_push_back(&rp_cfg.subpass_dependencies, sp_dep);
 
     return vkr_init_render_pass(vk, &rp_cfg, &vk->inst.device.render_passes[rndr->render_pass_ind]);
@@ -107,13 +123,12 @@ intern int setup_pipeline(renderer *rndr)
     attrib_desc.format = VK_FORMAT_R32G32B32_SFLOAT;
     attrib_desc.offset = offsetof(vertex, color);
     arr_push_back(&info.vert_attrib_desc, attrib_desc);
-    
+
     attrib_desc.binding = 0;
     attrib_desc.location = 2;
     attrib_desc.format = VK_FORMAT_R32G32_SFLOAT;
     attrib_desc.offset = offsetof(vertex, tex_coord);
     arr_push_back(&info.vert_attrib_desc, attrib_desc);
-    
 
     // Viewports and scissors
     VkViewport viewport{};
@@ -160,6 +175,14 @@ intern int setup_pipeline(renderer *rndr)
     col_blnd_att.alphaBlendOp = VK_BLEND_OP_ADD;             // Optional
     arr_push_back(&info.col_blend.attachments, col_blnd_att);
 
+    // Depth Stencil
+    info.depth_stencil.depth_test_enable = true;
+    info.depth_stencil.depth_write_enable = true;
+    info.depth_stencil.depth_compare_op = VK_COMPARE_OP_LESS;
+    info.depth_stencil.depth_bounds_test_enable = false;
+    info.depth_stencil.min_depth_bounds = 0.0f;
+    info.depth_stencil.max_depth_bounds = 1.0f;
+    
     // Our basic shaders
     const char *fnames[] = {"data/shaders/rdev.vert.spv", "data/shaders/rdev.frag.spv"};
     for (int i = 0; i <= VKR_SHADER_STAGE_FRAG; ++i) {
@@ -181,7 +204,7 @@ intern int create_vertex_indice_buffers(renderer *rndr)
 {
     auto vk = rndr->vk;
     auto dev = &vk->inst.device;
-    
+
     // Create vertex buffer on GPU
     vkr_buffer_cfg b_cfg{};
     rndr->vert_buf_ind = vkr_add_buffer(dev, {});
@@ -194,7 +217,7 @@ intern int create_vertex_indice_buffers(renderer *rndr)
 
     // Vert buffer
     b_cfg.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    b_cfg.buffer_size = sizeof(vertex) * 4;
+    b_cfg.buffer_size = sizeof(vertex) * 8;
     int err = vkr_init_buffer(&dev->buffers[rndr->vert_buf_ind], &b_cfg);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
@@ -205,7 +228,7 @@ intern int create_vertex_indice_buffers(renderer *rndr)
 
     // Ind buffer
     b_cfg.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    b_cfg.buffer_size = sizeof(u32) * 6;
+    b_cfg.buffer_size = sizeof(u32) * 12;
     err = vkr_init_buffer(&dev->buffers[rndr->ind_buf_ind], &b_cfg);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
@@ -220,7 +243,7 @@ intern int load_default_image_and_sampler(renderer *rndr)
 {
     auto vk = rndr->vk;
     auto dev = &rndr->vk->inst.device;
-    
+
     /////////////////////////////////
     // Load the image for sampling //
     /////////////////////////////////
@@ -236,24 +259,21 @@ intern int load_default_image_and_sampler(renderer *rndr)
 
     vkr_image_cfg cfg{};
     cfg.dims = {tex_dims, 1};
-    cfg.mip_levels = 1;
-    cfg.type = VK_IMAGE_TYPE_2D;
-    cfg.array_layers = 1;
     cfg.format = VK_FORMAT_R8G8B8A8_SRGB;
-    cfg.tiling = VK_IMAGE_TILING_OPTIMAL;
-    cfg.initial_layout = VK_IMAGE_LAYOUT_UNDEFINED;
-    cfg.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-    cfg.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
-    cfg.samples = VK_SAMPLE_COUNT_1_BIT;
-    cfg.vma_alloc = &dev->vma_alloc;
+//    cfg.mip_levels = 1;vkr_get_required_mip_levels(tex_dims);
 
+    // We have the src bit set here because we generate mipmaps for the image
+    cfg.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    cfg.vma_alloc = &dev->vma_alloc;
+    
     int err = vkr_init_image(dest_image, &cfg);
     if (err != err_code::VKR_NO_ERROR) {
-        stbi_image_free(pixels);        
+        stbi_image_free(pixels);
         return err;
     }
 
-    sizet imsize = cfg.dims.x*cfg.dims.y*cfg.dims.z*4;
+    sizet imsize = cfg.dims.x * cfg.dims.y * cfg.dims.z * 4;
     vkr_stage_and_upload_image_data(dest_image, pixels, imsize, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
 
     stbi_image_free(pixels);
@@ -262,12 +282,8 @@ intern int load_default_image_and_sampler(renderer *rndr)
     // Create the image view and sampler //
     ///////////////////////////////////////
     vkr_image_view_cfg iview_cfg{};
-    iview_cfg.view_type = VK_IMAGE_VIEW_TYPE_2D;
     iview_cfg.image = dest_image;
-    iview_cfg.srange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    iview_cfg.srange.layerCount = 1;
-    iview_cfg.srange.levelCount = 1;
-    
+
     rndr->default_image_view_ind = vkr_add_image_view(dev);
     auto iview_ptr = &dev->image_views[rndr->default_image_view_ind];
     err = vkr_init_image_view(iview_ptr, &iview_cfg, vk);
@@ -292,13 +308,48 @@ intern int load_default_image_and_sampler(renderer *rndr)
     return err;
 }
 
+intern int init_swapchain_framebuffers(renderer *rndr)
+{
+    auto vk = rndr->vk;
+    auto dev = &rndr->vk->inst.device;
+
+    vkr_image_cfg im_cfg{};
+    im_cfg.dims = {dev->swapchain.extent.width, dev->swapchain.extent.height, 1};
+    im_cfg.format = VK_FORMAT_D32_SFLOAT_S8_UINT;
+    im_cfg.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    im_cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    im_cfg.vma_alloc = &dev->vma_alloc;
+
+    if (rndr->swapchain_fb_depth_stencil_im_ind == INVALID_IND) {
+        rndr->swapchain_fb_depth_stencil_im_ind = vkr_add_image(dev);
+    }
+    int err = vkr_init_image(&dev->images[rndr->swapchain_fb_depth_stencil_im_ind], &im_cfg);
+    if (err != err_code::VKR_NO_ERROR) {
+        return err;
+    }
+
+    vkr_image_view_cfg imv_cfg{};
+    imv_cfg.srange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+    imv_cfg.image = &dev->images[rndr->swapchain_fb_depth_stencil_im_ind];
+
+    if (rndr->swapchain_fb_depth_stencil_iview_ind == INVALID_IND) {
+        rndr->swapchain_fb_depth_stencil_iview_ind = vkr_add_image_view(dev);
+    }
+    err = vkr_init_image_view(&dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind], &imv_cfg, vk);
+    if (err != err_code::VKR_NO_ERROR) {
+        return err;
+    }
+
+    vkr_init_swapchain_framebuffers(dev, vk, &dev->render_passes[rndr->render_pass_ind], vkr_framebuffer_attachment{dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind]});
+    return err;
+}
 
 intern int setup_rendering(renderer *rndr)
 {
     ilog("Setting up default rendering...");
     auto vk = rndr->vk;
     auto dev = &rndr->vk->inst.device;
-    
+
     int err = setup_render_pass(rndr);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
@@ -309,8 +360,11 @@ intern int setup_rendering(renderer *rndr)
         return err;
     }
 
-    vkr_init_swapchain_framebuffers(dev, vk, &dev->render_passes[rndr->render_pass_ind], nullptr);
-
+    err = init_swapchain_framebuffers(rndr);
+    if (err != err_code::VKR_NO_ERROR) {
+        return err;
+    }
+    
     err = create_vertex_indice_buffers(rndr);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
@@ -379,15 +433,20 @@ intern int setup_rendering(renderer *rndr)
     return err_code::VKR_NO_ERROR;
 }
 
-intern void record_command_buffer(vkr_command_buffer *cmd_buf,
+intern int record_command_buffer(vkr_command_buffer *cmd_buf,
                                   vkr_framebuffer *fb,
                                   vkr_pipeline *pipeline,
                                   vkr_buffer *vert_buf,
                                   vkr_buffer *ind_buf,
                                   vkr_descriptor_set *desc_set)
 {
-    vkr_begin_cmd_buf(cmd_buf);
-    vkr_cmd_begin_rpass(cmd_buf, fb);
+    int err = vkr_begin_cmd_buf(cmd_buf);
+    if (err != err_code::VKR_NO_ERROR) {
+        return err;
+    }
+
+    VkClearValue att_clear_vals[] = {{.color{1.0f,0.0f,1.0f,1.0f}}, {.depthStencil{1.0f, 0}}};
+    vkr_cmd_begin_rpass(cmd_buf, fb, att_clear_vals, 2);
 
     vkCmdBindPipeline(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->hndl);
 
@@ -412,10 +471,11 @@ intern void record_command_buffer(vkr_command_buffer *cmd_buf,
     vkCmdBindIndexBuffer(cmd_buf->hndl, ind_buf->hndl, 0, VK_INDEX_TYPE_UINT16);
 
     vkCmdBindDescriptorSets(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, 0, 1, &desc_set->hndl, 0, nullptr);
-    vkCmdDrawIndexed(cmd_buf->hndl, 6, 1, 0, 0, 0);
+    vkCmdDrawIndexed(cmd_buf->hndl, 12, 1, 0, 0, 0);
 
     vkr_cmd_end_rpass(cmd_buf);
-    vkr_end_cmd_buf(cmd_buf);
+    
+    return vkr_end_cmd_buf(cmd_buf);
 }
 
 int renderer_init(renderer *rndr, void *win_hndl, mem_arena *fl_arena)
@@ -455,19 +515,31 @@ int renderer_init(renderer *rndr, void *win_hndl, mem_arena *fl_arena)
 
     vec2 fbsz = platform_framebuffer_size(win_hndl);
     rndr->cvp.proj = (math::perspective(45.0f, fbsz.w / fbsz.h, 0.1f, 10.0f));
-    rndr->cvp.view = (math::look_at(vec3{0.0f, 0.0f, -2.0f}, vec3{0.0f}, vec3{0.0f, 1.0f, 0.0f}));
+    rndr->cvp.view = (math::look_at(vec3{0.0f, 2.0f, -2.0f}, vec3{0.0f}, vec3{0.0f, 1.0f, 0.0f}));
+    rndr->scale = {1};
     return err_code::RENDER_NO_ERROR;
 }
 
-int render_frame(renderer *rndr, int finished_frame_count)
+int render_frame(renderer *rndr, const profile_timepoints *tp, int finished_frame_count)
 {
+    double elapsed_s = nanos_to_sec(ptimer_elapsed_dt(tp));
+
     mem_reset_arena(&rndr->vk_frame_linear);
     auto dev = &rndr->vk->inst.device;
 
     if (platform_framebuffer_resized(rndr->vk->cfg.window)) {
-        vkr_recreate_swapchain(&rndr->vk->inst, rndr->vk, 0);
+        vkr_recreate_swapchain(&rndr->vk->inst, rndr->vk);
+        vkr_terminate_image_view(&dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind], rndr->vk);
+        vkr_terminate_image(&dev->images[rndr->swapchain_fb_depth_stencil_im_ind]);
+        init_swapchain_framebuffers(rndr);
     }
     
+    rndr->orientation *= math::orientation(vec4{0.0, 0.0, 1.0, (f32)tp->dt});
+    rndr->world_pos = vec3{math::sin((f32)elapsed_s), math::cos((f32)elapsed_s)};
+    //rndr->scale = {math::abs(math::sin((f32)elapsed_s))};
+    
+    rndr->cvp.model = math::model_tform(rndr->world_pos, rndr->orientation, rndr->scale);
+
     int current_frame_ind = finished_frame_count % MAX_FRAMES_IN_FLIGHT;
     auto cur_frame = &dev->rframes[current_frame_ind];
     auto buf_ind = cur_frame->cmd_buf_ind;
@@ -492,7 +564,6 @@ int render_frame(renderer *rndr, int finished_frame_count)
     // Update uniform buffer with some matrices
     int ubo_ind = cur_frame->uniform_buffer_ind;
     memcpy(dev->buffers[ubo_ind].mem_info.pMappedData, &rndr->cvp, sizeof(uniform_buffer_object));
-    
 
     // We have the acquired image index, though we don't know when it will be ready to have ops submitted, we can record
     // the ops in the command buffer and submit once it is readyy
@@ -538,4 +609,4 @@ void renderer_terminate(renderer *rndr)
     mem_terminate_arena(&rndr->vk_frame_linear);
 }
 
-}
+} // namespace nslib
