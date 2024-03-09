@@ -32,6 +32,42 @@ intern const u32 DEVICE_EXTENSION_COUNT = 1;
 intern const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 #endif
 
+const vertex rect_verts[] = {{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+                             {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+                             {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+                             {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}};
+
+const u16 rect_indices[] = {0, 1, 2, 2, 3, 0};
+
+intern void geom_make_rect(submesh *sm)
+{
+    arr_copy(&sm->verts, rect_verts, 4);
+    arr_copy(&sm->indices, rect_indices, 6);
+}
+
+void submesh_init(submesh *sm, mem_arena *arena)
+{
+    arr_init(&sm->verts, arena);
+    arr_init(&sm->indices, arena);
+}
+
+void submesh_terminate(submesh *sm)
+{
+    arr_terminate(&sm->verts);
+    arr_terminate(&sm->indices);
+}
+
+void world_chunk_init(world_chunk *chunk, mem_arena *arena)
+{
+    arr_init(&chunk->ents, arena);
+}
+
+void world_chunk_terminate(world_chunk *chunk)
+{
+    arr_terminate(&chunk->ents);
+}    
+
+
 intern int setup_render_pass(renderer *rndr)
 {
     auto vk = rndr->vk;
@@ -102,6 +138,12 @@ intern int setup_pipeline(renderer *rndr)
     info.set_layouts[0].bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     info.set_layouts[0].bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     info.set_layouts[0].bindings[1].descriptorCount = 1;
+
+    // Setup our push constant
+    ++info.push_constant_ranges.size;
+    info.push_constant_ranges[0].offset = 0;
+    info.push_constant_ranges[0].size = sizeof(push_constants);
+    info.push_constant_ranges[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
     // Vertex binding:
     VkVertexInputBindingDescription binding_desc{};
@@ -216,26 +258,29 @@ intern int create_vertex_indice_buffers(renderer *rndr)
     b_cfg.vma_alloc = &dev->vma_alloc;
 
     // Vert buffer
+    ilog("Creating vertex buffer");
     b_cfg.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    b_cfg.buffer_size = sizeof(vertex) * 8;
+    b_cfg.buffer_size = sizeof(vertex) * rndr->rect.verts.size;
+    dlog("Vert buffer size %d", b_cfg.buffer_size);
     int err = vkr_init_buffer(&dev->buffers[rndr->vert_buf_ind], &b_cfg);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
 
     // Init and copy data to staging buffer, then copy staging buf to vert buffer, then delete staging buf
-    vkr_stage_and_upload_buffer_data(&dev->buffers[rndr->vert_buf_ind], verts, b_cfg.buffer_size, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
+    vkr_stage_and_upload_buffer_data(&dev->buffers[rndr->vert_buf_ind], rndr->rect.verts.data, b_cfg.buffer_size, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
 
     // Ind buffer
+    ilog("Creating index buffer");
     b_cfg.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    b_cfg.buffer_size = sizeof(u32) * 12;
+    b_cfg.buffer_size = sizeof(u32) * rndr->rect.indices.size;
     err = vkr_init_buffer(&dev->buffers[rndr->ind_buf_ind], &b_cfg);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
 
     // Init and copy data to staging buffer, then copy staging buf to vert buffer, then delete staging buf
-    vkr_stage_and_upload_buffer_data(&dev->buffers[rndr->ind_buf_ind], indices, b_cfg.buffer_size, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
+    vkr_stage_and_upload_buffer_data(&dev->buffers[rndr->ind_buf_ind], rndr->rect.indices.data, b_cfg.buffer_size, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
     return err_code::VKR_NO_ERROR;
 }
 
@@ -381,7 +426,6 @@ intern int setup_rendering(renderer *rndr)
     for (int i = 0; i < dev->rframes.size; ++i) {
         // Create a uniform buffer for each frame
         vkr_buffer_cfg buf_cfg{};
-        vkr_buffer uniform_buf{};
         buf_cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
         buf_cfg.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
         buf_cfg.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
@@ -389,6 +433,7 @@ intern int setup_rendering(renderer *rndr)
         buf_cfg.alloc_flags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
         buf_cfg.vma_alloc = &dev->vma_alloc;
 
+        vkr_buffer uniform_buf{};
         int err = vkr_init_buffer(&uniform_buf, &buf_cfg);
         if (err != err_code::VKR_NO_ERROR) {
             return err;
@@ -401,15 +446,11 @@ intern int setup_rendering(renderer *rndr)
             return desc_ind.err_code;
         }
 
+        // Write to the descriptor set - give it our frame global uniform buffer handle
         VkDescriptorBufferInfo buffer_info{};
         buffer_info.offset = 0;
         buffer_info.range = buf_cfg.buffer_size;
         buffer_info.buffer = uniform_buf.hndl;
-
-        VkDescriptorImageInfo image_info{};
-        image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        image_info.imageView = dev->image_views[rndr->default_image_view_ind].hndl;
-        image_info.sampler = dev->samplers[rndr->default_sampler_ind].hndl;
 
         VkWriteDescriptorSet desc_write[2]{};
         desc_write[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -420,6 +461,12 @@ intern int setup_rendering(renderer *rndr)
         desc_write[0].descriptorCount = 1;
         desc_write[0].pBufferInfo = &buffer_info;
 
+        // Write our image view handle and sampler handle to the descriptor set 
+        VkDescriptorImageInfo image_info{};
+        image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        image_info.imageView = dev->image_views[rndr->default_image_view_ind].hndl;
+        image_info.sampler = dev->samplers[rndr->default_sampler_ind].hndl;
+
         desc_write[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         desc_write[1].dstSet = dev->rframes[i].desc_pool.desc_sets[desc_ind.begin].hndl;
         desc_write[1].dstBinding = 1;
@@ -428,18 +475,21 @@ intern int setup_rendering(renderer *rndr)
         desc_write[1].descriptorCount = 1;
         desc_write[1].pImageInfo = &image_info;
 
+        // Update our descriptor set - both of the writes above update the same descriptor set
         vkUpdateDescriptorSets(dev->hndl, 2, desc_write, 0, nullptr);
     }
     return err_code::VKR_NO_ERROR;
 }
 
-intern int record_command_buffer(vkr_command_buffer *cmd_buf,
-                                  vkr_framebuffer *fb,
-                                  vkr_pipeline *pipeline,
-                                  vkr_buffer *vert_buf,
-                                  vkr_buffer *ind_buf,
-                                  vkr_descriptor_set *desc_set)
+intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame *cur_frame, vkr_command_buffer *cmd_buf)
 {
+    auto dev = &rndr->vk->inst.device;
+    
+    auto desc_set = &cur_frame->desc_pool.desc_sets[0];
+    auto pipeline = &dev->pipelines[0];
+    auto vert_buf = &dev->buffers[rndr->vert_buf_ind];
+    auto ind_buf = &dev->buffers[rndr->ind_buf_ind];
+   
     int err = vkr_begin_cmd_buf(cmd_buf);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
@@ -464,14 +514,20 @@ intern int record_command_buffer(vkr_command_buffer *cmd_buf,
     scissor.extent = {fb->size.w, fb->size.h};
     vkCmdSetScissor(cmd_buf->hndl, 0, 1, &scissor);
 
+    // Our global descriptor set which has the uniform buffer
+    vkCmdBindDescriptorSets(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, 0, 1, &desc_set->hndl, 0, nullptr);
+
     VkBuffer vert_bufs[] = {vert_buf->hndl};
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(cmd_buf->hndl, 0, 1, vert_bufs, offsets);
-
     vkCmdBindIndexBuffer(cmd_buf->hndl, ind_buf->hndl, 0, VK_INDEX_TYPE_UINT16);
 
-    vkCmdBindDescriptorSets(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, 0, 1, &desc_set->hndl, 0, nullptr);
-    vkCmdDrawIndexed(cmd_buf->hndl, 12, 1, 0, 0, 0);
+    push_constants pc;
+    for (int i = 0; i < rndr->chunk.ents.size; ++i) {
+        pc.model = math::model_tform(rndr->chunk.ents[i].world_pos, rndr->chunk.ents[i].orientation, rndr->chunk.ents[i].scale);
+        vkCmdPushConstants(cmd_buf->hndl,pipeline->layout_hndl, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push_constants), &pc);
+        vkCmdDrawIndexed(cmd_buf->hndl, 12, 1, 0, 0, 0);
+    }
 
     vkr_cmd_end_rpass(cmd_buf);
     
@@ -506,6 +562,10 @@ int renderer_init(renderer *rndr, void *win_hndl, mem_arena *fl_arena)
     if (vkr_init(&vkii, rndr->vk) != err_code::VKR_NO_ERROR) {
         return err_code::RENDER_INIT_FAIL;
     }
+    
+    submesh_init(&rndr->rect, rndr->upstream_fl_arena);
+    world_chunk_init(&rndr->chunk, rndr->upstream_fl_arena);
+    geom_make_rect(&rndr->rect);
 
     int err = setup_rendering(rndr);
     if (err != err_code::VKR_NO_ERROR) {
@@ -514,15 +574,29 @@ int renderer_init(renderer *rndr, void *win_hndl, mem_arena *fl_arena)
     }
 
     vec2 fbsz = platform_framebuffer_size(win_hndl);
-    rndr->cvp.proj = (math::perspective(45.0f, fbsz.w / fbsz.h, 0.1f, 10.0f));
-    rndr->cvp.view = (math::look_at(vec3{0.0f, 2.0f, -2.0f}, vec3{0.0f}, vec3{0.0f, 1.0f, 0.0f}));
-    rndr->scale = {1};
+    rndr->cam.proj = (math::perspective(45.0f, fbsz.w / fbsz.h, 0.1f, 100.0f));
+    rndr->cam.view = (math::look_at(vec3{0.0f, 10.0f, -5.0f}, vec3{0.0f}, vec3{0.0f, 1.0f, 0.0f}));
+
+    int count = 2000;
+    arr_resize(&rndr->chunk.ents, count);
+    for (int i = i; i < rndr->chunk.ents.size; ++i) {
+        int mod = i - count/2;
+        rndr->chunk.ents[i].world_pos = vec3{0,0, mod*0.05f};
+    }
+    
+
     return err_code::RENDER_NO_ERROR;
 }
 
 int render_frame(renderer *rndr, const profile_timepoints *tp, int finished_frame_count)
 {
     double elapsed_s = nanos_to_sec(ptimer_elapsed_dt(tp));
+
+    for (int i = 0; i < rndr->chunk.ents.size; ++i) {
+        rndr->chunk.ents[i].orientation *= math::orientation(vec4{0.0, 0.0, 1.0, (f32)tp->dt});
+        rndr->chunk.ents[i].world_pos.x = math::sin((f32)elapsed_s);
+        rndr->chunk.ents[i].world_pos.y = math::cos((f32)elapsed_s);
+    }
 
     mem_reset_arena(&rndr->vk_frame_linear);
     auto dev = &rndr->vk->inst.device;
@@ -533,21 +607,11 @@ int render_frame(renderer *rndr, const profile_timepoints *tp, int finished_fram
         vkr_terminate_image(&dev->images[rndr->swapchain_fb_depth_stencil_im_ind]);
         init_swapchain_framebuffers(rndr);
     }
-    
-    rndr->orientation *= math::orientation(vec4{0.0, 0.0, 1.0, (f32)tp->dt});
-    rndr->world_pos = vec3{math::sin((f32)elapsed_s), math::cos((f32)elapsed_s)};
-    //rndr->scale = {math::abs(math::sin((f32)elapsed_s))};
-    
-    rndr->cvp.model = math::model_tform(rndr->world_pos, rndr->orientation, rndr->scale);
 
     int current_frame_ind = finished_frame_count % MAX_FRAMES_IN_FLIGHT;
     auto cur_frame = &dev->rframes[current_frame_ind];
     auto buf_ind = cur_frame->cmd_buf_ind;
     auto cmd_buf = &dev->qfams[buf_ind.pool_ind.qfam_ind].cmd_pools[buf_ind.pool_ind.pool_ind].buffers[buf_ind.buffer_ind];
-    auto pipeline = &dev->pipelines[0];
-    auto vert_buf = &dev->buffers[rndr->vert_buf_ind];
-    auto ind_buf = &dev->buffers[rndr->ind_buf_ind];
-
     // Wait for the rendering to be done before starting on the next frame and then reset the fence
     vkWaitForFences(dev->hndl, 1, &cur_frame->in_flight, VK_TRUE, UINT64_MAX);
 
@@ -562,14 +626,15 @@ int render_frame(renderer *rndr, const profile_timepoints *tp, int finished_fram
     vkResetFences(dev->hndl, 1, &cur_frame->in_flight);
 
     // Update uniform buffer with some matrices
+    uniform_buffer_object ubo{};
+    ubo.proj_view = rndr->cam.proj * rndr->cam.view;
     int ubo_ind = cur_frame->uniform_buffer_ind;
-    memcpy(dev->buffers[ubo_ind].mem_info.pMappedData, &rndr->cvp, sizeof(uniform_buffer_object));
+    memcpy(dev->buffers[ubo_ind].mem_info.pMappedData, &ubo, sizeof(uniform_buffer_object));
 
     // We have the acquired image index, though we don't know when it will be ready to have ops submitted, we can record
     // the ops in the command buffer and submit once it is readyy
     auto fb = &dev->framebuffers[im_ind];
-    auto desc_set = &cur_frame->desc_pool.desc_sets[0];
-    record_command_buffer(cmd_buf, fb, pipeline, vert_buf, ind_buf, desc_set);
+    record_command_buffer(rndr, fb, cur_frame, cmd_buf);
 
     // Get the info ready to submit our command buffer to the queue. We need to wait until the image avail semaphore has
     // signaled, and then we need to trigger the render finished signal once the the command buffer completes
@@ -603,6 +668,8 @@ int render_frame(renderer *rndr, const profile_timepoints *tp, int finished_fram
 void renderer_terminate(renderer *rndr)
 {
     auto dev = &rndr->vk->inst.device;
+    submesh_terminate(&rndr->rect);
+    world_chunk_terminate(&rndr->chunk);
     vkr_terminate(rndr->vk);
     mem_free(rndr->vk, &rndr->vk_free_list);
     mem_terminate_arena(&rndr->vk_free_list);

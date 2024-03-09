@@ -3,11 +3,12 @@
 #include "logging.h"
 #include "memory.h"
 #include "math/matrix4.h"
+#include "containers/array.h"
 
 namespace nslib
 {
 #define INVALID_IND ((sizet)-1)
-    
+
 struct vkr_context;
 
 namespace err_code
@@ -21,11 +22,14 @@ enum render
 };
 }
 
-struct uniform_buffer_object
+struct push_constants
 {
     mat4 model;
-    mat4 view;
-    mat4 proj;
+};
+
+struct uniform_buffer_object
+{
+    mat4 proj_view;
 };
 
 struct vertex
@@ -35,31 +39,30 @@ struct vertex
     vec2 tex_coord;
 };
 
-const vertex verts[] = {
-    {{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-    {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
-    {{-0.5f, -0.5f, 0.5f}, {0.0f, 0.0f, 5.0f}, {0.0f, 0.0f}},
-    {{0.5f, -0.5f, 0.5f}, {1.0f, 0.0f, 5.0f}, {1.0f, 0.0f}},
-    {{0.5f, 0.5f, 0.5f}, {1.0f, 1.0f, 5.0f}, {1.0f, 1.0f}},
-    {{-0.5f, 0.5f, 0.5f}, {0.0f, 1.0f, 5.0f}, {0.0f, 1.0f}}
-    };
+struct submesh
+{
+    array<vertex> verts;
+    array<u16> indices;
+};
 
-const u16 indices[] = {
-    0,
-    1,
-    2,
-    2,
-    3,
-    0,
-    4,
-    5,
-    6,
-    6,
-    7,
-    4
-    };
+struct camera
+{
+    mat4 proj;
+    mat4 view;
+};
+
+struct entity
+{
+    vec3 world_pos;
+    quat orientation;
+    vec3 scale{1};
+    submesh *geometry;
+};
+
+struct world_chunk
+{
+    array<entity> ents;
+};
 
 struct renderer
 {
@@ -75,20 +78,25 @@ struct renderer
     sizet pipeline_ind;
     sizet vert_buf_ind;
     sizet ind_buf_ind;
-    
+
     sizet default_image_ind;
     sizet default_image_view_ind;
     sizet default_sampler_ind;
-    
+
     sizet swapchain_fb_depth_stencil_iview_ind{INVALID_IND};
     sizet swapchain_fb_depth_stencil_im_ind{INVALID_IND};
     
-    uniform_buffer_object cvp;
+    submesh rect;
 
-    vec3 world_pos;
-    quat orientation;
-    vec3 scale;
+    camera cam;
+    world_chunk chunk;
 };
+
+void submesh_init(submesh *sm, mem_arena *arena);
+void submesh_terminate(submesh *sm);
+
+void world_chunk_init(world_chunk *chunk, mem_arena *arena);
+void world_chunk_terminate(world_chunk *chunk);
 
 int renderer_init(renderer *rndr, void *win_hndl, mem_arena *fl_arena);
 int render_frame(renderer *rndr, const struct profile_timepoints *tp, int finished_frame_count);
