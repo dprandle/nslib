@@ -357,6 +357,11 @@ vec2 platform_cursor_pos(void *window_hndl)
     return ret;
 }
 
+vec2 platform_normalized_cursor_pos(void *window_hndl)
+{
+    return platform_cursor_pos(window_hndl) / vec2(platform_framebuffer_size(window_hndl));
+}
+
 bool platform_framebuffer_resized(void *win_hndl)
 {
     platform_ctxt *pf = platform_ptr((GLFWwindow*)win_hndl);

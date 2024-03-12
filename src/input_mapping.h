@@ -34,8 +34,6 @@ struct input_button_event
 
 struct input_cursor_event
 {
-    dvec2 pos{};
-    dvec2 norm_pos{};
 };
 
 struct input_scroll_event
@@ -48,6 +46,8 @@ struct input_event
     const char *name{};
     int type{-1};
     int modifiers{};
+    vec2 pos{};
+    vec2 norm_pos{};
     union
     {
         input_button_event btn_data;
@@ -61,7 +61,7 @@ using input_event_func = void(const input_event *ev, void *user);
 struct input_keymap_entry
 {
     // First 14 bits are key/button, next 10 bits are modifiers, and last 8 bits are action
-    small_str name{};
+    string name{};
     u32 flags{};
     input_event_func *cb{};
     void *cb_user_param{};

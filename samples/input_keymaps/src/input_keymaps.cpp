@@ -36,10 +36,10 @@ int app_init(platform_ctxt *ctxt, void *user_data)
     auto mouse_func = [](const input_event *ev, void *) {
         ilog("%s : abs pos: {%f %f}  norm pos: {%f %f}",
              ev->name,
-             ev->cursor_data.pos.x,
-             ev->cursor_data.pos.y,
-             ev->cursor_data.norm_pos.x,
-             ev->cursor_data.norm_pos.y);
+             ev->pos.x,
+             ev->pos.y,
+             ev->norm_pos.x,
+             ev->norm_pos.y);
     };
 
     // Create a set of entires for keymap 1 - some mouse movement on left mouse button pressed, an entry for right

@@ -526,7 +526,7 @@ intern int record_command_buffer(renderer *rndr, sim_region *rgn, vkr_framebuffe
         auto rc = get_comp(curtf->ent_id, sm_tbl);
 
         if (rc) {
-            pc.model = math::transpose(curtf->cached);
+            pc.model = curtf->cached;
             vkCmdPushConstants(cmd_buf->hndl, pipeline->layout_hndl, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push_constants), &pc);
             vkCmdDrawIndexed(cmd_buf->hndl, rndr->rect.indices.size, 1, 0, 0, 0);
         }
@@ -609,7 +609,7 @@ int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_fram
 
     // Update uniform buffer with some matrices
     uniform_buffer_object ubo{};
-    ubo.proj_view = math::transpose(cam->proj * cam->view);
+    ubo.proj_view = cam->proj * cam->view;
     int ubo_ind = cur_frame->uniform_buffer_ind;
     memcpy(dev->buffers[ubo_ind].mem_info.pMappedData, &ubo, sizeof(uniform_buffer_object));
 

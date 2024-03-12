@@ -257,7 +257,7 @@ matrix4<T> look_at(const vector3<T> &eye_pos, const vector3<T> &target_pos, cons
 template<floating_pt T>
 matrix4<T> model_tform(const vector3<T> &pos={}, const quaternion<T> & orientation={}, const vector3<T> &scale={1})
 {
-    matrix4<T> ret{math::rotation(orientation), pos};
+    matrix4<T> ret{math::rotation_mat(orientation), pos};
     compwise_mult_rows(&ret, vec4{scale, 1});
     return ret;
 }
@@ -281,13 +281,33 @@ vector3<T> up_vec(const matrix4<T> &mat)
 }
 
 template<class T>
-vector3<T> scaling_component(const matrix4<T> &transform)
+matrix3<T> rotation_mat(const matrix4<T> &transform)
+{
+    matrix3<T> ret(basis(transform));
+    return rotation_mat(ret);
+}
+
+template<class T>
+quaternion<T> orientation(const matrix4<T> &transform)
+{
+    return orientation(rotation_mat(transform));
+}
+
+template<class T>
+matrix3<T> scaling_mat(const matrix4<T> &transform)
+{
+    matrix3<T> ret(basis(transform));
+    return scaling_mat(ret);
+}
+
+template<class T>
+vector3<T> scaling_vec(const matrix4<T> &transform)
 {
     return {length(transform[0].xyz), length(transform[1].xyz), length(transform[2].xyz)};
 }
 
 template<class T>
-vector3<T> translation_component(const matrix4<T> &transform)
+vector3<T> translation_vec(const matrix4<T> &transform)
 {
     return transform(3).xyz;
 }

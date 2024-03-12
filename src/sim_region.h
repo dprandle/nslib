@@ -8,25 +8,27 @@
 namespace nslib
 {
 struct submesh;
-namespace comp_type
+enum comp_type
 {
-enum val
-{
-    transform,
-    camera,
-    static_model,
+    COMP_TYPE_TRANSFORM,
+    COMP_TYPE_CAMERA,
+    COMP_TYPE_STATIC_MODEL,
     COMP_TYPE_USER
 };
-}
+
+enum comp_flags:u64 {
+    COMP_FLAG_DIRTY = 1
+};
 
 #define COMP(type)                                                                                                                         \
     static constexpr const char *type_str = #type;                                                                                         \
-    static constexpr const u32 type_id = comp_type::type;                                                                                  \
-    u32 ent_id;
+    static constexpr const u32 type_id = COMP_TYPE_##type;                                                                                 \
+    u32 ent_id;                                                                                                                            \
+    u64 flags;
 
 struct transform
 {
-    COMP(transform)
+    COMP(TRANSFORM)
     vec3 world_pos;
     quat orientation;
     vec3 scale{1};
@@ -36,13 +38,13 @@ struct transform
 
 struct static_model
 {
-    COMP(static_model)
+    COMP(STATIC_MODEL)
     submesh *geometry;
 };
 
 struct camera
 {
-    COMP(camera)
+    COMP(CAMERA)
     mat4 proj;
     mat4 view;
 };

@@ -93,7 +93,7 @@ matrix2<T> transpose(matrix2<T> mat)
 }
 
 template<floating_pt T>
-matrix2<T> rotation(T radian_angle)
+matrix2<T> rotation_mat(T radian_angle)
 {
     matrix2<T> ret;
     ret.data[0][0] = math::cos(radian_angle);
@@ -104,7 +104,7 @@ matrix2<T> rotation(T radian_angle)
 }
 
 template<class T>
-matrix2<T> scaling(const vector2<T> &scale_)
+matrix2<T> scaling_mat(const vector2<T> &scale_)
 {
     matrix2<T> ret;
     ret.data[0][0] = scale_.x;
@@ -113,7 +113,7 @@ matrix2<T> scaling(const vector2<T> &scale_)
 }
 
 template<class T>
-matrix2<T> scaling(const matrix2<T> &transform)
+matrix2<T> scaling_mat(const matrix2<T> &transform)
 {
     matrix2<T> ret;
     ret.data[0][0] = length(transform[0]);
@@ -122,13 +122,13 @@ matrix2<T> scaling(const matrix2<T> &transform)
 }
 
 template<class T>
-vector2<T> scaling_component(const matrix2<T> &tform)
+vector2<T> scaling_vec(const matrix2<T> &tform)
 {
     return {length(tform[0]), length(tform[1])};
 }
 
 template<class T>
-vector2<T> translation_component(const matrix2<T> &tform)
+vector2<T> translation_vec(const matrix2<T> &tform)
 {
     return tform(2);
 }

@@ -189,6 +189,7 @@ ivec2 platform_window_size(void *window_hndl);
 ivec2 platform_framebuffer_size(void *window_hndl);
 
 vec2 platform_cursor_pos(void *window_hndl);
+vec2 platform_normalized_cursor_pos(void *window_hndl);
 
 void platform_window_process_input(platform_ctxt *pf);
 bool platform_framebuffer_resized(void *win_hndl);

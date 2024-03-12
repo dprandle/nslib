@@ -19,7 +19,7 @@ layout(location = 1) out vec2 frag_tex_coord;
 
 void main() {
     // Because GLSL stores matrices in column major, we reverse our multiplication order
-    gl_Position = ubo.proj_view  * pc.model * vec4(in_pos, 1.0);
+    gl_Position = vec4(in_pos, 1.0) * pc.model * ubo.proj_view;
     fragColor = in_color;
     frag_tex_coord = in_tex_coord;
 }

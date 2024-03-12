@@ -148,19 +148,19 @@ quaternion<T> conjugate(quaternion<T> qt)
 }
 
 template<class T>
-vector3<T> right(const quaternion<T> &q)
+vector3<T> right_vec(const quaternion<T> &q)
 {
     return {1 - 2 * (q.y * q.y + q.z * q.z), 2 * (q.x * q.y + q.z * q.w), 2 * (q.x * q.z - q.y * q.w)};
 }
 
 template<class T>
-vector3<T> target(const quaternion<T> &q)
+vector3<T> target_vec(const quaternion<T> &q)
 {
     return {2 * (q.x * q.z + q.y * q.w), 2 * (q.y * q.z - q.x * q.w), 1 - 2 * (q.x * q.x + q.y * q.y)};
 }
 
 template<class T>
-vector3<T> up(const quaternion<T> &q)
+vector3<T> up_vec(const quaternion<T> &q)
 {
     return {2 * (q.x * q.y - q.z * q.w), 1 - 2 * (q.x * q.x + q.z * q.z), 2 * (q.y * q.z + q.x * q.w)};
 }
@@ -190,14 +190,13 @@ vector4<T> axis_angle(const quaternion<T> &orientation)
 template<floating_pt T>
 quaternion<T> orientation(const vector4<T> &axis_angle)
 {
-    quaternion<T> ret;
-    T ang = axis_angle.w;
-    ang /= 2;
-    T s_ang = math::sin(ang);
+    quaternion<T> ret{};
+    T half_ang = axis_angle.w / (T)2;
+    T s_ang = math::sin(half_ang);
     ret.x = axis_angle.x * s_ang;
     ret.y = axis_angle.y * s_ang;
     ret.z = axis_angle.z * s_ang;
-    ret.w = math::cos(ang);
+    ret.w = math::cos(half_ang);
     return ret;
 }
 
@@ -322,10 +321,11 @@ inline quaternion<float> operator/(quaternion<float> lhs, T rhs)
 template<class T>
 quaternion<T> operator*(const quaternion<T> &lhs, const quaternion<T> &rhs)
 {
-    quaternion<T> ret{lhs.w * rhs.x + lhs.x * rhs.w + lhs.y * rhs.z - lhs.z * rhs.y,
-                      lhs.w * rhs.y - lhs.x * rhs.z + lhs.y * rhs.w + lhs.z * rhs.x,
-                      lhs.w * rhs.z + lhs.x * rhs.y - lhs.y * rhs.x + lhs.z * rhs.w,
-                      lhs.w * rhs.w - lhs.x * rhs.x - lhs.y * rhs.y - lhs.z * rhs.z};
+    quaternion<T> ret{};
+    ret.x = lhs.w * rhs.x + lhs.x * rhs.w + lhs.y * rhs.z - lhs.z * rhs.y;
+    ret.y = lhs.w * rhs.y - lhs.x * rhs.z + lhs.y * rhs.w + lhs.z * rhs.x;
+    ret.z = lhs.w * rhs.z + lhs.x * rhs.y - lhs.y * rhs.x + lhs.z * rhs.w;
+    ret.w = lhs.w * rhs.w - lhs.x * rhs.x - lhs.y * rhs.y - lhs.z * rhs.z;
     return ret;
 }
 

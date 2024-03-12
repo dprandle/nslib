@@ -446,7 +446,7 @@ int app_run_frame(platform_ctxt *ctxt, void *user_data)
     auto app = (app_data *)user_data;
     vec3 dir = math::target_vec(app->cvp.view);
     vec3 right = math::right_vec(app->cvp.view);
-    vec3 cur_pos = math::translation_component(app->cvp.view);
+    vec3 cur_pos = math::translation_vec(app->cvp.view);
 
     for (int ie = 0; ie < ctxt->finp.events.size; ++ie) {
         auto ev = &ctxt->finp.events[ie];

@@ -15,23 +15,25 @@ intern void fill_event_from_platform_event(const platform_input_event *raw, inpu
     ev->modifiers = raw->mods;
     if (raw->type == platform_input_event_type::CURSOR_POS) {
         ev->type = IEVENT_TYPE_CURSOR;
-        ev->cursor_data.pos = raw->pos;
-        ev->cursor_data.norm_pos = raw->pos / vec2{platform_window_size(raw->win_hndl)};
+        ev->pos = raw->pos;
     }
     else if (raw->type == platform_input_event_type::SCROLL) {
+        ev->pos = platform_cursor_pos(raw->win_hndl);
         ev->type = IEVENT_TYPE_SCROLL;
         ev->scroll_data.offset = raw->offset;
     }
     else {
+        ev->pos = platform_cursor_pos(raw->win_hndl);
         ev->type = IEVENT_TYPE_BTN;
         ev->btn_data.action = raw->action;
         ev->btn_data.key_or_button = raw->key_or_button;
     }
+    ev->norm_pos = ev->pos / vec2(platform_framebuffer_size(raw->win_hndl));
 }
 
 bool operator==(const input_keymap_entry &lhs, const input_keymap_entry &rhs)
 {
-    return strcmp(lhs.name, rhs.name);
+    return (lhs.name == rhs.name);
 }
 
 u32 input_keymap_button_key(int key_or_button, int modifiers, int action)
@@ -115,7 +117,7 @@ input_keymap_entry *input_get_keymap_entry(const char *name, input_keymap *km)
     sizet i{0};
     auto item = hashmap_iter(&km->hm, &i);
     while (item) {
-        if (strncmp(name, item->value.name, SMALL_STR_LEN) == 0) {
+        if (name == item->value.name) {
             return &item->value;
         }
         item = hashmap_iter(&km->hm, &i);
@@ -130,14 +132,13 @@ const input_keymap_entry *input_get_keymap_entry(const char *name, const input_k
     sizet i{0};
     auto item = hashmap_iter(&km->hm, &i);
     while (item) {
-        if (strncmp(name, item->value.name, SMALL_STR_LEN) == 0) {
+        if (name == item->value.name) {
             return &item->value;
         }
         item = hashmap_iter(&km->hm, &i);
     }
     return nullptr;
 }
-    
 
 bool input_remove_keymap_entry(u32 key, input_keymap *km)
 {
@@ -193,7 +194,7 @@ void input_map_event(const platform_input_event *raw, const input_keymap_stack *
 
         bool should_return = false;
         if (kentry) {
-            ev.name = kentry->name;
+            ev.name = str_cstr(kentry->name);
             fill_event_from_platform_event(raw, &ev);
             if (kentry->cb) {
                 kentry->cb(&ev, kentry->cb_user_param);
@@ -201,7 +202,7 @@ void input_map_event(const platform_input_event *raw, const input_keymap_stack *
             should_return = !test_flags(kentry->flags, IEVENT_FLAG_DONT_CONSUME);
         }
         if (kanymod && kanymod != kentry) {
-            ev.name = kanymod->name;
+            ev.name = str_cstr(kanymod->name);
             fill_event_from_platform_event(raw, &ev);
             if (kanymod->cb) {
                 kanymod->cb(&ev, kanymod->cb_user_param);

@@ -126,25 +126,25 @@ matrix2<T> basis(const matrix3<T> &mat)
 }
 
 template<class T>
-vector3<T> up(const matrix3<T> &mat)
+vector3<T> up_vec(const matrix3<T> &mat)
 {
     return normalize(mat(1));
 }
 
 template<class T>
-vector3<T> right(const matrix3<T> &mat)
+vector3<T> right_vec(const matrix3<T> &mat)
 {
     return normalize(mat(0));
 }
 
 template<class T>
-vector3<T> target(const matrix3<T> &mat)
+vector3<T> target_vec(const matrix3<T> &mat)
 {
     return normalize(mat(2));
 }
 
 template<floating_pt T>
-matrix3<T> rotation(const vector4<T> &axis_angle)
+matrix3<T> rotation_mat(const vector4<T> &axis_angle)
 {
     matrix3<T> ret;
 
@@ -177,7 +177,7 @@ matrix3<T> rotation(const vector4<T> &axis_angle)
 }
 
 template<floating_pt T>
-matrix3<T> rotation(const vector3<T> &euler, typename vector3<T>::euler_order order)
+matrix3<T> rotation_mat(const vector3<T> &euler, typename vector3<T>::euler_order order)
 {
     matrix3<T> ret;
     T cb = math::cos(euler.x);
@@ -272,7 +272,7 @@ matrix3<T> rotation(const vector3<T> &euler, typename vector3<T>::euler_order or
 }
 
 template<floating_pt T>
-matrix3<T> rotation(const quaternion<T> &orient)
+matrix3<T> rotation_mat(const quaternion<T> &orient)
 {
     matrix3<T> ret;
     ret.data[0][0] = 1 - 2 * (orient.y * orient.y + orient.z * orient.z);
@@ -290,7 +290,7 @@ matrix3<T> rotation(const quaternion<T> &orient)
 }
 
 template<floating_pt T>
-matrix3<T> rotation(const vector3<T> &from_vec, const vector3<T> &to_vec)
+matrix3<T> rotation_mat(const vector3<T> &from_vec, const vector3<T> &to_vec)
 {
     /* http://www.euclideanspace.com/maths/algebra/vectors/angleBetween/index.htm */
     matrix3<T> ret;
@@ -316,7 +316,7 @@ matrix3<T> rotation(const vector3<T> &from_vec, const vector3<T> &to_vec)
 }
 
 template<class T>
-matrix3<T> rotation(const matrix3<T> &transform)
+matrix3<T> rotation_mat(const matrix3<T> &transform)
 {
     matrix3<T> ret(transform);
     normalize(&ret.data[0]);
@@ -457,7 +457,7 @@ quaternion<T> orientation(const matrix3<T> &rotation)
 }
 
 template<class T>
-matrix3<T> scaling(const vector3<T> &scale)
+matrix3<T> scaling_mat(const vector3<T> &scale)
 {
     matrix3<T> ret;
     ret.data[0][0] = scale.x;
@@ -467,7 +467,7 @@ matrix3<T> scaling(const vector3<T> &scale)
 }
 
 template<class T>
-matrix3<T> scaling(const matrix3<T> &transform)
+matrix3<T> scaling_mat(const matrix3<T> &transform)
 {
     matrix3<T> ret;
     ret.data[0][0] = length(transform[0]);
@@ -477,7 +477,7 @@ matrix3<T> scaling(const matrix3<T> &transform)
 }
 
 template<class T>
-vector3<T> scaling_component(const matrix3<T> &transform)
+vector3<T> scaling_vec(const matrix3<T> &transform)
 {
     vector3<T> ret;
     ret.x = length(transform[0]);
@@ -487,7 +487,7 @@ vector3<T> scaling_component(const matrix3<T> &transform)
 }
 
 template<class T>
-vector3<T> translation_component(const matrix3<T> &transform)
+vector3<T> translation_vec(const matrix3<T> &transform)
 {
     return transform(3);
 }
