@@ -18,7 +18,7 @@ enum struct mem_alloc_type
 
 struct free_header
 {
-    sizet block_size;
+    sizet block_size{};
 };
 
 struct alloc_header

@@ -62,6 +62,6 @@ const int MB_SIZE = 1024 * KB_SIZE;
 
 using small_str = char[SMALL_STR_LEN];
 
-inline constexpr const sizet npos = LONG_MAX;
+inline constexpr const sizet NPOS = LONG_MAX;
 
 } // namespace nslib

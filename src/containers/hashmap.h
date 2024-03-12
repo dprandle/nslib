@@ -127,27 +127,6 @@ bool hashmap_next(hashmap<K, T> *hm, sizet *i, typename hashmap<K,T>::const_iter
 }
 
 template<class K, class T>
-typename hashmap<K, T>::iterator hashmap_insert(hashmap<K, T> *hm, const K &key, const T &value)
-{
-    assert(hm->hm);
-    if (hashmap_find(hm, key)) {
-        return nullptr;
-    }
-    typename hashmap<K, T>::value_type item{key, value};
-    return (typename hashmap<K, T>::iterator)ihashmap_set(hm->hm, &item);
-}
-
-template<class K, class T>
-typename hashmap<K, T>::iterator hashmap_insert(hashmap<K, T> *hm, const typename hashmap<K, T>::value_type & item)
-{
-    assert(hm->hm);
-    if (hashmap_find(hm, item.key)) {
-        return nullptr;
-    }
-    return (typename hashmap<K, T>::iterator)ihashmap_set(hm->hm, &item);
-}
-
-template<class K, class T>
 void hashmap_clear(hashmap<K, T> *hm, bool update_cap)
 {
     assert(hm->hm);
@@ -221,7 +200,7 @@ void hashmap_init(hashmap<Key, Value> *hm)
         return hash_type(cast->key, seed0, seed1);
     };
 
-    // We only care about == so jsut return 1 in all other cases - If the hashed value of the keys are equal then we
+    // We only care about == so just return 1 in all other cases - If the hashed value of the keys are equal then we
     // check to see if the key itself is equal
     auto compare_func = [](const void *a, const void *b, void *) -> i32 {
         auto cast_a = (typename hashmap<Key,Value>::const_iterator)a;

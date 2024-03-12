@@ -935,7 +935,7 @@ vkr_add_result vkr_add_descriptor_sets(vkr_descriptor_pool *pool, const vkr_cont
 {
     ilog("Adding %lu descritor set/s", count);
     vkr_add_result result{};
-    array<VkDescriptorSet> hndls;
+    array<VkDescriptorSet> hndls{};
     arr_init(&hndls, vk->cfg.arenas.command_arena);
     arr_resize(&hndls, count);
 

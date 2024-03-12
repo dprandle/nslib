@@ -1,7 +1,6 @@
 #pragma once
 
 #include "logging.h"
-#include "memory.h"
 #include "math/matrix4.h"
 #include "containers/array.h"
 
@@ -10,6 +9,8 @@ namespace nslib
 #define INVALID_IND ((sizet)-1)
 
 struct vkr_context;
+struct sim_region;
+struct camera;
 
 namespace err_code
 {
@@ -45,25 +46,6 @@ struct submesh
     array<u16> indices;
 };
 
-struct camera
-{
-    mat4 proj;
-    mat4 view;
-};
-
-struct entity
-{
-    vec3 world_pos;
-    quat orientation;
-    vec3 scale{1};
-    submesh *geometry;
-};
-
-struct world_chunk
-{
-    array<entity> ents;
-};
-
 struct renderer
 {
     // Passed in
@@ -85,21 +67,15 @@ struct renderer
 
     sizet swapchain_fb_depth_stencil_iview_ind{INVALID_IND};
     sizet swapchain_fb_depth_stencil_im_ind{INVALID_IND};
-    
-    submesh rect;
 
-    camera cam;
-    world_chunk chunk;
+    submesh rect;
 };
 
 void submesh_init(submesh *sm, mem_arena *arena);
 void submesh_terminate(submesh *sm);
 
-void world_chunk_init(world_chunk *chunk, mem_arena *arena);
-void world_chunk_terminate(world_chunk *chunk);
-
 int renderer_init(renderer *rndr, void *win_hndl, mem_arena *fl_arena);
-int render_frame(renderer *rndr, const struct profile_timepoints *tp, int finished_frame_count);
+int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_frame_count);
 void renderer_terminate(renderer *rndr);
 
 } // namespace nslib

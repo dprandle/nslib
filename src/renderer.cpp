@@ -1,3 +1,4 @@
+#include "sim_region.h"
 #include "string_archive.h"
 #include "containers/string.h"
 #include "math/quaternion.h"
@@ -57,23 +58,12 @@ void submesh_terminate(submesh *sm)
     arr_terminate(&sm->indices);
 }
 
-void world_chunk_init(world_chunk *chunk, mem_arena *arena)
-{
-    arr_init(&chunk->ents, arena);
-}
-
-void world_chunk_terminate(world_chunk *chunk)
-{
-    arr_terminate(&chunk->ents);
-}    
-
-
 intern int setup_render_pass(renderer *rndr)
 {
     auto vk = rndr->vk;
     rndr->render_pass_ind = vkr_add_render_pass(&vk->inst.device, {});
     vkr_rpass_cfg rp_cfg{};
-    
+
     VkAttachmentDescription att{};
     att.format = vk->inst.device.swapchain.format;
     att.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -96,11 +86,11 @@ intern int setup_render_pass(renderer *rndr)
     att_ref.attachment = 0;
     att_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     arr_push_back(&subpass.color_attachments, att_ref);
-    
+
     att_ref.attachment = 1;
     att_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     subpass.depth_stencil_attachment = &att_ref;
-    
+
     arr_push_back(&rp_cfg.subpasses, subpass);
 
     VkSubpassDependency sp_dep{};
@@ -224,7 +214,7 @@ intern int setup_pipeline(renderer *rndr)
     info.depth_stencil.depth_bounds_test_enable = false;
     info.depth_stencil.min_depth_bounds = 0.0f;
     info.depth_stencil.max_depth_bounds = 1.0f;
-    
+
     // Our basic shaders
     const char *fnames[] = {"data/shaders/rdev.vert.spv", "data/shaders/rdev.frag.spv"};
     for (int i = 0; i <= VKR_SHADER_STAGE_FRAG; ++i) {
@@ -268,7 +258,8 @@ intern int create_vertex_indice_buffers(renderer *rndr)
     }
 
     // Init and copy data to staging buffer, then copy staging buf to vert buffer, then delete staging buf
-    vkr_stage_and_upload_buffer_data(&dev->buffers[rndr->vert_buf_ind], rndr->rect.verts.data, b_cfg.buffer_size, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
+    vkr_stage_and_upload_buffer_data(
+        &dev->buffers[rndr->vert_buf_ind], rndr->rect.verts.data, b_cfg.buffer_size, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
 
     // Ind buffer
     ilog("Creating index buffer");
@@ -280,7 +271,8 @@ intern int create_vertex_indice_buffers(renderer *rndr)
     }
 
     // Init and copy data to staging buffer, then copy staging buf to vert buffer, then delete staging buf
-    vkr_stage_and_upload_buffer_data(&dev->buffers[rndr->ind_buf_ind], rndr->rect.indices.data, b_cfg.buffer_size, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
+    vkr_stage_and_upload_buffer_data(
+        &dev->buffers[rndr->ind_buf_ind], rndr->rect.indices.data, b_cfg.buffer_size, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
     return err_code::VKR_NO_ERROR;
 }
 
@@ -305,13 +297,13 @@ intern int load_default_image_and_sampler(renderer *rndr)
     vkr_image_cfg cfg{};
     cfg.dims = {tex_dims, 1};
     cfg.format = VK_FORMAT_R8G8B8A8_SRGB;
-//    cfg.mip_levels = 1;vkr_get_required_mip_levels(tex_dims);
+    //    cfg.mip_levels = 1;vkr_get_required_mip_levels(tex_dims);
 
     // We have the src bit set here because we generate mipmaps for the image
     cfg.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
     cfg.vma_alloc = &dev->vma_alloc;
-    
+
     int err = vkr_init_image(dest_image, &cfg);
     if (err != err_code::VKR_NO_ERROR) {
         stbi_image_free(pixels);
@@ -385,7 +377,10 @@ intern int init_swapchain_framebuffers(renderer *rndr)
         return err;
     }
 
-    vkr_init_swapchain_framebuffers(dev, vk, &dev->render_passes[rndr->render_pass_ind], vkr_framebuffer_attachment{dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind]});
+    vkr_init_swapchain_framebuffers(dev,
+                                    vk,
+                                    &dev->render_passes[rndr->render_pass_ind],
+                                    vkr_framebuffer_attachment{dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind]});
     return err;
 }
 
@@ -409,7 +404,7 @@ intern int setup_rendering(renderer *rndr)
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
-    
+
     err = create_vertex_indice_buffers(rndr);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
@@ -461,7 +456,7 @@ intern int setup_rendering(renderer *rndr)
         desc_write[0].descriptorCount = 1;
         desc_write[0].pBufferInfo = &buffer_info;
 
-        // Write our image view handle and sampler handle to the descriptor set 
+        // Write our image view handle and sampler handle to the descriptor set
         VkDescriptorImageInfo image_info{};
         image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         image_info.imageView = dev->image_views[rndr->default_image_view_ind].hndl;
@@ -481,21 +476,21 @@ intern int setup_rendering(renderer *rndr)
     return err_code::VKR_NO_ERROR;
 }
 
-intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame *cur_frame, vkr_command_buffer *cmd_buf)
+intern int record_command_buffer(renderer *rndr, sim_region *rgn, vkr_framebuffer *fb, vkr_frame *cur_frame, vkr_command_buffer *cmd_buf)
 {
     auto dev = &rndr->vk->inst.device;
-    
+
     auto desc_set = &cur_frame->desc_pool.desc_sets[0];
     auto pipeline = &dev->pipelines[0];
     auto vert_buf = &dev->buffers[rndr->vert_buf_ind];
     auto ind_buf = &dev->buffers[rndr->ind_buf_ind];
-   
+
     int err = vkr_begin_cmd_buf(cmd_buf);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
 
-    VkClearValue att_clear_vals[] = {{.color{1.0f,0.0f,1.0f,1.0f}}, {.depthStencil{1.0f, 0}}};
+    VkClearValue att_clear_vals[] = {{.color{1.0f, 0.0f, 1.0f, 1.0f}}, {.depthStencil{1.0f, 0}}};
     vkr_cmd_begin_rpass(cmd_buf, fb, att_clear_vals, 2);
 
     vkCmdBindPipeline(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->hndl);
@@ -523,14 +518,22 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
     vkCmdBindIndexBuffer(cmd_buf->hndl, ind_buf->hndl, 0, VK_INDEX_TYPE_UINT16);
 
     push_constants pc;
-    for (int i = 0; i < rndr->chunk.ents.size; ++i) {
-        pc.model = math::model_tform(rndr->chunk.ents[i].world_pos, rndr->chunk.ents[i].orientation, rndr->chunk.ents[i].scale);
-        vkCmdPushConstants(cmd_buf->hndl,pipeline->layout_hndl, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push_constants), &pc);
-        vkCmdDrawIndexed(cmd_buf->hndl, 12, 1, 0, 0, 0);
+    auto tf_tbl = get_comp_tbl<transform>(&rgn->cdb);
+    auto sm_tbl = get_comp_tbl<static_model>(&rgn->cdb);
+    
+    for (int i = 0; i < tf_tbl->entries.size; ++i) {
+        auto curtf = &tf_tbl->entries[i];
+        auto rc = get_comp(curtf->ent_id, sm_tbl);
+
+        if (rc) {
+            pc.model = math::transpose(curtf->cached);
+            vkCmdPushConstants(cmd_buf->hndl, pipeline->layout_hndl, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push_constants), &pc);
+            vkCmdDrawIndexed(cmd_buf->hndl, rndr->rect.indices.size, 1, 0, 0, 0);
+        }
     }
 
     vkr_cmd_end_rpass(cmd_buf);
-    
+
     return vkr_end_cmd_buf(cmd_buf);
 }
 
@@ -562,9 +565,8 @@ int renderer_init(renderer *rndr, void *win_hndl, mem_arena *fl_arena)
     if (vkr_init(&vkii, rndr->vk) != err_code::VKR_NO_ERROR) {
         return err_code::RENDER_INIT_FAIL;
     }
-    
+
     submesh_init(&rndr->rect, rndr->upstream_fl_arena);
-    world_chunk_init(&rndr->chunk, rndr->upstream_fl_arena);
     geom_make_rect(&rndr->rect);
 
     int err = setup_rendering(rndr);
@@ -572,32 +574,11 @@ int renderer_init(renderer *rndr, void *win_hndl, mem_arena *fl_arena)
         elog("Failed to initialize renderer with code %d", err);
         return err;
     }
-
-    vec2 fbsz = platform_framebuffer_size(win_hndl);
-    rndr->cam.proj = (math::perspective(45.0f, fbsz.w / fbsz.h, 0.1f, 100.0f));
-    rndr->cam.view = (math::look_at(vec3{0.0f, 10.0f, -5.0f}, vec3{0.0f}, vec3{0.0f, 1.0f, 0.0f}));
-
-    int count = 2000;
-    arr_resize(&rndr->chunk.ents, count);
-    for (int i = i; i < rndr->chunk.ents.size; ++i) {
-        int mod = i - count/2;
-        rndr->chunk.ents[i].world_pos = vec3{0,0, mod*0.05f};
-    }
-    
-
     return err_code::RENDER_NO_ERROR;
 }
 
-int render_frame(renderer *rndr, const profile_timepoints *tp, int finished_frame_count)
+int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_frame_count)
 {
-    double elapsed_s = nanos_to_sec(ptimer_elapsed_dt(tp));
-
-    for (int i = 0; i < rndr->chunk.ents.size; ++i) {
-        rndr->chunk.ents[i].orientation *= math::orientation(vec4{0.0, 0.0, 1.0, (f32)tp->dt});
-        rndr->chunk.ents[i].world_pos.x = math::sin((f32)elapsed_s);
-        rndr->chunk.ents[i].world_pos.y = math::cos((f32)elapsed_s);
-    }
-
     mem_reset_arena(&rndr->vk_frame_linear);
     auto dev = &rndr->vk->inst.device;
 
@@ -612,6 +593,7 @@ int render_frame(renderer *rndr, const profile_timepoints *tp, int finished_fram
     auto cur_frame = &dev->rframes[current_frame_ind];
     auto buf_ind = cur_frame->cmd_buf_ind;
     auto cmd_buf = &dev->qfams[buf_ind.pool_ind.qfam_ind].cmd_pools[buf_ind.pool_ind.pool_ind].buffers[buf_ind.buffer_ind];
+
     // Wait for the rendering to be done before starting on the next frame and then reset the fence
     vkWaitForFences(dev->hndl, 1, &cur_frame->in_flight, VK_TRUE, UINT64_MAX);
 
@@ -627,14 +609,14 @@ int render_frame(renderer *rndr, const profile_timepoints *tp, int finished_fram
 
     // Update uniform buffer with some matrices
     uniform_buffer_object ubo{};
-    ubo.proj_view = rndr->cam.proj * rndr->cam.view;
+    ubo.proj_view = math::transpose(cam->proj * cam->view);
     int ubo_ind = cur_frame->uniform_buffer_ind;
     memcpy(dev->buffers[ubo_ind].mem_info.pMappedData, &ubo, sizeof(uniform_buffer_object));
 
     // We have the acquired image index, though we don't know when it will be ready to have ops submitted, we can record
     // the ops in the command buffer and submit once it is readyy
     auto fb = &dev->framebuffers[im_ind];
-    record_command_buffer(rndr, fb, cur_frame, cmd_buf);
+    record_command_buffer(rndr, rgn, fb, cur_frame, cmd_buf);
 
     // Get the info ready to submit our command buffer to the queue. We need to wait until the image avail semaphore has
     // signaled, and then we need to trigger the render finished signal once the the command buffer completes
@@ -669,7 +651,6 @@ void renderer_terminate(renderer *rndr)
 {
     auto dev = &rndr->vk->inst.device;
     submesh_terminate(&rndr->rect);
-    world_chunk_terminate(&rndr->chunk);
     vkr_terminate(rndr->vk);
     mem_free(rndr->vk, &rndr->vk_free_list);
     mem_terminate_arena(&rndr->vk_free_list);

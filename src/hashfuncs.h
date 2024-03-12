@@ -2,6 +2,7 @@
 
 #include "basic_types.h"
 #include "basic_type_traits.h"
+#include "logging.h"
 
 namespace nslib
 {

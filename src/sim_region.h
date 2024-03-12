@@ -1,0 +1,184 @@
+#pragma once
+
+#include "memory.h"
+#include "math/matrix4.h"
+#include "containers/array.h"
+#include "containers/hashmap.h"
+
+namespace nslib
+{
+struct submesh;
+namespace comp_type
+{
+enum val
+{
+    transform,
+    camera,
+    static_model,
+    COMP_TYPE_USER
+};
+}
+
+#define COMP(type)                                                                                                                         \
+    static constexpr const char *type_str = #type;                                                                                         \
+    static constexpr const u32 type_id = comp_type::type;                                                                                  \
+    u32 ent_id;
+
+struct transform
+{
+    COMP(transform)
+    vec3 world_pos;
+    quat orientation;
+    vec3 scale{1};
+
+    mat4 cached;
+};
+
+struct static_model
+{
+    COMP(static_model)
+    submesh *geometry;
+};
+
+struct camera
+{
+    COMP(camera)
+    mat4 proj;
+    mat4 view;
+};
+
+template<class T>
+struct comp_table
+{
+    array<T> entries;
+    hashmap<u32, sizet> entc_hm;
+};
+
+struct comp_db
+{
+    array<void *> comp_tables;
+};
+
+struct entity
+{
+    u32 id;
+    string name;
+    comp_db *cdb;
+};
+
+struct sim_region
+{
+    array<entity> ents;
+    hashmap<u32, sizet> entmap;
+    comp_db cdb;
+    u32 last_id{};
+};
+
+template<class T>
+void comp_tbl_init(comp_table<T> *tbl, mem_arena *arena, sizet initial_capacity = 64)
+{
+    arr_init(&tbl->entries, arena, initial_capacity);
+    hashmap_init(&tbl->entc_hm);
+}
+
+template<class T>
+void comp_tbl_terminate(comp_table<T> *tbl)
+{
+    hashmap_terminate(&tbl->entc_hm);
+    arr_terminate(&tbl->entries);
+}
+
+template<class T>
+void add_comp_tbl(comp_db *cdb)
+{
+    if ((T::type_id + 1) > cdb->comp_tables.size) {
+        arr_resize(&cdb->comp_tables, T::type_id + 1);
+    }
+    if (!cdb->comp_tables[T::type_id]) {
+        auto ctbl = (comp_table<T> *)mem_alloc(sizeof(comp_table<T>), cdb->comp_tables.arena);
+        comp_tbl_init(ctbl, cdb->comp_tables.arena);
+        cdb->comp_tables[T::type_id] = ctbl;
+    }
+}
+
+template<class T>
+comp_table<T> *get_comp_tbl(comp_db *cdb)
+{
+    return (comp_table<T> *)cdb->comp_tables[T::type_id];
+}
+
+template<class T>
+void remove_comp_tbl(comp_db *cdb)
+{
+    auto ctbl = get_comp_tbl<T>(cdb);
+    if (ctbl) {
+        comp_tbl_terminate(ctbl);
+        mem_free(ctbl, cdb->comp_tables.arena);
+        cdb->comp_tables[T::type_id] = {};
+    }
+}
+
+void comp_db_init(comp_db *cdb, mem_arena *arena);
+void comp_db_terminate(comp_db *cdb);
+
+template<class T>
+T *add_comp(u32 ent_id, comp_table<T> *ctbl, const T &copy = {})
+{
+    auto fiter = hashmap_find(&ctbl->entc_hm, ent_id);
+    if (fiter) {
+        return nullptr;
+    }
+    sizet cid = ctbl->entries.size;
+    arr_push_back(&ctbl->entries, copy);
+    ctbl->entries[cid].ent_id = ent_id;
+    hashmap_set(&ctbl->entc_hm, ent_id, cid);
+    return &ctbl->entries[cid];
+}
+
+template<class T>
+T *add_comp(u32 ent_id, comp_db *cdb, const T &copy = {})
+{
+    auto ctbl = get_comp_tbl<T>(cdb);
+    return add_comp<T>(ent_id, ctbl, copy);
+}
+
+template<class T>
+T *add_comp(entity *ent, const T &copy = {})
+{
+    return add_comp<T>(ent->id, ent->cdb, copy);
+}
+
+template<class T>
+T *get_comp(u32 ent_id, comp_table<T> *ctbl)
+{
+    auto fiter = hashmap_find(&ctbl->entc_hm, ent_id);
+    if (!fiter) {
+        return nullptr;
+    }
+    return &ctbl->entries[fiter->value];
+}
+
+template<class T>
+T *get_comp(u32 ent_id, comp_db *cdb)
+{
+    auto ctbl = get_comp_tbl<T>(cdb);
+    return get_comp<T>(ent_id, ctbl);
+}
+
+template<class T>
+T *get_comp(entity *ent)
+{
+    return get_comp<T>(ent->id, ent->cdb);
+}
+
+sizet add_entities(sizet count, sim_region *reg);
+entity *add_entity(const entity &copy, sim_region *reg);
+entity *add_entity(const char *name, sim_region *reg);
+entity *get_entity(u32 ent_id, sim_region *reg);
+bool remove_entity(u32 ent_id, sim_region *reg);
+bool remove_entity(entity *ent, sim_region *reg);
+
+void sim_region_init(sim_region *reg, mem_arena *arena);
+void sim_region_terminate(sim_region *reg);
+
+} // namespace nslib

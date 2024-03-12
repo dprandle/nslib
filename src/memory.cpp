@@ -156,7 +156,7 @@ intern void *mem_free_list_alloc(mem_arena *arena, sizet size, sizet alignment_p
 
     //////////////////////////////////////////////////////////////////////////////////////////
     // The affected node is at the start of the block, and the block as allocated like this //
-    // Header | Alignment Padding | Aligned Base Address                                    //
+    // Alignment Padding | Header | Aligned Base Address                                    //
     //////////////////////////////////////////////////////////////////////////////////////////
     sizet header_addr = (sizet)affected_node + alignment_padding;
     sizet aligned_data_addr = (sizet)affected_node + padding;
@@ -203,21 +203,30 @@ intern sizet mem_free_list_linear_block_user_size(void *ptr)
 intern void mem_free_list_free(mem_arena *arena, void *ptr)
 {
     // Insert it in a sorted position by the address number
+
+    //////////////////////////////////////////////////////////////////////////////////////////
+    // The affected node is at the start of the block, and the block as allocated like this //
+    // Alignment Padding | Header | Aligned Base Address                                    //
+    //////////////////////////////////////////////////////////////////////////////////////////
     sizet current_addr = (sizet)ptr;
     sizet header_addr = current_addr - sizeof(alloc_header);
     auto aheader = (alloc_header *)header_addr;
+    
 #if DO_DEBUG_PRINT
     sizet algn_padding = aheader->algn_padding;
 #endif
-
+    
     mem_node *free_node = (mem_node *)(header_addr - aheader->algn_padding);
     free_node->data.block_size = aheader->block_size;
     free_node->next = nullptr;
 
+    // Start at the head of the free list, and keep going along the free list until we get to a node that has a higher
+    // address than the node we are freeing - ie insert our free node in such a way so the lower mem addresses are used
+    // up first
     mem_node *it = arena->mfl.free_list.head;
     mem_node *it_prev = nullptr;
     while (it != nullptr) {
-        if (ptr < it) {
+        if (free_node < it) {
             ll_insert(&arena->mfl.free_list, it_prev, free_node);
             break;
         }
