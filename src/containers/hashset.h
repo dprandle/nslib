@@ -73,25 +73,24 @@ void hashset_for_each(const hashset<T> *hs, LambdaFunc func)
 }
 
 template<class T>
-const T * hashset_iter(const hashset<T> *hs, sizet *i)
+const T *hashset_iter(const hashset<T> *hs, sizet *i)
 {
     assert(hs->hm);
     assert(i);
     T *item{nullptr};
-    ihashmap_iter(hs->hm, i, (void**)&item);
+    ihashmap_iter(hs->hm, i, (void **)&item);
     return item;
 }
 
 template<class T>
-T * hashset_iter(hashset<T> *hs, sizet *i)
+T *hashset_iter(hashset<T> *hs, sizet *i)
 {
     assert(hs->hm);
     assert(i);
     T *item{nullptr};
-    ihashmap_iter(hs->hm, i, (void**)&item);
+    ihashmap_iter(hs->hm, i, (void **)&item);
     return item;
 }
-
 
 template<class T>
 bool hashset_next(const hashset<T> *hs, sizet *i, const T **item)
@@ -116,7 +115,7 @@ T *hashset_insert(hashset<T> *hs, const T &value)
     if (hashset_find(hs, value)) {
         return nullptr;
     }
-    return (T*)ihashmap_set(hs->hm,&value);
+    return (T *)ihashmap_set(hs->hm, &value);
 }
 
 template<class T>
@@ -125,7 +124,6 @@ sizet hashset_count(hashset<T> *hs)
     assert(hs);
     return ihashmap_count(hs->hm);
 }
-
 
 template<class T>
 T *hashset_clear(hashset<T> *hs, bool update_cap)
@@ -138,35 +136,36 @@ template<class T>
 T *hashset_set(hashset<T> *hs, const T &value)
 {
     assert(hs->hm);
-    return (T*)ihashmap_set(hs->hm, &value);
+    return (T *)ihashmap_set(hs->hm, &value);
 }
 
 template<class T>
 const T *hashset_find(const hashset<T> *hs, const T &val)
 {
     assert(hs->hm);
-    return (T*)ihashmap_get(hs->hm, &val);
+    return (T *)ihashmap_get(hs->hm, &val);
 }
 
 template<class T>
 T *hashset_find(hashset<T> *hs, const T &val)
 {
     assert(hs->hm);
-    return (T*)ihashmap_get(hs->hm, &val);
+    return (T *)ihashmap_get(hs->hm, &val);
 }
 
 template<class T>
 T *hashset_remove(hashset<T> *hs, const T &val)
 {
     assert(hs->hm);
-    return (T*)ihashmap_delete(hs->hm, &val);
+    return (T *)ihashmap_delete(hs->hm, &val);
 }
 
 template<class T>
 void hashset_terminate(hashset<T> *hs)
 {
-    if (hs) {
+    if (hs && hs->hm) {
         ihashmap_free(hs->hm);
+        hs->hm = nullptr;
     }
 }
 
@@ -189,18 +188,9 @@ void hashset_init(hashset<T> *hs)
         auto cast_b = (const T *)b;
         return (*cast_a == *cast_b) ? 0 : 1;
     };
-    
-    hs->hm = ihashmap_new_with_allocator(global_malloc_func(),
-                                         global_realloc_func(),
-                                         global_free_func(),
-                                         sizeof(T),
-                                         0,
-                                         seed0,
-                                         seed1,
-                                         hash_func,
-                                         compare_func,
-                                         nullptr,
-                                         hs);
+
+    hs->hm = ihashmap_new_with_allocator(
+        global_malloc_func(), global_realloc_func(), global_free_func(), sizeof(T), 0, seed0, seed1, hash_func, compare_func, nullptr, hs);
 }
 
 template<class ArchiveT, class T>
@@ -226,9 +216,9 @@ void pack_unpack(ArchiveT *ar, hashset<T> &val, const pack_var_info &vinfo)
     }
 }
 
-
 template<class T>
-string to_str(const hashset<T> &hs) {
+string to_str(const hashset<T> &hs)
+{
     string ret("\nhashset {");
     auto for_each = [&ret](const T *item) {
         ret += "\n" + to_str(*item);
@@ -238,6 +228,5 @@ string to_str(const hashset<T> &hs) {
     ret += "\n}";
     return ret;
 }
-
 
 } // namespace nslib

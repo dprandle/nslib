@@ -1,10 +1,11 @@
+#include "robj_common.h"
 #include "platform.h"
 #include "renderer.h"
 #include "input_mapping.h"
 #include "sim_region.h"
 #include "vk_context.h"
 #include "basic_types.h"
-
+#include "containers/hashset.h"
 using namespace nslib;
 
 struct app_data
@@ -15,7 +16,6 @@ struct app_data
     input_keymap_stack stack{};
     u32 cam_id;
     vec2 mpos;
-
     ivec2 movement{};
 };
 
@@ -172,6 +172,7 @@ int init(platform_ctxt *ctxt, void *user_data)
 int run_frame(platform_ctxt *ctxt, void *user_data)
 {
     auto app = (app_data *)user_data;
+    
     input_map_frame(&ctxt->finp, &app->stack);
     f64 elapsed_s = nanos_to_sec(ptimer_elapsed_dt(&ctxt->time_pts));
 

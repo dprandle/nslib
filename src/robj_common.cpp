@@ -20,14 +20,27 @@ string to_str(const rid &rid)
     return ret;
 }
 
+rid generate_id()
+{
+    // Generate in this format 774f0899-9666-471a-b1f9
+    rid ret{};
+    u32 r1 = rand();
+    u32 r2 = rand();
+    u16 r3 = rand();
+    str_printf(&ret.str,"%08x-%08x-%04x",r1, r2, r3);
+    ret.id = hash_type(ret.str, 0, 0);
+    return ret;
+}
 
-void cache_init(robj_cache *cache, i32 rtype, sizet item_size, sizet item_budget, mem_arena *upstream) {
+void cache_init(robj_cache *cache, i32 rtype, sizet item_size, sizet item_budget, mem_arena *upstream)
+{
     cache->arena.mpool.chunk_size = item_size;
     cache->arena.upstream_allocator = upstream;
     mem_init_arena(item_budget, mem_alloc_type::POOL, &cache->arena);
 }
 
-void cache_terminate(robj_cache *cache) {
+void cache_terminate(robj_cache *cache)
+{
     mem_terminate_arena(&cache->arena);
 }
 

@@ -9,7 +9,7 @@ namespace robj_types
 {
 enum
 {
-    SHADER
+    GEOMETRY
 };
 }
 
@@ -38,6 +38,8 @@ inline u64 hash_type(const rid &id, u64, u64)
 {
     return id.id;
 }
+
+rid generate_id();
 
 inline bool operator==(const rid &lhs, const rid &rhs)
 {
