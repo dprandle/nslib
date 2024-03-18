@@ -67,14 +67,14 @@ struct robj_cache
     mem_arena arena;
 };
 
-void cache_init(robj_cache *cache, u32 rtype, sizet item_size, sizet item_budget, mem_arena *upstream);
+void init_cache(robj_cache *cache, u32 rtype, sizet item_size, sizet item_budget, mem_arena *upstream);
 
 template<class T>
-void cache_init(robj_cache *cache, sizet item_budget, mem_arena *upstream)
+void init_cache(robj_cache *cache, sizet item_budget, mem_arena *upstream)
 {
-    cache_init(cache, T::type, sizeof(T), item_budget, upstream);
+    init_cache(cache, T::type, sizeof(T), item_budget, upstream);
 }
 
-void cache_terminate(robj_cache *cache);
+void terminate_cache(robj_cache *cache);
 
 } // namespace nslib

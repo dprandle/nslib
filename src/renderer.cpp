@@ -33,31 +33,6 @@ intern const u32 DEVICE_EXTENSION_COUNT = 1;
 intern const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 #endif
 
-const vertex rect_verts[] = {{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-                             {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-                             {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-                             {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}};
-
-const u16 rect_indices[] = {0, 1, 2, 2, 3, 0};
-
-intern void geom_make_rect(submesh *sm)
-{
-    arr_copy(&sm->verts, rect_verts, 4);
-    arr_copy(&sm->indices, rect_indices, 6);
-}
-
-void submesh_init(submesh *sm, mem_arena *arena)
-{
-    arr_init(&sm->verts, arena);
-    arr_init(&sm->indices, arena);
-}
-
-void submesh_terminate(submesh *sm)
-{
-    arr_terminate(&sm->verts);
-    arr_terminate(&sm->indices);
-}
-
 intern int setup_render_pass(renderer *rndr)
 {
     auto vk = rndr->vk;
@@ -112,6 +87,9 @@ intern int setup_pipeline(renderer *rndr)
     arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_VIEWPORT);
     arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_SCISSOR);
 
+    // Allow changing to line frame for example
+    arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY);
+
     // Descripitor Set Layouts - Just one layout for the moment with a binding at 0 for uniforms and a binding at 1 for
     // image sampler
     ++info.set_layouts.size;
@@ -152,14 +130,14 @@ intern int setup_pipeline(renderer *rndr)
 
     attrib_desc.binding = 0;
     attrib_desc.location = 1;
-    attrib_desc.format = VK_FORMAT_R32G32B32_SFLOAT;
-    attrib_desc.offset = offsetof(vertex, color);
+    attrib_desc.format = VK_FORMAT_R32G32_SFLOAT;
+    attrib_desc.offset = offsetof(vertex, tc);
     arr_push_back(&info.vert_attrib_desc, attrib_desc);
 
     attrib_desc.binding = 0;
     attrib_desc.location = 2;
-    attrib_desc.format = VK_FORMAT_R32G32_SFLOAT;
-    attrib_desc.offset = offsetof(vertex, tex_coord);
+    attrib_desc.format = VK_FORMAT_B8G8R8A8_UINT;
+    attrib_desc.offset = offsetof(vertex, color);
     arr_push_back(&info.vert_attrib_desc, attrib_desc);
 
     // Viewports and scissors
@@ -219,7 +197,7 @@ intern int setup_pipeline(renderer *rndr)
     const char *fnames[] = {"data/shaders/rdev.vert.spv", "data/shaders/rdev.frag.spv"};
     for (int i = 0; i <= VKR_SHADER_STAGE_FRAG; ++i) {
         platform_file_err_desc err{};
-        platform_read_file(fnames[i], &info.shader_stages[i].code, 0, &err);
+        read_file(fnames[i], &info.shader_stages[i].code, 0, &err);
         if (err.code != err_code::PLATFORM_NO_ERROR) {
             wlog("Error reading file %s from disk (code %d): %s", fnames[i], err.code, err.str);
             return err_code::RENDER_LOAD_SHADERS_FAIL;
@@ -264,7 +242,7 @@ intern int create_vertex_indice_buffers(renderer *rndr)
     // Ind buffer
     ilog("Creating index buffer");
     b_cfg.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    b_cfg.buffer_size = sizeof(u32) * rndr->rect.indices.size;
+    b_cfg.buffer_size = sizeof(u32) * rndr->rect.inds.size;
     err = vkr_init_buffer(&dev->buffers[rndr->ind_buf_ind], &b_cfg);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
@@ -272,7 +250,7 @@ intern int create_vertex_indice_buffers(renderer *rndr)
 
     // Init and copy data to staging buffer, then copy staging buf to vert buffer, then delete staging buf
     vkr_stage_and_upload_buffer_data(
-        &dev->buffers[rndr->ind_buf_ind], rndr->rect.indices.data, b_cfg.buffer_size, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
+        &dev->buffers[rndr->ind_buf_ind], rndr->rect.inds.data, b_cfg.buffer_size, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
     return err_code::VKR_NO_ERROR;
 }
 
@@ -520,15 +498,17 @@ intern int record_command_buffer(renderer *rndr, sim_region *rgn, vkr_framebuffe
     push_constants pc;
     auto tf_tbl = get_comp_tbl<transform>(&rgn->cdb);
     auto sm_tbl = get_comp_tbl<static_model>(&rgn->cdb);
-    
+    vkCmdSetPrimitiveTopology(cmd_buf->hndl, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+
     for (int i = 0; i < tf_tbl->entries.size; ++i) {
         auto curtf = &tf_tbl->entries[i];
         auto rc = get_comp(curtf->ent_id, sm_tbl);
 
         if (rc) {
             pc.model = curtf->cached;
+
             vkCmdPushConstants(cmd_buf->hndl, pipeline->layout_hndl, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push_constants), &pc);
-            vkCmdDrawIndexed(cmd_buf->hndl, rndr->rect.indices.size, 1, 0, 0, 0);
+            vkCmdDrawIndexed(cmd_buf->hndl, rndr->rect.inds.size, 1, 0, 0, 0);
         }
     }
 
@@ -537,7 +517,7 @@ intern int record_command_buffer(renderer *rndr, sim_region *rgn, vkr_framebuffe
     return vkr_end_cmd_buf(cmd_buf);
 }
 
-int renderer_init(renderer *rndr, void *win_hndl, mem_arena *fl_arena)
+int init_renderer(renderer *rndr, void *win_hndl, mem_arena *fl_arena)
 {
     assert(fl_arena->alloc_type == mem_alloc_type::FREE_LIST);
     rndr->upstream_fl_arena = fl_arena;
@@ -566,8 +546,8 @@ int renderer_init(renderer *rndr, void *win_hndl, mem_arena *fl_arena)
         return err_code::RENDER_INIT_FAIL;
     }
 
-    submesh_init(&rndr->rect, rndr->upstream_fl_arena);
-    geom_make_rect(&rndr->rect);
+    init_submesh(&rndr->rect, rndr->upstream_fl_arena);
+    make_rect(&rndr->rect);
 
     int err = setup_rendering(rndr);
     if (err != err_code::VKR_NO_ERROR) {
@@ -577,47 +557,36 @@ int renderer_init(renderer *rndr, void *win_hndl, mem_arena *fl_arena)
     return err_code::RENDER_NO_ERROR;
 }
 
-int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_frame_count)
+intern void recreate_swapchain(renderer *rndr)
 {
-    mem_reset_arena(&rndr->vk_frame_linear);
+    // Recreating the swapchain will wait on all semaphores and fences before continuing
     auto dev = &rndr->vk->inst.device;
+    vkr_recreate_swapchain(&rndr->vk->inst, rndr->vk);
+    vkr_terminate_image_view(&dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind], rndr->vk);
+    vkr_terminate_image(&dev->images[rndr->swapchain_fb_depth_stencil_im_ind]);
+    init_swapchain_framebuffers(rndr);
+}
 
-    if (platform_framebuffer_resized(rndr->vk->cfg.window)) {
-        vkr_recreate_swapchain(&rndr->vk->inst, rndr->vk);
-        vkr_terminate_image_view(&dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind], rndr->vk);
-        vkr_terminate_image(&dev->images[rndr->swapchain_fb_depth_stencil_im_ind]);
-        init_swapchain_framebuffers(rndr);
+intern i32 acquire_swapchain_image(renderer *rndr, vkr_frame *cur_frame, u32 *im_ind)
+{
+    auto dev = &rndr->vk->inst.device;
+    
+    // Acquire the image, signal the image_avail semaphore once the image has been acquired. We get the index back, but
+    // that doesn't mean the image is ready. The image is only ready (on the GPU side) once the image avail semaphore is triggered
+    VkResult result = vkAcquireNextImageKHR(dev->hndl, dev->swapchain.swapchain, UINT64_MAX, cur_frame->image_avail, VK_NULL_HANDLE, im_ind);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        recreate_swapchain(rndr);
     }
-
-    int current_frame_ind = finished_frame_count % MAX_FRAMES_IN_FLIGHT;
-    auto cur_frame = &dev->rframes[current_frame_ind];
-    auto buf_ind = cur_frame->cmd_buf_ind;
-    auto cmd_buf = &dev->qfams[buf_ind.pool_ind.qfam_ind].cmd_pools[buf_ind.pool_ind.pool_ind].buffers[buf_ind.buffer_ind];
-
-    // Wait for the rendering to be done before starting on the next frame and then reset the fence
-    vkWaitForFences(dev->hndl, 1, &cur_frame->in_flight, VK_TRUE, UINT64_MAX);
-
-    // Acquire the image, signal the image_avail semaphore once the image has been acquired
-    u32 im_ind{};
-    int result = vkAcquireNextImageKHR(dev->hndl, dev->swapchain.swapchain, UINT64_MAX, cur_frame->image_avail, VK_NULL_HANDLE, &im_ind);
-    if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-        wlog("Failed to acquire swapchain image");
-        return err_code::RENDER_NO_ERROR;
+    else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        elog("Failed to acquire swapchain image");
+        return err_code::RENDER_ACQUIRE_IMAGE_FAIL;
     }
+    return err_code::RENDER_NO_ERROR;
+}
 
-    vkResetFences(dev->hndl, 1, &cur_frame->in_flight);
-
-    // Update uniform buffer with some matrices
-    uniform_buffer_object ubo{};
-    ubo.proj_view = cam->proj * cam->view;
-    int ubo_ind = cur_frame->uniform_buffer_ind;
-    memcpy(dev->buffers[ubo_ind].mem_info.pMappedData, &ubo, sizeof(uniform_buffer_object));
-
-    // We have the acquired image index, though we don't know when it will be ready to have ops submitted, we can record
-    // the ops in the command buffer and submit once it is readyy
-    auto fb = &dev->framebuffers[im_ind];
-    record_command_buffer(rndr, rgn, fb, cur_frame, cmd_buf);
-
+intern i32 submit_command_buffer(renderer *rndr, vkr_frame *cur_frame, vkr_command_buffer *cmd_buf)
+{
+    auto dev = &rndr->vk->inst.device;
     // Get the info ready to submit our command buffer to the queue. We need to wait until the image avail semaphore has
     // signaled, and then we need to trigger the render finished signal once the the command buffer completes
     VkSubmitInfo submit_info{};
@@ -633,7 +602,12 @@ int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_fram
     if (vkQueueSubmit(dev->qfams[VKR_QUEUE_FAM_TYPE_GFX].qs[0].hndl, 1, &submit_info, cur_frame->in_flight) != VK_SUCCESS) {
         return err_code::RENDER_SUBMIT_QUEUE_FAIL;
     }
+    return err_code::RENDER_NO_ERROR;
+}
 
+intern i32 present_image(renderer *rndr, vkr_frame *cur_frame, u32 image_ind)
+{
+    auto dev = &rndr->vk->inst.device;
     // Once the rendering signal has fired, present the image (show it on screen)
     VkPresentInfoKHR present_info{};
     present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -641,16 +615,91 @@ int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_fram
     present_info.pWaitSemaphores = &cur_frame->render_finished;
     present_info.swapchainCount = 1;
     present_info.pSwapchains = &dev->swapchain.swapchain;
-    present_info.pImageIndices = &im_ind;
+    present_info.pImageIndices = &image_ind;
     present_info.pResults = nullptr; // Optional - check for individual swaps
-    vkQueuePresentKHR(dev->qfams[VKR_QUEUE_FAM_TYPE_PRESENT].qs[0].hndl, &present_info);
+    VkResult result = vkQueuePresentKHR(dev->qfams[VKR_QUEUE_FAM_TYPE_PRESENT].qs[0].hndl, &present_info);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+        recreate_swapchain(rndr);
+    }
+    else if (result != VK_SUCCESS) {
+        elog("Failed to presenet KHR");
+        return err_code::RENDER_PRESENT_KHR_FAIL;
+    }
     return err_code::RENDER_NO_ERROR;
 }
 
-void renderer_terminate(renderer *rndr)
+int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_frame_count)
+{
+    mem_reset_arena(&rndr->vk_frame_linear);
+    auto dev = &rndr->vk->inst.device;
+    
+    // Grab the current in flight frame and its command buffer
+    int current_frame_ind = finished_frame_count % MAX_FRAMES_IN_FLIGHT;
+    auto cur_frame = &dev->rframes[current_frame_ind];
+
+    // Recreating the swapchain here before even acquiring images gives us the smoothest resizing, but we still need to
+    // handle recreation for other things that might happen so keep the acquire image and present image recreations
+    // based on return value
+    if (platform_framebuffer_resized(rndr->vk->cfg.window)) {
+        recreate_swapchain(rndr);
+    }
+
+    // Get the next available swapchain image index
+    u32 im_ind{};
+    i32 err = acquire_swapchain_image(rndr, cur_frame, &im_ind);
+    if (err != err_code::RENDER_NO_ERROR) {
+        return err;
+    }
+
+    // We wait until this FIF's fence has been triggered before rendering the frame. FIF fences are created in a
+    // triggered state so there will be no waiting on the first time. We then reset the fence (aka set it to
+    // untriggered) and it is passed to the vkQueueSubmit call to trigger it again. So if not the first time rendering
+    // this FIF, we are waiting for the vkQueueSubmit from the previous time this FIF was rendered to complete
+    VkResult vk_err = vkWaitForFences(dev->hndl, 1, &cur_frame->in_flight, VK_TRUE, UINT64_MAX);
+    if (vk_err != VK_SUCCESS) {
+        elog("Failed to wait for fence");
+        return err_code::RENDER_WAIT_FENCE_FAIL;
+    }
+    
+    vk_err = vkResetFences(dev->hndl, 1, &cur_frame->in_flight);
+    if (vk_err != VK_SUCCESS) {
+        elog("Failed to reset fence");
+        return err_code::RENDER_RESET_FENCE_FAIL;
+    }
+
+    // Update uniform buffer with some matrices
+    uniform_buffer_object ubo{};
+    ubo.proj_view = cam->proj * cam->view;
+    int ubo_ind = cur_frame->uniform_buffer_ind;
+    memcpy(dev->buffers[ubo_ind].mem_info.pMappedData, &ubo, sizeof(uniform_buffer_object));
+
+    // The command buf index struct has an ind struct into the pool the cmd buf comes from, and then an ind into the buffer
+    // The ind into the pool has an ind into the queue family (as that contains our array of command pools) and then and
+    // ind to the command pool
+    auto buf_ind = cur_frame->cmd_buf_ind;
+    auto cmd_buf = &dev->qfams[buf_ind.pool_ind.qfam_ind].cmd_pools[buf_ind.pool_ind.pool_ind].buffers[buf_ind.buffer_ind];
+    auto fb = &dev->framebuffers[im_ind];
+
+    // We have the acquired image index, though we don't know when it will be ready to have ops submitted, we can record
+    // the ops in the command buffer and submit once it is readyy
+    err = record_command_buffer(rndr, rgn, fb, cur_frame, cmd_buf);
+    if (err != err_code::RENDER_NO_ERROR) {
+        return err;
+    }
+
+    // Submit command buffer to GPU
+    err = submit_command_buffer(rndr, cur_frame, cmd_buf);
+    if (err != err_code::RENDER_NO_ERROR) {
+        return err;
+    }
+
+    return present_image(rndr, cur_frame, im_ind);
+}
+
+void terminate_renderer(renderer *rndr)
 {
     auto dev = &rndr->vk->inst.device;
-    submesh_terminate(&rndr->rect);
+    terminate_submesh(&rndr->rect);
     vkr_terminate(rndr->vk);
     mem_free(rndr->vk, &rndr->vk_free_list);
     mem_terminate_arena(&rndr->vk_free_list);

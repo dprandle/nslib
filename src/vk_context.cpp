@@ -376,6 +376,14 @@ int vkr_init_instance(const vkr_context *vk, vkr_instance *inst)
     vkr_enumerate_validation_layers(vk->cfg.validation_layer_names, vk->cfg.validation_layer_count, &vk->cfg.arenas);
 
     create_inf.pNext = &dbg_ci;
+    VkValidationFeatureEnableEXT enabled[] = {VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT};
+    VkValidationFeaturesEXT features{VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT};
+    features.disabledValidationFeatureCount = 0;
+    features.enabledValidationFeatureCount = 1;
+    features.pDisabledValidationFeatures = nullptr;
+    features.pEnabledValidationFeatures = enabled;
+    features.pNext = create_inf.pNext;
+    create_inf.pNext = &features;
     create_inf.ppEnabledExtensionNames = ext;
     create_inf.enabledExtensionCount = total_exts;
     create_inf.ppEnabledLayerNames = vk->cfg.validation_layer_names;
@@ -845,7 +853,7 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
     arr_init(&simages, vk->cfg.arenas.command_arena);
     arr_resize(&simages, image_count);
     arr_resize(&sw_info->images, image_count, vkr_image{});
-    
+
     res = vkGetSwapchainImagesKHR(vk->inst.device.hndl, sw_info->swapchain, &image_count, simages.data);
     if (res != VK_SUCCESS) {
         elog("Failed to get swapchain images with code %d", res);
@@ -873,7 +881,6 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
     ilog("Successfully set up swapchain with %d image views", sw_info->image_views.size);
     return err_code::VKR_NO_ERROR;
 }
-
 
 void vkr_recreate_swapchain(vkr_instance *inst, const vkr_context *vk)
 {
@@ -1336,12 +1343,12 @@ int vkr_init_framebuffer(const vkr_context *vk, const vkr_framebuffer_cfg *cfg, 
     ilog("Initializing framebuffer");
     assert(cfg->rpass);
     assert(cfg->attachments);
-    
+
     arr_init(&fb->attachments, vk->cfg.arenas.persistent_arena);
     fb->size = cfg->size;
     fb->rpass = *cfg->rpass;
     fb->layers = fb->layers;
-    
+
     arr_copy(&fb->attachments, cfg->attachments, cfg->attachment_count);
 
     array<VkImageView> att;
@@ -1731,7 +1738,6 @@ void vkr_init_swapchain_framebuffers(vkr_device *device,
     }
 }
 
-
 void vkr_init_swapchain_framebuffers(vkr_device *device,
                                      const vkr_context *vk,
                                      const vkr_rpass *rpass,
@@ -1770,7 +1776,6 @@ void vkr_init_swapchain_framebuffers(vkr_device *device,
         arr_terminate(&other_atts[i]);
     }
     arr_terminate(&other_atts);
-    
 }
 
 void vkr_terminate_swapchain_framebuffers(vkr_device *device, const vkr_context *vk, sizet fb_offset)

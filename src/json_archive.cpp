@@ -4,7 +4,7 @@ namespace nslib
 {
 
 // If json_str is null then we will be set to output mode, otherwise input mode
-void jsa_init(json_archive *jsa, const char *json_str)
+void init_jsa(json_archive *jsa, const char *json_str)
 {
     jsa->opmode = archive_opmode::UNPACK;
     if (json_str) {
@@ -19,7 +19,7 @@ void jsa_init(json_archive *jsa, const char *json_str)
 }
 
 // If json_str is null then we will be set to output mode, otherwise input mode
-void jsa_init(json_archive *jsa, archive_opmode mode, json_obj *root)
+void init_jsa(json_archive *jsa, archive_opmode mode, json_obj *root)
 {
     jsa->opmode = mode;
     if (mode == archive_opmode::PACK && !root) {
@@ -52,7 +52,7 @@ string jsa_to_json_string(json_archive *jsa, bool pretty_format)
     return ret;
 }
 
-void jsa_terminate(json_archive *jsa)
+void terminate_jsa(json_archive *jsa)
 {
     while (arr_begin(&jsa->stack) != arr_end(&jsa->stack)) {
         json_delete(arr_back(&jsa->stack)->current);

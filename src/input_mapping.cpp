@@ -18,17 +18,17 @@ intern void fill_event_from_platform_event(const platform_input_event *raw, inpu
         ev->pos = raw->pos;
     }
     else if (raw->type == platform_input_event_type::SCROLL) {
-        ev->pos = platform_cursor_pos(raw->win_hndl);
+        ev->pos = get_cursor_pos(raw->win_hndl);
         ev->type = IEVENT_TYPE_SCROLL;
         ev->scroll_data.offset = raw->offset;
     }
     else {
-        ev->pos = platform_cursor_pos(raw->win_hndl);
+        ev->pos = get_cursor_pos(raw->win_hndl);
         ev->type = IEVENT_TYPE_BTN;
         ev->btn_data.action = raw->action;
         ev->btn_data.key_or_button = raw->key_or_button;
     }
-    ev->norm_pos = ev->pos / vec2(platform_framebuffer_size(raw->win_hndl));
+    ev->norm_pos = ev->pos / vec2(get_framebuffer_size(raw->win_hndl));
 }
 
 bool operator==(const input_keymap_entry &lhs, const input_keymap_entry &rhs)
@@ -36,37 +36,37 @@ bool operator==(const input_keymap_entry &lhs, const input_keymap_entry &rhs)
     return (lhs.name == rhs.name);
 }
 
-u32 input_keymap_button_key(int key_or_button, int modifiers, int action)
+u32 keymap_button_key(int key_or_button, int modifiers, int action)
 {
     return (key_or_button << 18) | (modifiers << 8) | action;
 }
 
-u32 input_keymap_cursor_key(int modifiers)
+u32 keymap_cursor_key(int modifiers)
 {
-    return input_keymap_button_key(CURSOR_POS_CHANGE, modifiers, 0);
+    return keymap_button_key(CURSOR_POS_CHANGE, modifiers, 0);
 }
 
-u32 input_keymap_scroll_key(int modifiers)
+u32 keymap_scroll_key(int modifiers)
 {
-    return input_keymap_button_key(SCROLL_CHANGE, modifiers, 0);
+    return keymap_button_key(SCROLL_CHANGE, modifiers, 0);
 }
 
-int input_button_from_key(u32 key)
+int button_from_key(u32 key)
 {
     return (key >> 18);
 }
 
-int input_mods_from_key(u32 key)
+int mods_from_key(u32 key)
 {
     return ((key >> 8) & 0x000003FF);
 }
 
-int input_action_from_key(u32 key)
+int action_from_key(u32 key)
 {
     return (key & 0x000000FF);
 }
 
-void input_init_keymap(const char *name, input_keymap *km)
+void init_keymap(const char *name, input_keymap *km)
 {
     assert(km);
     assert(name);
@@ -76,21 +76,21 @@ void input_init_keymap(const char *name, input_keymap *km)
     hashmap_init(&km->hm);
 }
 
-void input_terminate_keymap(input_keymap *km)
+void terminate_keymap(input_keymap *km)
 {
     assert(km);
     hashmap_terminate(&km->hm);
     memset(km, 0, sizeof(input_keymap));
 }
 
-bool input_set_keymap_entry(u32 key, const input_keymap_entry *entry, input_keymap *km)
+bool set_keymap_entry(u32 key, const input_keymap_entry *entry, input_keymap *km)
 {
     assert(entry);
     assert(km);
     return hashmap_set(&km->hm, key, *entry);
 }
 
-input_keymap_entry *input_get_keymap_entry(u32 key, input_keymap *km)
+input_keymap_entry *get_keymap_entry(u32 key, input_keymap *km)
 {
     assert(km);
     auto item = hashmap_find(&km->hm, key);
@@ -100,7 +100,7 @@ input_keymap_entry *input_get_keymap_entry(u32 key, input_keymap *km)
     return nullptr;
 }
 
-const input_keymap_entry *input_get_keymap_entry(u32 key, const input_keymap *km)
+const input_keymap_entry *get_keymap_entry(u32 key, const input_keymap *km)
 {
     assert(km);
     auto item = hashmap_find(&km->hm, key);
@@ -110,7 +110,7 @@ const input_keymap_entry *input_get_keymap_entry(u32 key, const input_keymap *km
     return nullptr;
 }
 
-input_keymap_entry *input_get_keymap_entry(const char *name, input_keymap *km)
+input_keymap_entry *get_keymap_entry(const char *name, input_keymap *km)
 {
     assert(name);
     assert(km);
@@ -125,7 +125,7 @@ input_keymap_entry *input_get_keymap_entry(const char *name, input_keymap *km)
     return nullptr;
 }
 
-const input_keymap_entry *input_get_keymap_entry(const char *name, const input_keymap *km)
+const input_keymap_entry *get_keymap_entry(const char *name, const input_keymap *km)
 {
     assert(name);
     assert(km);
@@ -140,14 +140,14 @@ const input_keymap_entry *input_get_keymap_entry(const char *name, const input_k
     return nullptr;
 }
 
-bool input_remove_keymap_entry(u32 key, input_keymap *km)
+bool remove_keymap_entry(u32 key, input_keymap *km)
 {
     assert(km);
     return hashmap_remove(&km->hm, key);
 }
 
 // Push km to the top of the keymap stack - top is highest priority in input_map_event
-void input_push_keymap(input_keymap *km, input_keymap_stack *stack)
+void push_keymap(input_keymap *km, input_keymap_stack *stack)
 {
     assert(km);
     assert(stack);
@@ -156,7 +156,7 @@ void input_push_keymap(input_keymap *km, input_keymap_stack *stack)
     ++stack->count;
 }
 
-bool input_keymap_in_stack(const input_keymap *km, const input_keymap_stack *stack)
+bool keymap_in_stack(const input_keymap *km, const input_keymap_stack *stack)
 {
     assert(km);
     assert(stack);
@@ -169,7 +169,7 @@ bool input_keymap_in_stack(const input_keymap *km, const input_keymap_stack *sta
 }
 
 // Pop to top keymap from the stack and return it
-input_keymap *input_pop_keymap(input_keymap_stack *stack)
+input_keymap *pop_keymap(input_keymap_stack *stack)
 {
     assert(stack);
     if (stack->count == 0) {
@@ -179,18 +179,18 @@ input_keymap *input_pop_keymap(input_keymap_stack *stack)
     return stack->kmaps[stack->count];
 }
 
-void input_map_event(const platform_input_event *raw, const input_keymap_stack *stack)
+void map_input_event(const platform_input_event *raw, const input_keymap_stack *stack)
 {
     assert(raw);
     assert(stack);
     input_event ev{};
-    u32 key = input_keymap_button_key(raw->key_or_button, raw->mods, raw->action);
-    u32 key_any = input_keymap_button_key(raw->key_or_button, MOD_ANY, raw->action);
+    u32 key = keymap_button_key(raw->key_or_button, raw->mods, raw->action);
+    u32 key_any = keymap_button_key(raw->key_or_button, MOD_ANY, raw->action);
 
     for (u8 i = stack->count; i != 0; --i) {
         const input_keymap *cur_map = stack->kmaps[i - 1];
-        const input_keymap_entry *kentry = input_get_keymap_entry(key, cur_map);
-        const input_keymap_entry *kanymod = input_get_keymap_entry(key_any, cur_map);
+        const input_keymap_entry *kentry = get_keymap_entry(key, cur_map);
+        const input_keymap_entry *kanymod = get_keymap_entry(key_any, cur_map);
 
         bool should_return = false;
         if (kentry) {
@@ -215,12 +215,12 @@ void input_map_event(const platform_input_event *raw, const input_keymap_stack *
     }
 }
 
-void input_map_frame(const platform_frame_input_events *frame, const input_keymap_stack *stack)
+void map_input_frame(const platform_frame_input_events *frame, const input_keymap_stack *stack)
 {
     assert(frame);
     assert(stack);
     for (int i = 0; i < frame->events.size; ++i) {
-        input_map_event(&frame->events[i], stack);
+        map_input_event(&frame->events[i], stack);
     }
 }
 

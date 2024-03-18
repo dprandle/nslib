@@ -39,7 +39,7 @@ void cache_init(robj_cache *cache, i32 rtype, sizet item_size, sizet item_budget
     mem_init_arena(item_budget, mem_alloc_type::POOL, &cache->arena);
 }
 
-void cache_terminate(robj_cache *cache)
+void terminate_cache(robj_cache *cache)
 {
     mem_terminate_arena(&cache->arena);
 }

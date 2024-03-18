@@ -65,7 +65,7 @@ const u32 VKR_DESCRIPTOR_TYPE_COUNT = 11;
 inline constexpr const u32 MAX_QUEUE_REQUEST_COUNT = 32;
 inline constexpr const u32 VKR_MAX_EXTENSION_STR_LEN = 128;
 
-inline constexpr const sizet MAX_FRAMES_IN_FLIGHT = 3;
+inline constexpr const sizet MAX_FRAMES_IN_FLIGHT = 2;
 
 const u32 VKR_INVALID = (u32)-1;
 inline constexpr const u32 MEM_ALLOC_TYPE_COUNT = VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE + 1;

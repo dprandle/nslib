@@ -18,7 +18,7 @@ intern void glfw_error_callback(i32 error, const char *description)
 }
 
 
-intern platform_window_event * get_latest_window_event(platform_window_event_type type, platform_frame_window_events *fwind)
+platform_window_event * get_latest_window_event(platform_window_event_type type, platform_frame_window_events *fwind)
 {
     for (int i = fwind->events.size - 1; i >= 0; --i) {
         if (fwind->events[i].type == type) {
@@ -28,7 +28,7 @@ intern platform_window_event * get_latest_window_event(platform_window_event_typ
     return nullptr;
 }
 
-intern bool frame_has_event_type(platform_window_event_type type, const platform_frame_window_events *fwind)
+bool frame_has_event_type(platform_window_event_type type, const platform_frame_window_events *fwind)
 {
     for (int i = 0; i < fwind->events.size; ++i) {
         if (fwind->events[i].type == type) {
@@ -248,7 +248,7 @@ void *platform_realloc(void *ptr, sizet byte_size)
     return realloc(ptr, byte_size);
 }
 
-int platform_init(const platform_init_info *settings, platform_ctxt *ctxt)
+int init_platform(const platform_init_info *settings, platform_ctxt *ctxt)
 {
     ilog("Platform init version %d.%d.%d", NSLIB_VERSION_MAJOR, NSLIB_VERSION_MINOR, NSLIB_VERSION_PATCH);
     glfwSetErrorCallback(glfw_error_callback);
@@ -258,7 +258,7 @@ int platform_init(const platform_init_info *settings, platform_ctxt *ctxt)
         return err_code::PLATFORM_INIT_FAIL;
     }
 
-    ctxt->win_hndl = platform_create_window(&settings->wind);
+    ctxt->win_hndl = create_platform_window(&settings->wind);
     if (!ctxt->win_hndl) {
         elog("Failed to create window");
         return err_code::PLATFORM_INIT_FAIL;
@@ -283,14 +283,14 @@ int platform_init(const platform_init_info *settings, platform_ctxt *ctxt)
     return err_code::PLATFORM_NO_ERROR;
 }
 
-int platform_terminate(platform_ctxt *ctxt)
+int terminate_platform(platform_ctxt *ctxt)
 {
     ilog("Platform terminate");
     terminate_mem_arenas(&ctxt->arenas);
     return err_code::PLATFORM_NO_ERROR;
 }
 
-void *platform_create_window(const platform_window_init_info *settings)
+void *create_platform_window(const platform_window_init_info *settings)
 {
     assert(settings);
 
@@ -325,7 +325,7 @@ void *platform_create_window(const platform_window_init_info *settings)
     return glfwCreateWindow(sz.x, sz.y, settings->title, monitor, nullptr);
 }
 
-void platform_window_process_input(platform_ctxt *pf)
+void process_platform_window_input(platform_ctxt *pf)
 {
     arr_clear(&pf->finp.events);
     arr_clear(&pf->fwind.events);
@@ -337,19 +337,19 @@ bool platform_window_should_close(void *window_hndl)
     return glfwWindowShouldClose((GLFWwindow *)window_hndl);
 }
 
-ivec2 platform_window_size(void *win)
+ivec2 get_window_size(void *win)
 {
     platform_ctxt *pf = platform_ptr((GLFWwindow*)win);
     return pf->fwind.win_size;
 }
 
-ivec2 platform_framebuffer_size(void *win)
+ivec2 get_framebuffer_size(void *win)
 {
     platform_ctxt *pf = platform_ptr((GLFWwindow*)win);
     return pf->fwind.fb_size;
 }
 
-vec2 platform_cursor_pos(void *window_hndl)
+vec2 get_cursor_pos(void *window_hndl)
 {
     GLFWwindow *glfw_win = (GLFWwindow *)(window_hndl);
     dvec2 ret;
@@ -357,9 +357,9 @@ vec2 platform_cursor_pos(void *window_hndl)
     return ret;
 }
 
-vec2 platform_normalized_cursor_pos(void *window_hndl)
+vec2 get_normalized_cursor_pos(void *window_hndl)
 {
-    return platform_cursor_pos(window_hndl) / vec2(platform_framebuffer_size(window_hndl));
+    return get_cursor_pos(window_hndl) / vec2(get_framebuffer_size(window_hndl));
 }
 
 bool platform_framebuffer_resized(void *win_hndl)
@@ -375,17 +375,17 @@ bool platform_window_resized(void *win_hndl)
 }
 
 
-void platform_start_frame(platform_ctxt *ctxt)
+void start_platform_frame(platform_ctxt *ctxt)
 {
     ptimer_split(&ctxt->time_pts);
-    platform_window_process_input(ctxt);
+    process_platform_window_input(ctxt);
     // if (ctxt->arenas.frame_linear.used > 0) {
     //     dlog("Clearing %d used bytes from frame linear arena", ctxt->arenas.frame_linear.used);
     // }
     mem_reset_arena(&ctxt->arenas.frame_linear);
 }
 
-void platform_end_frame(platform_ctxt *ctxt)
+void end_platform_frame(platform_ctxt *ctxt)
 {
     ++ctxt->finished_frames;
 }
@@ -425,7 +425,7 @@ ftell_fail:
     return ret;
 }
 
-sizet platform_file_size(const char *fname, platform_file_err_desc *err)
+sizet file_size(const char *fname, platform_file_err_desc *err)
 {
     sizet ret{0};
     FILE *f = fopen(fname, "r");
@@ -455,7 +455,7 @@ intern sizet platform_read_file(FILE *f, void *data, sizet element_size, sizet n
     return nelems;
 }
 
-sizet platform_read_file(const char *fname,
+sizet read_file(const char *fname,
                          const char *mode,
                          void *data,
                          sizet element_size,
@@ -476,12 +476,12 @@ sizet platform_read_file(const char *fname,
     return elems;
 }
 
-sizet platform_read_file(const char *fname, void *data, sizet element_size, sizet nelements, sizet byte_offset, platform_file_err_desc *err)
+sizet read_file(const char *fname, void *data, sizet element_size, sizet nelements, sizet byte_offset, platform_file_err_desc *err)
 {
-    return platform_read_file(fname, "rb", data, element_size, nelements, byte_offset, err);
+    return read_file(fname, "rb", data, element_size, nelements, byte_offset, err);
 }
 
-sizet platform_read_file(const char *fname, const char *mode, byte_array *buffer, sizet byte_offset, platform_file_err_desc *err)
+sizet read_file(const char *fname, const char *mode, byte_array *buffer, sizet byte_offset, platform_file_err_desc *err)
 {
     sizet elems{0};
     FILE *f = fopen(fname, mode);
@@ -500,9 +500,9 @@ sizet platform_read_file(const char *fname, const char *mode, byte_array *buffer
     return elems;
 }
 
-sizet platform_read_file(const char *fname, byte_array *buffer, sizet byte_offset, platform_file_err_desc *err)
+sizet read_file(const char *fname, byte_array *buffer, sizet byte_offset, platform_file_err_desc *err)
 {
-    return platform_read_file(fname, "rb", buffer, byte_offset, err);
+    return read_file(fname, "rb", buffer, byte_offset, err);
 }
 
 intern sizet platform_write_file(FILE *f, const void *data, sizet element_size, sizet nelements, sizet byte_offset, platform_file_err_desc *err)
@@ -530,7 +530,7 @@ intern sizet platform_write_file(FILE *f, const void *data, sizet element_size, 
     return ret;
 }
 
-sizet platform_write_file(const char *fname,
+sizet write_file(const char *fname,
                           const char *mode,
                           const void *data,
                           sizet element_size,
@@ -551,12 +551,12 @@ sizet platform_write_file(const char *fname,
     return ret;
 }
 
-sizet platform_write_file(const char *fname, const void *data, sizet element_size, sizet nelements, sizet byte_offset, platform_file_err_desc *err)
+sizet write_file(const char *fname, const void *data, sizet element_size, sizet nelements, sizet byte_offset, platform_file_err_desc *err)
 {
-    return platform_write_file(fname, "wb", data, element_size, nelements, byte_offset, err);
+    return write_file(fname, "wb", data, element_size, nelements, byte_offset, err);
 }
 
-sizet platform_write_file(const char *fname, const char *mode, const byte_array *data, sizet byte_offset, platform_file_err_desc *err)
+sizet write_file(const char *fname, const char *mode, const byte_array *data, sizet byte_offset, platform_file_err_desc *err)
 {
     sizet ret{0};
     FILE *f = fopen(fname, mode);
@@ -571,9 +571,9 @@ sizet platform_write_file(const char *fname, const char *mode, const byte_array 
     return ret;
 }
 
-sizet platform_write_file(const char *fname, const byte_array *data, sizet byte_offset, platform_file_err_desc *err)
+sizet write_file(const char *fname, const byte_array *data, sizet byte_offset, platform_file_err_desc *err)
 {
-    return platform_write_file(fname, "wb", data, byte_offset, err);
+    return write_file(fname, "wb", data, byte_offset, err);
 }
 
 } // namespace nslib

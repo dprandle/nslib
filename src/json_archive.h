@@ -24,12 +24,12 @@ struct json_archive
 };
 
 // If json_str is null then we will be set to output mode, otherwise input mode
-void jsa_init(json_archive *jsa, const char *json_str);
+void init_jsa(json_archive *jsa, const char *json_str);
 
 // If json_str is null then we will be set to output mode, otherwise input mode
-void jsa_init(json_archive *jsa, archive_opmode mode = archive_opmode::PACK, json_obj *root = nullptr);
+void init_jsa(json_archive *jsa, archive_opmode mode = archive_opmode::PACK, json_obj *root = nullptr);
 
-void jsa_terminate(json_archive *jsa);
+void terminate_jsa(json_archive *jsa);
 
 string jsa_to_json_string(json_archive *jsa, bool pretty_format);
 

@@ -180,7 +180,7 @@ int setup_rendering(app_data *app)
     const char *fnames[] = {"data/shaders/triangle.vert.spv", "data/shaders/triangle.frag.spv"};
     for (int i = 0; i <= VKR_SHADER_STAGE_FRAG; ++i) {
         platform_file_err_desc err{};
-        platform_read_file(fnames[i], &info.shader_stages[i].code, 0, &err);
+        read_file(fnames[i], &info.shader_stages[i].code, 0, &err);
         if (err.code != err_code::PLATFORM_NO_ERROR) {
             wlog("Error reading file %s from disk (code %d): %s", fnames[i], err.code, err.str);
             return err.code;

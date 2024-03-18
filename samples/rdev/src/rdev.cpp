@@ -22,7 +22,7 @@ struct app_data
 intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_keymap *kmap)
 {
     // Create camera
-    auto sz = platform_framebuffer_size(ctxt->win_hndl);
+    auto sz = get_framebuffer_size(ctxt->win_hndl);
     auto cam = add_entity("Editor_Cam", &app->rgn);
     auto cam_comp = add_comp<camera>(cam);
     auto cam_tcomp = add_comp<transform>(cam);
@@ -60,8 +60,8 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_ke
         camc->view = math::inverse(camt->cached);
     };
 
-    u32 k = input_keymap_cursor_key(CURSOR_SCROLL_MOD_MOUSE_RIGHT);
-    input_set_keymap_entry(k, &cam_turn, kmap);
+    u32 k = keymap_cursor_key(CURSOR_SCROLL_MOD_MOUSE_RIGHT);
+    set_keymap_entry(k, &cam_turn, kmap);
 
     input_keymap_entry cam_track_cursor{"reset_pos"};
     cam_track_cursor.cb_user_param = app;
@@ -69,8 +69,8 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_ke
         auto app = (app_data *)data;
         app->mpos = ev->norm_pos;
     };
-    k = input_keymap_button_key(MOUSE_BTN_RIGHT, MOD_ANY, INPUT_ACTION_PRESS);
-    input_set_keymap_entry(k, &cam_track_cursor, kmap);
+    k = keymap_button_key(MOUSE_BTN_RIGHT, MOD_ANY, INPUT_ACTION_PRESS);
+    set_keymap_entry(k, &cam_track_cursor, kmap);
 
     input_keymap_entry cam_move{};
     cam_move.name = "cam_forward_press";
@@ -79,33 +79,32 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_ke
         auto app = (app_data *)data;
         app->movement.y += 1;
     };
-    k = input_keymap_button_key(KEY_W, MOD_NONE, INPUT_ACTION_PRESS);
-    input_set_keymap_entry(k, &cam_move, kmap);
+    k = keymap_button_key(KEY_W, MOD_NONE, INPUT_ACTION_PRESS);
+    set_keymap_entry(k, &cam_move, kmap);
 
     cam_move.name = "cam_forward_release";
     cam_move.cb = [](const input_event *ev, void *data) {
         auto app = (app_data *)data;
         app->movement.y -= 1;
     };
-    k = input_keymap_button_key(KEY_W, MOD_NONE, INPUT_ACTION_RELEASE);
-    input_set_keymap_entry(k, &cam_move, kmap);
+    k = keymap_button_key(KEY_W, MOD_NONE, INPUT_ACTION_RELEASE);
+    set_keymap_entry(k, &cam_move, kmap);
     
-
     cam_move.name = "cam_back_press";
     cam_move.cb = [](const input_event *ev, void *data) {
         auto app = (app_data *)data;
         app->movement.y -= 1;
     };
-    k = input_keymap_button_key(KEY_S, MOD_NONE, INPUT_ACTION_PRESS);
-    input_set_keymap_entry(k, &cam_move, kmap);
+    k = keymap_button_key(KEY_S, MOD_NONE, INPUT_ACTION_PRESS);
+    set_keymap_entry(k, &cam_move, kmap);
 
     cam_move.name = "cam_back_release";
     cam_move.cb = [](const input_event *ev, void *data) {
         auto app = (app_data *)data;
         app->movement.y += 1;
     };
-    k = input_keymap_button_key(KEY_S, MOD_NONE, INPUT_ACTION_RELEASE);
-    input_set_keymap_entry(k, &cam_move, kmap);
+    k = keymap_button_key(KEY_S, MOD_NONE, INPUT_ACTION_RELEASE);
+    set_keymap_entry(k, &cam_move, kmap);
     
 
     cam_move.name = "cam_left_press";
@@ -113,39 +112,39 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_ke
         auto app = (app_data *)data;
         app->movement.x -= 1;
     };
-    k = input_keymap_button_key(KEY_A, MOD_NONE, INPUT_ACTION_PRESS);
-    input_set_keymap_entry(k, &cam_move, kmap);
+    k = keymap_button_key(KEY_A, MOD_NONE, INPUT_ACTION_PRESS);
+    set_keymap_entry(k, &cam_move, kmap);
 
     cam_move.name = "cam_left_release";
     cam_move.cb = [](const input_event *ev, void *data) {
         auto app = (app_data *)data;
         app->movement.x += 1;
     };
-    k = input_keymap_button_key(KEY_A, MOD_NONE, INPUT_ACTION_RELEASE);
-    input_set_keymap_entry(k, &cam_move, kmap);
+    k = keymap_button_key(KEY_A, MOD_NONE, INPUT_ACTION_RELEASE);
+    set_keymap_entry(k, &cam_move, kmap);
     
     cam_move.name = "cam_right_press";
     cam_move.cb = [](const input_event *ev, void *data) {
         auto app = (app_data *)data;
         app->movement.x += 1;
     };
-    k = input_keymap_button_key(KEY_D, MOD_NONE, INPUT_ACTION_PRESS);
-    input_set_keymap_entry(k, &cam_move, kmap);
+    k = keymap_button_key(KEY_D, MOD_NONE, INPUT_ACTION_PRESS);
+    set_keymap_entry(k, &cam_move, kmap);
 
     cam_move.name = "cam_right_release";
     cam_move.cb = [](const input_event *ev, void *data) {
         auto app = (app_data *)data;
         app->movement.x -= 1;
     };
-    k = input_keymap_button_key(KEY_D, MOD_NONE, INPUT_ACTION_RELEASE);
-    input_set_keymap_entry(k, &cam_move, kmap);
+    k = keymap_button_key(KEY_D, MOD_NONE, INPUT_ACTION_RELEASE);
+    set_keymap_entry(k, &cam_move, kmap);
     
 }
 
 int init(platform_ctxt *ctxt, void *user_data)
 {
     auto app = (app_data *)user_data;
-    sim_region_init(&app->rgn, &ctxt->arenas.free_list);
+    init_sim_region(&app->rgn, &ctxt->arenas.free_list);
 
     // Create a bunch of entities
     int count = 5000;
@@ -160,20 +159,20 @@ int init(platform_ctxt *ctxt, void *user_data)
     }
     
     // Create input map
-    input_init_keymap("global", &app->global_km);
+    init_keymap("global", &app->global_km);
 
     // Create and setup input for camera
     setup_camera_controller(ctxt, app, &app->global_km);
     
-    input_push_keymap(&app->global_km, &app->stack);
-    return renderer_init(&app->rndr, ctxt->win_hndl, &ctxt->arenas.free_list);
+    push_keymap(&app->global_km, &app->stack);
+    return init_renderer(&app->rndr, ctxt->win_hndl, &ctxt->arenas.free_list);
 }
 
 int run_frame(platform_ctxt *ctxt, void *user_data)
 {
     auto app = (app_data *)user_data;
     
-    input_map_frame(&ctxt->finp, &app->stack);
+    map_input_frame(&ctxt->finp, &app->stack);
     f64 elapsed_s = nanos_to_sec(ptimer_elapsed_dt(&ctxt->time_pts));
 
     // Move the cam if needed
@@ -205,9 +204,9 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
 int terminate(platform_ctxt *ctxt, void *user_data)
 {
     auto app = (app_data *)user_data;
-    input_terminate_keymap(&app->global_km);
-    sim_region_terminate(&app->rgn);
-    renderer_terminate(&app->rndr);
+    terminate_keymap(&app->global_km);
+    terminate_sim_region(&app->rgn);
+    terminate_renderer(&app->rndr);
     return err_code::PLATFORM_NO_ERROR;
 }
 

@@ -87,61 +87,61 @@ struct input_keymap_stack
 };
 
 // Get the hash key for the passed in key/mouse button, modifiers, action combination
-u32 input_keymap_button_key(int key_or_button, int modifiers, int action);
+u32 keymap_button_key(int key_or_button, int modifiers, int action);
 
 // Get the hash key for a cursor movement entry with the passed in modifiers
-u32 input_keymap_cursor_key(int modifiers);
+u32 keymap_cursor_key(int modifiers);
 
 // Get the hash key for a scroll entry with the passed in modifiers
-u32 input_keymap_scroll_key(int modifiers);
+u32 keymap_scroll_key(int modifiers);
 
 // Get the key/mouse button code from the hash key
-int input_button_from_key(u32 key);
+int button_from_key(u32 key);
 
 // Get the modifiers from the hash key
-int input_mods_from_key(u32 key);
+int mods_from_key(u32 key);
 
 // Get the action from the hash key
-int input_action_from_key(u32 key);
+int action_from_key(u32 key);
 
 // Set keymap entry overwriting an existing one if its there - returns true if overwrote an existing entry otherwise
 // returns false
-bool input_set_keymap_entry(u32 key, const input_keymap_entry *entry, input_keymap *km);
+bool set_keymap_entry(u32 key, const input_keymap_entry *entry, input_keymap *km);
 
 // Find keymap entry by key and return it - return null if no match is found
-input_keymap_entry *input_get_keymap_entry(u32 key, input_keymap *km);
+input_keymap_entry *get_keymap_entry(u32 key, input_keymap *km);
 
 // Find the keymap entry with name and return it - return null if no match is found
-input_keymap_entry *input_get_keymap_entry(const char *name, input_keymap *km);
+input_keymap_entry *get_keymap_entry(const char *name, input_keymap *km);
 
 // Find keymap entry by key and return it - return null if no match is found
-const input_keymap_entry *input_get_keymap_entry(u32 key, const input_keymap *km);
+const input_keymap_entry *get_keymap_entry(u32 key, const input_keymap *km);
 
 // Find the keymap entry with name and return it - return null if no match is found
-const input_keymap_entry *input_get_keymap_entry(const char *name, const input_keymap *km);
+const input_keymap_entry *get_keymap_entry(const char *name, const input_keymap *km);
     
 // Remove a keymap entry - returns true if removed
-bool input_remove_keymap_entry(u32 key, input_keymap *km);
+bool remove_keymap_entry(u32 key, input_keymap *km);
 
 // Map the platform event to input_keymap_entries
-void input_map_event(const platform_input_event *raw, const input_keymap_stack *stack);
+void map_input_event(const platform_input_event *raw, const input_keymap_stack *stack);
 
 // Map the frame platform events to input_keymap_entries
-void input_map_frame(const platform_frame_input_events *frame, const input_keymap_stack *stack);
+void map_input_frame(const platform_frame_input_events *frame, const input_keymap_stack *stack);
 
 // Push km to the top of the keymap stack - top is highest priority in input_map_event
-void input_push_keymap(input_keymap *km, input_keymap_stack *stack);
+void push_keymap(input_keymap *km, input_keymap_stack *stack);
 
 // Returns true if km is found in stack, otherwise returns false
-bool input_keymap_in_stack(const input_keymap *km, const input_keymap_stack *stack);
+bool keymap_in_stack(const input_keymap *km, const input_keymap_stack *stack);
 
 // Pop to top keymap from the stack and return it
-input_keymap *input_pop_keymap(input_keymap_stack *stack);
+input_keymap *pop_keymap(input_keymap_stack *stack);
 
 // Initialize the keymap and allocate the hashmap
-void input_init_keymap(const char *name, input_keymap *km);
+void init_keymap(const char *name, input_keymap *km);
 
 // Tear down the keymap and free the hashmap
-void input_terminate_keymap(input_keymap *km);
+void terminate_keymap(input_keymap *km);
 
 } // namespace nslib

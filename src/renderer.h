@@ -1,6 +1,7 @@
 #pragma once
 
 #include "logging.h"
+#include "model.h"
 #include "math/matrix4.h"
 #include "containers/array.h"
 
@@ -19,7 +20,11 @@ enum render
     RENDER_NO_ERROR,
     RENDER_INIT_FAIL,
     RENDER_LOAD_SHADERS_FAIL,
+    RENDER_ACQUIRE_IMAGE_FAIL,
+    RENDER_WAIT_FENCE_FAIL,
+    RENDER_RESET_FENCE_FAIL,
     RENDER_SUBMIT_QUEUE_FAIL,
+    RENDER_PRESENT_KHR_FAIL
 };
 }
 
@@ -31,19 +36,6 @@ struct push_constants
 struct uniform_buffer_object
 {
     mat4 proj_view;
-};
-
-struct vertex
-{
-    vec3 pos;
-    vec3 color;
-    vec2 tex_coord;
-};
-
-struct submesh
-{
-    array<vertex> verts;
-    array<u16> indices;
 };
 
 struct renderer
@@ -71,11 +63,10 @@ struct renderer
     submesh rect;
 };
 
-void submesh_init(submesh *sm, mem_arena *arena);
-void submesh_terminate(submesh *sm);
 
-int renderer_init(renderer *rndr, void *win_hndl, mem_arena *fl_arena);
+
+int init_renderer(renderer *rndr, void *win_hndl, mem_arena *fl_arena);
 int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_frame_count);
-void renderer_terminate(renderer *rndr);
+void terminate_renderer(renderer *rndr);
 
 } // namespace nslib

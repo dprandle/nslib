@@ -1,4 +1,5 @@
 #version 450
+#extension GL_EXT_debug_printf : enable
 
 layout(binding = 0) uniform UBO {
     mat4 proj_view;
@@ -11,15 +12,15 @@ layout( push_constant ) uniform PC
 } pc;
 
 layout(location = 0) in vec3 in_pos;
-layout(location = 1) in vec3 in_color;
-layout(location = 2) in vec2 in_tex_coord;
+layout(location = 1) in vec2 in_tex_coord;
+layout(location = 2) in uvec4 in_color;
 
-layout(location = 0) out vec3 fragColor;
+layout(location = 0) out vec4 fragColor;
 layout(location = 1) out vec2 frag_tex_coord;
 
 void main() {
     // Because GLSL stores matrices in column major, we reverse our multiplication order
     gl_Position = vec4(in_pos, 1.0) * pc.model * ubo.proj_view;
-    fragColor = in_color;
+    fragColor = vec4(in_color.r, in_color.g, in_color.b, in_color.a) / 255.0;
     frag_tex_coord = in_tex_coord;
 }

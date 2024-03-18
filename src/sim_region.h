@@ -77,14 +77,14 @@ struct sim_region
 };
 
 template<class T>
-void comp_tbl_init(comp_table<T> *tbl, mem_arena *arena, sizet initial_capacity = 64)
+void init_comp_tbl(comp_table<T> *tbl, mem_arena *arena, sizet initial_capacity = 64)
 {
     arr_init(&tbl->entries, arena, initial_capacity);
     hashmap_init(&tbl->entc_hm);
 }
 
 template<class T>
-void comp_tbl_terminate(comp_table<T> *tbl)
+void init_comp_tbl(comp_table<T> *tbl)
 {
     hashmap_terminate(&tbl->entc_hm);
     arr_terminate(&tbl->entries);
@@ -98,7 +98,7 @@ void add_comp_tbl(comp_db *cdb)
     }
     if (!cdb->comp_tables[T::type_id]) {
         auto ctbl = (comp_table<T> *)mem_alloc(sizeof(comp_table<T>), cdb->comp_tables.arena);
-        comp_tbl_init(ctbl, cdb->comp_tables.arena);
+        init_comp_tbl(ctbl, cdb->comp_tables.arena);
         cdb->comp_tables[T::type_id] = ctbl;
     }
 }
@@ -114,14 +114,14 @@ void remove_comp_tbl(comp_db *cdb)
 {
     auto ctbl = get_comp_tbl<T>(cdb);
     if (ctbl) {
-        comp_tbl_terminate(ctbl);
+        init_comp_tbl(ctbl);
         mem_free(ctbl, cdb->comp_tables.arena);
         cdb->comp_tables[T::type_id] = {};
     }
 }
 
-void comp_db_init(comp_db *cdb, mem_arena *arena);
-void comp_db_terminate(comp_db *cdb);
+void init_comp_db(comp_db *cdb, mem_arena *arena);
+void terminate_comp_db(comp_db *cdb);
 
 template<class T>
 T *add_comp(u32 ent_id, comp_table<T> *ctbl, const T &copy = {})
@@ -180,7 +180,7 @@ entity *get_entity(u32 ent_id, sim_region *reg);
 bool remove_entity(u32 ent_id, sim_region *reg);
 bool remove_entity(entity *ent, sim_region *reg);
 
-void sim_region_init(sim_region *reg, mem_arena *arena);
-void sim_region_terminate(sim_region *reg);
+void init_sim_region(sim_region *reg, mem_arena *arena);
+void terminate_sim_region(sim_region *reg);
 
 } // namespace nslib

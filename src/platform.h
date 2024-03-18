@@ -174,72 +174,66 @@ struct platform_init_info
     int default_log_level{LOG_TRACE};
 };
 
-int platform_init(const platform_init_info *config, platform_ctxt *ctxt);
-int platform_terminate(platform_ctxt *ctxt);
+int init_platform(const platform_init_info *config, platform_ctxt *ctxt);
+int terminate_platform(platform_ctxt *ctxt);
 
 void *platform_alloc(sizet byte_size);
 void *platform_realloc(void *ptr, sizet byte_size);
 void platform_free(void *block);
-void platform_start_frame(platform_ctxt *ctxt);
-void platform_end_frame(platform_ctxt *ctxt);
 
-void *platform_create_window(const platform_window_init_info *pf_config);
+void start_platform_frame(platform_ctxt *ctxt);
+void end_platform_frame(platform_ctxt *ctxt);
 
-ivec2 platform_window_size(void *window_hndl);
-ivec2 platform_framebuffer_size(void *window_hndl);
+void *create_platform_window(const platform_window_init_info *pf_config);
 
-vec2 platform_cursor_pos(void *window_hndl);
-vec2 platform_normalized_cursor_pos(void *window_hndl);
+ivec2 get_window_size(void *window_hndl);
+ivec2 get_framebuffer_size(void *window_hndl);
 
-void platform_window_process_input(platform_ctxt *pf);
+vec2 get_cursor_pos(void *window_hndl);
+vec2 get_normalized_cursor_pos(void *window_hndl);
+
+platform_window_event *get_latest_window_event(platform_window_event_type type, platform_frame_window_events *fwind);
+bool frame_has_event_type(platform_window_event_type type, const platform_frame_window_events *fwind);
+void process_platform_window_input(platform_ctxt *pf);
 bool platform_framebuffer_resized(void *win_hndl);
 bool platform_window_resized(void *win_hndl);
 bool platform_window_should_close(void *window_hndl);
 
-sizet platform_file_size(const char *fname, platform_file_err_desc *err);
+sizet file_size(const char *fname, platform_file_err_desc *err);
 
-sizet platform_read_file(const char *fname,
-                         const char *mode,
-                         void *data,
-                         sizet element_size,
-                         sizet nelements,
-                         sizet byte_offset = 0,
-                         platform_file_err_desc *err = nullptr);
+sizet read_file(const char *fname,
+                const char *mode,
+                void *data,
+                sizet element_size,
+                sizet nelements,
+                sizet byte_offset = 0,
+                platform_file_err_desc *err = nullptr);
 
-sizet platform_read_file(const char *fname,
-                         void *data,
-                         sizet element_size,
-                         sizet nelements,
-                         sizet byte_offset = 0,
-                         platform_file_err_desc *err = nullptr);
+sizet read_file(const char *fname, void *data, sizet element_size, sizet nelements, sizet byte_offset = 0, platform_file_err_desc *err = nullptr);
 
 // If 0, vec will be resized to entire file size
-sizet platform_read_file(const char *fname, const char *mode, byte_array *buffer, sizet byte_offset = 0, platform_file_err_desc *err = nullptr);
+sizet read_file(const char *fname, const char *mode, byte_array *buffer, sizet byte_offset = 0, platform_file_err_desc *err = nullptr);
 
-sizet platform_read_file(const char *fname, byte_array *buffer, sizet byte_offset = 0, platform_file_err_desc *err = nullptr);
+sizet read_file(const char *fname, byte_array *buffer, sizet byte_offset = 0, platform_file_err_desc *err = nullptr);
 
-sizet platform_write_file(const char *fname,
-                          const char *mode,
-                          const void *data,
-                          sizet element_size,
-                          sizet nelements,
-                          sizet byte_offset = 0,
-                          platform_file_err_desc *err = nullptr);
+sizet write_file(const char *fname,
+                 const char *mode,
+                 const void *data,
+                 sizet element_size,
+                 sizet nelements,
+                 sizet byte_offset = 0,
+                 platform_file_err_desc *err = nullptr);
 
-sizet platform_write_file(const char *fname,
-                          const void *data,
-                          sizet element_size,
-                          sizet nelements,
-                          sizet byte_offset = 0,
-                          platform_file_err_desc *err = nullptr);
+sizet write_file(const char *fname,
+                 const void *data,
+                 sizet element_size,
+                 sizet nelements,
+                 sizet byte_offset = 0,
+                 platform_file_err_desc *err = nullptr);
 
-sizet platform_write_file(const char *fname,
-                          const char *mode,
-                          const byte_array *data,
-                          sizet byte_offset = 0,
-                          platform_file_err_desc *err = nullptr);
+sizet write_file(const char *fname, const char *mode, const byte_array *data, sizet byte_offset = 0, platform_file_err_desc *err = nullptr);
 
-sizet platform_write_file(const char *fname, const byte_array *data, sizet byte_offset = 0, platform_file_err_desc *err = nullptr);
+sizet write_file(const char *fname, const byte_array *data, sizet byte_offset = 0, platform_file_err_desc *err = nullptr);
 
 } // namespace nslib
 
@@ -253,23 +247,23 @@ sizet platform_write_file(const char *fname, const byte_array *data, sizet byte_
     }                                                                                                                                      \
     ctxt.argc = pf_config.argc;                                                                                                            \
     ctxt.argv = pf_config.argv;                                                                                                            \
-    if (platform_init(&pf_config, &ctxt) != err_code::PLATFORM_NO_ERROR) {                                                                 \
+    if (init_platform(&pf_config, &ctxt) != err_code::PLATFORM_NO_ERROR) {                                                                 \
         return err_code::PLATFORM_INIT_FAIL;                                                                                               \
     }                                                                                                                                      \
     if (pf_config.user_cb.init) {                                                                                                          \
         int err = pf_config.user_cb.init(&ctxt, &user_data);                                                                               \
         if (err != err_code::PLATFORM_NO_ERROR) {                                                                                          \
             elog("User init failed with code %d", err);                                                                                    \
-            return platform_terminate(&ctxt);                                                                                              \
+            return terminate_platform(&ctxt);                                                                                              \
         }                                                                                                                                  \
     }                                                                                                                                      \
     ptimer_restart(&ctxt.time_pts);                                                                                                        \
     while (run_loop && !platform_window_should_close(ctxt.win_hndl)) {                                                                     \
-        platform_start_frame(&ctxt);                                                                                                       \
+        start_platform_frame(&ctxt);                                                                                                       \
         if (pf_config.user_cb.run_frame && pf_config.user_cb.run_frame(&ctxt, &user_data) != err_code::PLATFORM_NO_ERROR) {                \
             run_loop = false;                                                                                                              \
         }                                                                                                                                  \
-        platform_end_frame(&ctxt);                                                                                                         \
+        end_platform_frame(&ctxt);                                                                                                         \
     }                                                                                                                                      \
     if (pf_config.user_cb.terminate) {                                                                                                     \
         int err = pf_config.user_cb.terminate(&ctxt, &user_data);                                                                          \
@@ -277,7 +271,7 @@ sizet platform_write_file(const char *fname, const byte_array *data, sizet byte_
             elog("User terminate failed with code %d", err);                                                                               \
         }                                                                                                                                  \
     }                                                                                                                                      \
-    return platform_terminate(&ctxt);
+    return terminate_platform(&ctxt);
 
 #define DEFINE_APPLICATION_MAIN_STATIC(user_type, config_platform_func)                                                                    \
     user_type user_data{};                                                                                                                 \

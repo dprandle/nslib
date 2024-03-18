@@ -271,23 +271,23 @@ int app_init(platform_ctxt *ctxt, void *user_data)
     // ilog("data_to_pup after unpacking: \n%s", to_cstr(data));
     
     json_archive ja{};
-    jsa_init(&ja);
+    init_jsa(&ja);
     ilog("Packing data_to_pup to json archive");
     pup_var(&ja, data, {"data_to_pup"});
     string js_str = jsa_to_json_string(&ja, true);
     string js_compact_str = jsa_to_json_string(&ja, false);
     
-    jsa_terminate(&ja);
+    terminate_jsa(&ja);
     ilog("Resulting JSON pretty string:\n%s", str_cstr(js_str));
     ilog("Resulting JSON compact string:\n%s", str_cstr(js_compact_str));
-    platform_write_file("data.json", str_cstr(js_str), 1, str_len(js_str));
+    write_file("data.json", str_cstr(js_str), 1, str_len(js_str));
 
     clear_data(&data);
     
     json_archive ja_in{};
-    jsa_init(&ja_in, str_cstr(js_str));
+    init_jsa(&ja_in, str_cstr(js_str));
     pup_var(&ja_in, data, {"data_to_pup"});
-    jsa_terminate(&ja_in);
+    terminate_jsa(&ja_in);
 
     ilog("data_to_pup json in: \n%s", to_cstr(data));
 

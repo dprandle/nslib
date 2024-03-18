@@ -3,12 +3,12 @@
 namespace nslib
 {
 
-void comp_db_init(comp_db *cdb, mem_arena *arena)
+void init_comp_db(comp_db *cdb, mem_arena *arena)
 {
     arr_init(&cdb->comp_tables, arena);
 }
 
-void comp_db_terminate(comp_db *cdb)
+void terminate_comp_db(comp_db *cdb)
 {
     arr_terminate(&cdb->comp_tables);
 }
@@ -80,10 +80,10 @@ bool remove_entity(entity *ent, sim_region *reg)
     return false;
 }
 
-void sim_region_init(sim_region *reg, mem_arena *arena)
+void init_sim_region(sim_region *reg, mem_arena *arena)
 {
     arr_init(&reg->ents, arena);
-    comp_db_init(&reg->cdb, arena);
+    init_comp_db(&reg->cdb, arena);
     hashmap_init(&reg->entmap);
 
     add_comp_tbl<static_model>(&reg->cdb);
@@ -91,14 +91,14 @@ void sim_region_init(sim_region *reg, mem_arena *arena)
     add_comp_tbl<transform>(&reg->cdb);
 }
 
-void sim_region_terminate(sim_region *reg)
+void terminate_sim_region(sim_region *reg)
 {
     remove_comp_tbl<transform>(&reg->cdb);
     remove_comp_tbl<camera>(&reg->cdb);
     remove_comp_tbl<static_model>(&reg->cdb);
 
     hashmap_terminate(&reg->entmap);
-    comp_db_terminate(&reg->cdb);
+    terminate_comp_db(&reg->cdb);
     arr_terminate(&reg->ents);
 }
 } // namespace nslib
