@@ -29,6 +29,7 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_ke
 
     cam_comp->proj = (math::perspective(60.0f, (f32)sz.w / (f32)sz.h, 0.1f, 1000.0f));
     cam_comp->view = (math::look_at(vec3{0.0f, 10.0f, -5.0f}, vec3{0.0f}, vec3{0.0f, 1.0f, 0.0f}));
+    
     cam_tcomp->cached = math::inverse(cam_comp->view);
     cam_tcomp->orientation = math::orientation(cam_tcomp->cached);
     cam_tcomp->scale = math::scaling_vec(cam_tcomp->cached);
@@ -36,7 +37,7 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_ke
     app->cam_id = cam->id;
 
     cam_tcomp->cached = math::model_tform(cam_tcomp->world_pos, cam_tcomp->orientation, cam_tcomp->scale);
-    cam_comp->view = math::inverse(cam_tcomp->cached);
+    //cam_comp->view = math::inverse(cam_tcomp->cached);
 
     // Setup some keys
     input_keymap_entry cam_turn{};
@@ -147,7 +148,7 @@ int init(platform_ctxt *ctxt, void *user_data)
     init_sim_region(&app->rgn, &ctxt->arenas.free_list);
 
     // Create a bunch of entities
-    int count = 5000;
+    int count = 10;
     add_entities(count, &app->rgn);
 
     for (int i = 0; i < app->rgn.ents.size; ++i) {
@@ -158,8 +159,8 @@ int init(platform_ctxt *ctxt, void *user_data)
         tfcomp->cached = math::model_tform(tfcomp->world_pos, tfcomp->orientation, tfcomp->scale);
     }
     
-    // Create input map
-    init_keymap("global", &app->global_km);
+    //Create input map
+    init_keymap("global", &app->global_km, &ctxt->arenas.free_list);
 
     // Create and setup input for camera
     setup_camera_controller(ctxt, app, &app->global_km);

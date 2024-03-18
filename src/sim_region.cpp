@@ -84,7 +84,7 @@ void init_sim_region(sim_region *reg, mem_arena *arena)
 {
     arr_init(&reg->ents, arena);
     init_comp_db(&reg->cdb, arena);
-    hashmap_init(&reg->entmap);
+    hashmap_init(&reg->entmap, arena);
 
     add_comp_tbl<static_model>(&reg->cdb);
     add_comp_tbl<camera>(&reg->cdb);

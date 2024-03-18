@@ -17,10 +17,6 @@
 namespace nslib
 {
 
-static void *(*__malloc)(sizet) = NULL;
-static void *(*__realloc)(void *, sizet) = NULL;
-static void (*__free)(void *) = NULL;
-
 void ihashmap_set_grow_by_power(struct ihashmap *map, sizet power)
 {
     map->growpower = (u8)(power < 1 ? 1 : power > 16 ? 16 : power);
@@ -51,21 +47,35 @@ static u64 get_hash(struct ihashmap *map, const void *key)
     return clip_hash(map->hash(key, map->seed0, map->seed1));
 }
 
-struct ihashmap *ihashmap_new_with_allocator(void *(*_malloc)(sizet),
-                                            void *(*_realloc)(void *, sizet),
-                                            void (*_free)(void *),
-                                            sizet elsize,
-                                            sizet cap,
-                                            u64 seed0,
-                                            u64 seed1,
-                                            u64 (*hash)(const void *item, u64 seed0, u64 seed1),
-                                            int (*compare)(const void *a, const void *b, void *udata),
-                                            void (*elfree)(void *item),
-                                            void *udata)
+ihashmap *ihashmap_new(sizet elsize,
+                       sizet cap,
+                       u64 seed0,
+                       u64 seed1,
+                       u64 (*hash)(const void *item, u64 seed0, u64 seed1),
+                       int (*compare)(const void *a, const void *b, void *udata),
+                       void (*elfree)(void *item),
+                       void *udata)
 {
-    _malloc = _malloc ? _malloc : __malloc ? __malloc : malloc;
-    _realloc = _realloc ? _realloc : __realloc ? __realloc : realloc;
-    _free = _free ? _free : __free ? __free : free;
+    return ihashmap_new_with_allocator(nullptr, nullptr, nullptr, nullptr, elsize, cap, seed0, seed1, hash, compare, elfree, udata);
+}
+
+ihashmap *ihashmap_new_with_allocator(malloc_func_type *_malloc,
+                                      realloc_func_type *_realloc,
+                                      free_func_type *_free,
+                                      mem_arena *_arena,
+                                      sizet elsize,
+                                      sizet cap,
+                                      u64 seed0,
+                                      u64 seed1,
+                                      u64 (*hash)(const void *item, u64 seed0, u64 seed1),
+                                      int (*compare)(const void *a, const void *b, void *udata),
+                                      void (*elfree)(void *item),
+                                      void *udata)
+{
+    _malloc = _malloc ? _malloc : (malloc_func_type *)mem_alloc;
+    _realloc = _realloc ? _realloc : (realloc_func_type *)mem_realloc;
+    _free = _free ? _free : (free_func_type *)mem_free;
+    _arena = _arena ? _arena : mem_global_arena();
     sizet ncap = 16;
     if (cap < ncap) {
         cap = ncap;
@@ -83,7 +93,7 @@ struct ihashmap *ihashmap_new_with_allocator(void *(*_malloc)(sizet),
     }
     // hashmap + spare + edata
     sizet size = sizeof(struct ihashmap) + bucketsz * 2;
-    ihashmap *map = (ihashmap *)_malloc(size);
+    ihashmap *map = (ihashmap *)_malloc(size, _arena);
     if (!map) {
         return NULL;
     }
@@ -101,9 +111,9 @@ struct ihashmap *ihashmap_new_with_allocator(void *(*_malloc)(sizet),
     map->cap = cap;
     map->nbuckets = cap;
     map->mask = map->nbuckets - 1;
-    map->buckets = _malloc(map->bucketsz * map->nbuckets);
+    map->buckets = _malloc(map->bucketsz * map->nbuckets, _arena);
     if (!map->buckets) {
-        _free(map);
+        _free(map, _arena);
         return NULL;
     }
     memset(map->buckets, 0, map->bucketsz * map->nbuckets);
@@ -113,39 +123,13 @@ struct ihashmap *ihashmap_new_with_allocator(void *(*_malloc)(sizet),
     map->malloc = _malloc;
     map->realloc = _realloc;
     map->free = _free;
+    map->arena = _arena;
     return map;
-}
-
-struct ihashmap *ihashmap_new(sizet elsize,
-                             sizet cap,
-                             u64 seed0,
-                             u64 seed1,
-                             u64 (*hash)(const void *item, u64 seed0, u64 seed1),
-                             int (*compare)(const void *a, const void *b, void *udata),
-                             void (*elfree)(void *item),
-                             void *udata)
-{
-    return ihashmap_new_with_allocator(NULL, NULL, NULL, elsize, cap, seed0, seed1, hash, compare, elfree, udata);
 }
 
 int generate_rand_seed()
 {
     return rand();
-}
-
-malloc_func_type *global_malloc_func()
-{
-    return mem_alloc;
-}
-
-realloc_func_type *global_realloc_func()
-{
-    return mem_realloc;
-}
-
-free_func_type *global_free_func()
-{
-    return mem_free;
 }
 
 static void free_elements(struct ihashmap *map)
@@ -167,9 +151,9 @@ void ihashmap_clear(struct ihashmap *map, bool update_cap)
         map->cap = map->nbuckets;
     }
     else if (map->nbuckets != map->cap) {
-        void *new_buckets = map->malloc(map->bucketsz * map->cap);
+        void *new_buckets = map->malloc(map->bucketsz * map->cap, map->arena);
         if (new_buckets) {
-            map->free(map->buckets);
+            map->free(map->buckets, map->arena);
             map->buckets = new_buckets;
         }
         map->nbuckets = map->cap;
@@ -182,8 +166,18 @@ void ihashmap_clear(struct ihashmap *map, bool update_cap)
 
 static bool resize0(struct ihashmap *map, sizet new_cap)
 {
-    struct ihashmap *map2 = ihashmap_new_with_allocator(
-        map->malloc, map->realloc, map->free, map->elsize, new_cap, map->seed0, map->seed1, map->hash, map->compare, map->elfree, map->udata);
+    struct ihashmap *map2 = ihashmap_new_with_allocator(map->malloc,
+                                                        map->realloc,
+                                                        map->free,
+                                                        map->arena,
+                                                        map->elsize,
+                                                        new_cap,
+                                                        map->seed0,
+                                                        map->seed1,
+                                                        map->hash,
+                                                        map->compare,
+                                                        map->elfree,
+                                                        map->udata);
     if (!map2)
         return false;
     for (sizet i = 0; i < map->nbuckets; i++) {
@@ -208,13 +202,13 @@ static bool resize0(struct ihashmap *map, sizet new_cap)
             entry->dib += 1;
         }
     }
-    map->free(map->buckets);
+    map->free(map->buckets, map->arena);
     map->buckets = map2->buckets;
     map->nbuckets = map2->nbuckets;
     map->mask = map2->mask;
     map->growat = map2->growat;
     map->shrinkat = map2->shrinkat;
-    map->free(map2);
+    map->free(map2, map->arena);
     return true;
 }
 
@@ -357,8 +351,8 @@ void ihashmap_free(struct ihashmap *map)
     if (!map)
         return;
     free_elements(map);
-    map->free(map->buckets);
-    map->free(map);
+    map->free(map->buckets, map->arena);
+    map->free(map, map->arena);
 }
 
 bool ihashmap_oom(struct ihashmap *map)

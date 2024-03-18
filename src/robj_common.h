@@ -5,11 +5,12 @@
 #pragma once
 namespace nslib
 {
+
 namespace robj_types
 {
 enum
 {
-    GEOMETRY
+    MESH,
 };
 }
 
@@ -51,20 +52,24 @@ inline bool operator!=(const rid &lhs, const rid &rhs)
     return !(lhs == rhs);
 }
 
-struct robj_common
-{
+struct robj_common {
     rid id;
 };
 
-pup_func(robj_common)
-{
+pup_func(robj_common) {
     pup_member(id);
 }
 
 struct robj_cache
 {
+    // Resource id to pointer to resource obj
     hashmap<rid, robj_common*> rmap;
     mem_arena arena;
+};
+
+struct robj_cache_group
+{
+    array<robj_cache> comp_tables;
 };
 
 void init_cache(robj_cache *cache, u32 rtype, sizet item_size, sizet item_budget, mem_arena *upstream);

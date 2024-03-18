@@ -80,7 +80,7 @@ template<class T>
 void init_comp_tbl(comp_table<T> *tbl, mem_arena *arena, sizet initial_capacity = 64)
 {
     arr_init(&tbl->entries, arena, initial_capacity);
-    hashmap_init(&tbl->entc_hm);
+    hashmap_init(&tbl->entc_hm, arena);
 }
 
 template<class T>

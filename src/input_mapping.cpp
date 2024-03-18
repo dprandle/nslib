@@ -66,14 +66,14 @@ int action_from_key(u32 key)
     return (key & 0x000000FF);
 }
 
-void init_keymap(const char *name, input_keymap *km)
+void init_keymap(const char *name, input_keymap *km, mem_arena *arena)
 {
     assert(km);
     assert(name);
     int seed0 = rand();
     int seed1 = rand();
     strncpy(km->name, name, SMALL_STR_LEN);
-    hashmap_init(&km->hm);
+    hashmap_init(&km->hm, arena);
 }
 
 void terminate_keymap(input_keymap *km)

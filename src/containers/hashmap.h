@@ -188,8 +188,9 @@ sizet hashmap_count(const hashmap<K, T> *hm)
     return ihashmap_count(hm->hm);
 }
 
+// Passing nullptr for the arena will use the global free list arena
 template<class Key, class Value>
-void hashmap_init(hashmap<Key, Value> *hm)
+void hashmap_init(hashmap<Key, Value> *hm, mem_arena *arena)
 {
     int seed0 = generate_rand_seed();
     int seed1 = generate_rand_seed();
@@ -208,9 +209,10 @@ void hashmap_init(hashmap<Key, Value> *hm)
         return (cast_a->key == cast_b->key) ? 0 : 1;
     };
 
-    hm->hm = ihashmap_new_with_allocator(global_malloc_func(),
-                                         global_realloc_func(),
-                                         global_free_func(),
+    hm->hm = ihashmap_new_with_allocator(mem_alloc,
+                                         mem_realloc,
+                                         mem_free,
+                                         arena,
                                          sizeof(key_val_pair<Key, Value>),
                                          0,
                                          seed0,

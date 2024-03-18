@@ -139,7 +139,7 @@ bool keymap_in_stack(const input_keymap *km, const input_keymap_stack *stack);
 input_keymap *pop_keymap(input_keymap_stack *stack);
 
 // Initialize the keymap and allocate the hashmap
-void init_keymap(const char *name, input_keymap *km);
+void init_keymap(const char *name, input_keymap *km, mem_arena *arena);
 
 // Tear down the keymap and free the hashmap
 void terminate_keymap(input_keymap *km);

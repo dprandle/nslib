@@ -133,18 +133,18 @@ void test_hashmaps()
     dlog("Starting hashmap test");
     hashmap<rid, custom_type_2> hm1;
     hashmap<string, custom_type_2> hm2;
-    hashmap_init(&hm1);
-    hashmap_init(&hm2);
+    hashmap_init(&hm1, nullptr);
+    hashmap_init(&hm2, nullptr);
 
     hashset<rid> hs1;
     hashset<string> hs2;
-    hashset_init(&hs1);
-    hashset_init(&hs2);
+    hashset_init(&hs1, nullptr);
+    hashset_init(&hs2, nullptr);
 
     hashset<custom_type_0> hs3;
     hashset<custom_type_1> hs4;
-    hashset_init(&hs3);
-    hashset_init(&hs4);
+    hashset_init(&hs3, nullptr);
+    hashset_init(&hs4, nullptr);
 
     hashmap_set(&hm1, rid("key1"), {1, 2});
     hashmap_set(&hm1, rid("key2"), {3, 4});

@@ -338,11 +338,6 @@ intern void mem_linear_free(mem_arena *, void *)
     // NO OP
 }
 
-void *mem_alloc(sizet bytes)
-{
-    return mem_alloc(bytes, nullptr, 8);
-}
-
 void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment)
 {
     void *ret{nullptr};
@@ -373,6 +368,17 @@ void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment)
     memset(ret, 0, bytes);
 #endif
     return ret;
+}
+
+
+void *mem_alloc(sizet bytes, mem_arena *arena)
+{
+    return mem_alloc(bytes, arena, 8);
+}
+
+void *mem_alloc(sizet bytes)
+{
+    return mem_alloc(bytes, nullptr);
 }
 
 sizet mem_block_size(void *ptr, mem_arena *arena)
@@ -429,14 +435,19 @@ void *mem_realloc(void *ptr, sizet new_size, mem_arena *arena, sizet alignment, 
     }
 }
 
+void *mem_realloc(void *ptr, sizet size, mem_arena *arena, sizet alignment)
+{
+    return mem_realloc(ptr, size, arena, alignment, true);
+}
+
+void *mem_realloc(void *ptr, sizet size, mem_arena *arena)
+{
+    return mem_realloc(ptr, size, arena, 8);
+}
+
 void *mem_realloc(void *ptr, sizet size)
 {
     return mem_realloc(ptr, size, nullptr);
-}
-
-void mem_free(void *item)
-{
-    mem_free(item, nullptr);
 }
 
 void mem_free(void *ptr, mem_arena *arena)
@@ -467,6 +478,11 @@ void mem_free(void *ptr, mem_arena *arena)
     else {
         platform_free(ptr);
     }
+}
+
+void mem_free(void *item)
+{
+    mem_free(item, nullptr);
 }
 
 void mem_reset_arena(mem_arena *arena)

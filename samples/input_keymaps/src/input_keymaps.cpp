@@ -18,9 +18,9 @@ int app_init(platform_ctxt *ctxt, void *user_data)
     ilog("App init");
 
     // Create three different keymaps which well add some entries in
-    init_keymap("KM1", &app->km1);
-    init_keymap("KM2", &app->km2);
-    init_keymap("KM3", &app->km3);
+    init_keymap("KM1", &app->km1, &ctxt->arenas.free_list);
+    init_keymap("KM2", &app->km2, &ctxt->arenas.free_list);
+    init_keymap("KM3", &app->km3, &ctxt->arenas.free_list);
 
     // Just print the entry name button and action for key/mouse button entries
     auto key_mbutton_func = [](const input_event *ev, void *) {

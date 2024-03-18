@@ -5,10 +5,11 @@
 #include "../basic_types.h"
 
 namespace nslib
-{    
-using malloc_func_type = void *(sizet);
-using realloc_func_type = void *(void *, sizet);
-using free_func_type = void(void *);
+{
+struct mem_arena;
+using malloc_func_type = void *(sizet, mem_arena *);
+using realloc_func_type = void *(void *, sizet, mem_arena *);
+using free_func_type = void(void *, mem_arena *);
 
 struct ihashmap_bucket
 {
@@ -33,6 +34,7 @@ struct ihashmap
     malloc_func_type *malloc;
     realloc_func_type *realloc;
     free_func_type *free;
+    mem_arena *arena;
     sizet elsize;
     sizet cap;
     u64 seed0;
@@ -71,30 +73,33 @@ struct ihashmap
 // The hashmap must be freed with hashmap_free().
 // Param `elfree` is a function that frees a specific item. This should be NULL
 // unless you're storing some kind of reference data in the hash.
-struct ihashmap *ihashmap_new(sizet elsize,
-                              sizet cap,
-                              u64 seed0,
-                              u64 seed1,
-                              u64 (*hash)(const void *item, u64 seed0, u64 seed1),
-                              int (*compare)(const void *a, const void *b, void *udata),
-                              void (*elfree)(void *item),
-                              void *udata);
+ihashmap *ihashmap_new(malloc_func_type *malloc,
+                       realloc_func_type *realloc,
+                       free_func_type *free,
+                       mem_arena *arena,
+                       sizet elsize,
+                       sizet cap,
+                       u64 seed0,
+                       u64 seed1,
+                       u64 (*hash)(const void *item, u64 seed0, u64 seed1),
+                       int (*compare)(const void *a, const void *b, void *udata),
+                       void (*elfree)(void *item),
+                       void *udata);
 
-struct ihashmap *ihashmap_new(const struct ihashmap *copy_from);
+ihashmap *ihashmap_new_with_allocator(malloc_func_type *malloc,
+                                      realloc_func_type *realloc,
+                                      free_func_type *free,
+                                      mem_arena *arena,
+                                      sizet elsize,
+                                      sizet cap,
+                                      u64 seed0,
+                                      u64 seed1,
+                                      u64 (*hash)(const void *item, u64 seed0, u64 seed1),
+                                      int (*compare)(const void *a, const void *b, void *udata),
+                                      void (*elfree)(void *item),
+                                      void *udata);
 
-// hashmap_new_with_allocator returns a new hash map using a custom allocator.
-// See hashmap_new for more information information
-struct ihashmap *ihashmap_new_with_allocator(void *(*malloc)(sizet),
-                                             void *(*realloc)(void *, sizet),
-                                             void (*free)(void *),
-                                             sizet elsize,
-                                             sizet cap,
-                                             u64 seed0,
-                                             u64 seed1,
-                                             u64 (*hash)(const void *item, u64 seed0, u64 seed1),
-                                             int (*compare)(const void *a, const void *b, void *udata),
-                                             void (*elfree)(void *item),
-                                             void *udata);
+ihashmap *ihashmap_new(const struct ihashmap *copy_from);
 
 // hashmap_free frees the hash map
 // Every item is called with the element-freeing function given in hashmap_new,
@@ -178,8 +183,5 @@ const void *ihashmap_set_with_hash(struct ihashmap *map, const void *item, u64 h
 void ihashmap_set_grow_by_power(struct ihashmap *map, sizet power);
 
 int generate_rand_seed();
-malloc_func_type *global_malloc_func();
-realloc_func_type *global_realloc_func();
-free_func_type *global_free_func();
 
-}
+} // namespace nslib

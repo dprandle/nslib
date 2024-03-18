@@ -1,4 +1,5 @@
 #pragma once
+#include "robj_common.h"
 #include "math/vector4.h"
 #include "containers/array.h"
 
@@ -6,6 +7,10 @@ namespace nslib
 {
 
 const i32 JOINTS_PER_VERTEX = 4;
+
+struct material{
+    rid id;
+};
 
 struct vertex
 {

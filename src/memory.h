@@ -87,11 +87,17 @@ struct mem_arena
     };
 };
 
-void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment=8);
+void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment);
+
+void *mem_alloc(sizet bytes, mem_arena *arena);
 
 void *mem_alloc(sizet bytes);
 
-void *mem_realloc(void *ptr, sizet size, mem_arena *arena, sizet alignment = 8, bool free_ptr_after_cpy=true);
+void *mem_realloc(void *ptr, sizet size, mem_arena *arena, sizet alignment, bool free_ptr_after_cpy);
+
+void *mem_realloc(void *ptr, sizet size, mem_arena *arena, sizet alignment);
+
+void *mem_realloc(void *ptr, sizet size, mem_arena *arena);
 
 void *mem_realloc(void *ptr, sizet size);
 
@@ -123,9 +129,9 @@ T * mem_new(mem_arena *arena, Args&&... args)
     return item;
 }
 
-void mem_free(void *item);
-
 void mem_free(void *item, mem_arena *arena);
+
+void mem_free(void *item);
 
 template<class T>
 void mem_delete(T *item, mem_arena *arena)

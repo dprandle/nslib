@@ -170,7 +170,7 @@ void hashset_terminate(hashset<T> *hs)
 }
 
 template<class T>
-void hashset_init(hashset<T> *hs)
+void hashset_init(hashset<T> *hs, mem_arena *arena)
 {
     int seed0 = generate_rand_seed();
     int seed1 = generate_rand_seed();
@@ -190,7 +190,7 @@ void hashset_init(hashset<T> *hs)
     };
 
     hs->hm = ihashmap_new_with_allocator(
-        global_malloc_func(), global_realloc_func(), global_free_func(), sizeof(T), 0, seed0, seed1, hash_func, compare_func, nullptr, hs);
+        mem_alloc, mem_realloc, mem_free, arena, sizeof(T), 0, seed0, seed1, hash_func, compare_func, nullptr, hs);
 }
 
 template<class ArchiveT, class T>
