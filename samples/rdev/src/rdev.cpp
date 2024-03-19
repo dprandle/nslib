@@ -12,8 +12,11 @@ struct app_data
 {
     renderer rndr{};
     sim_region rgn{};
+    robj_cache_group cg{};
+
     input_keymap global_km;
     input_keymap_stack stack{};
+    
     u32 cam_id;
     vec2 mpos;
     ivec2 movement{};
@@ -37,7 +40,7 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_ke
     app->cam_id = cam->id;
 
     cam_tcomp->cached = math::model_tform(cam_tcomp->world_pos, cam_tcomp->orientation, cam_tcomp->scale);
-    //cam_comp->view = math::inverse(cam_tcomp->cached);
+    cam_comp->view = math::inverse(cam_tcomp->cached);
 
     // Setup some keys
     input_keymap_entry cam_turn{};
@@ -53,7 +56,7 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_ke
         app->mpos = ev->norm_pos;
 
         vec3 right = math::right_vec(camt->orientation);
-        f32 factor = 1.8;
+        f32 factor = 2.5;
         vec4 horizontal = {right, -(f32)delta.y*factor};
         vec4 vertical = {{0, 0, 1}, (f32)delta.x*factor};
         camt->orientation = math::orientation(vertical) * math::orientation(horizontal) * camt->orientation;
@@ -145,17 +148,22 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_ke
 int init(platform_ctxt *ctxt, void *user_data)
 {
     auto app = (app_data *)user_data;
-    init_sim_region(&app->rgn, &ctxt->arenas.free_list);
+
+    init_cache_group_default_types(&app->cg, mem_global_arena());
+    auto mc = get_cache<mesh>(&app->cg);
+    auto msh = (mesh*)add_robj(mc);
+    
+    init_sim_region(&app->rgn, mem_global_arena());
 
     // Create a bunch of entities
-    int count = 10;
+    int count = 347;
     add_entities(count, &app->rgn);
 
     for (int i = 0; i < app->rgn.ents.size; ++i) {
         auto tfcomp = add_comp<transform>(&app->rgn.ents[i]);
         add_comp<static_model>(&app->rgn.ents[i]);
         int mod = i - count / 2;
-        tfcomp->world_pos = vec3{0, 0, mod * 0.05f};
+        tfcomp->world_pos = vec3{0, 0, -mod * 0.05f};
         tfcomp->cached = math::model_tform(tfcomp->world_pos, tfcomp->orientation, tfcomp->scale);
     }
     
@@ -166,6 +174,7 @@ int init(platform_ctxt *ctxt, void *user_data)
     setup_camera_controller(ctxt, app, &app->global_km);
     
     push_keymap(&app->global_km, &app->stack);
+    
     return init_renderer(&app->rndr, ctxt->win_hndl, &ctxt->arenas.free_list);
 }
 
@@ -182,7 +191,7 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
         auto cam_tform = get_comp<transform>(app->cam_id, &app->rgn.cdb);
         auto right = math::right_vec(cam_tform->orientation);
         auto target = math::target_vec(cam_tform->orientation);
-        cam_tform->world_pos += (right * app->movement.x + target * app->movement.y) * 0.1;
+        cam_tform->world_pos += (right * app->movement.x + target * app->movement.y) * ctxt->time_pts.dt * 10;
         cam_tform->cached = math::model_tform(cam_tform->world_pos, cam_tform->orientation, cam_tform->scale);
         cam->view = math::inverse(cam_tform->cached);
     }
@@ -192,7 +201,7 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
     for (sizet i = 0; i < tform_tbl->entries.size; ++i) {
         auto curtf = &tform_tbl->entries[i];
         if (i % 100 == 0 && curtf->ent_id != app->cam_id) {
-            curtf->orientation *= math::orientation(vec4{0.0, 0.0, 1.0, (f32)ctxt->time_pts.dt});
+            curtf->orientation *= math::orientation(vec4{1.0, 0.0, 0.0, (f32)ctxt->time_pts.dt});
             curtf->world_pos.x = math::sin((f32)elapsed_s);
             curtf->world_pos.y = math::cos((f32)elapsed_s);
             curtf->flags = COMP_FLAG_DIRTY;
@@ -205,9 +214,10 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
 int terminate(platform_ctxt *ctxt, void *user_data)
 {
     auto app = (app_data *)user_data;
+    terminate_renderer(&app->rndr);
     terminate_keymap(&app->global_km);
     terminate_sim_region(&app->rgn);
-    terminate_renderer(&app->rndr);
+    terminate_cache_group(&app->cg);
     return err_code::PLATFORM_NO_ERROR;
 }
 

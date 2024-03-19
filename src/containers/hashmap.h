@@ -111,7 +111,7 @@ typename hashmap<K, T>::iterator hashmap_iter(hashmap<K, T> *hm, sizet *i)
 }
 
 template<class K, class T>
-bool hashmap_next(const hashmap<K, T> *hm, sizet *i, typename hashmap<K,T>::const_iterator *item)
+bool hashmap_next(const hashmap<K, T> *hm, sizet *i, typename hashmap<K, T>::const_iterator *item)
 {
     assert(hm->hm);
     assert(i);
@@ -119,7 +119,7 @@ bool hashmap_next(const hashmap<K, T> *hm, sizet *i, typename hashmap<K,T>::cons
 }
 
 template<class K, class T>
-bool hashmap_next(hashmap<K, T> *hm, sizet *i, typename hashmap<K,T>::const_iterator *item)
+bool hashmap_next(hashmap<K, T> *hm, sizet *i, typename hashmap<K, T>::const_iterator *item)
 {
     assert(hm->hm);
     assert(i);
@@ -142,7 +142,7 @@ typename hashmap<K, T>::iterator hashmap_set(hashmap<K, T> *hm, const K &key, co
 }
 
 template<class K, class T>
-typename hashmap<K, T>::iterator hashmap_set(hashmap<K, T> *hm, const typename hashmap<K,T>::value_type &item)
+typename hashmap<K, T>::iterator hashmap_set(hashmap<K, T> *hm, const typename hashmap<K, T>::value_type &item)
 {
     assert(hm->hm);
     return (typename hashmap<K, T>::iterator)ihashmap_set(hm->hm, &item);
@@ -190,44 +190,45 @@ sizet hashmap_count(const hashmap<K, T> *hm)
 
 // Passing nullptr for the arena will use the global free list arena
 template<class Key, class Value>
-void hashmap_init(hashmap<Key, Value> *hm, mem_arena *arena)
+void hashmap_init(hashmap<Key, Value> *hm, mem_arena *arena, sizet mem_alignment = DEFAULT_MIN_ALIGNMENT)
 {
     int seed0 = generate_rand_seed();
     int seed1 = generate_rand_seed();
 
     // Hash func attempts to call the hash_type function
     auto hash_func = [](const void *item, u64 seed0, u64 seed1) -> u64 {
-        auto cast = (typename hashmap<Key,Value>::const_iterator)item;
+        auto cast = (typename hashmap<Key, Value>::const_iterator)item;
         return hash_type(cast->key, seed0, seed1);
     };
 
     // We only care about == so just return 1 in all other cases - If the hashed value of the keys are equal then we
     // check to see if the key itself is equal
     auto compare_func = [](const void *a, const void *b, void *) -> i32 {
-        auto cast_a = (typename hashmap<Key,Value>::const_iterator)a;
-        auto cast_b = (typename hashmap<Key,Value>::const_iterator)b;
+        auto cast_a = (typename hashmap<Key, Value>::const_iterator)a;
+        auto cast_b = (typename hashmap<Key, Value>::const_iterator)b;
         return (cast_a->key == cast_b->key) ? 0 : 1;
     };
 
-    hm->hm = ihashmap_new_with_allocator(mem_alloc,
-                                         mem_realloc,
-                                         mem_free,
-                                         arena,
-                                         sizeof(key_val_pair<Key, Value>),
-                                         0,
-                                         seed0,
-                                         seed1,
-                                         hash_func,
-                                         compare_func,
-                                         nullptr,
-                                         hm);
+    hm->hm = ihashmap_new(mem_alloc,
+                          mem_realloc,
+                          mem_free,
+                          arena,
+                          mem_alignment,
+                          sizeof(key_val_pair<Key, Value>),
+                          0,
+                          seed0,
+                          seed1,
+                          hash_func,
+                          compare_func,
+                          nullptr,
+                          hm);
 }
 
 template<class Key, class Value>
 string to_str(const hashmap<Key, Value> &hm)
 {
     string ret("\nhashmap {");
-    auto for_each = [&ret](typename hashmap<Key,Value>::const_iterator item) -> bool {
+    auto for_each = [&ret](typename hashmap<Key, Value>::const_iterator item) -> bool {
         ret += "\nkey: " + to_str(item->key);
         ret += "\nval: " + to_str(item->value);
         return true;
@@ -245,7 +246,7 @@ void pack_unpack(ArchiveT *ar, hashmap<K, T> &val, const pack_var_info &vinfo)
     sizet i{0};
     if (ar->opmode == archive_opmode::UNPACK) {
         while (i < sz) {
-            typename hashmap<K,T>::value_type item{K{},T{}};
+            typename hashmap<K, T>::value_type item{K{}, T{}};
             pup_var(ar, item, {to_cstr("{%d}", i), {pack_va_flags::PACK_PAIR_KEY_VAL}});
             hashmap_set(&val, item);
             ++i;
@@ -254,7 +255,7 @@ void pack_unpack(ArchiveT *ar, hashmap<K, T> &val, const pack_var_info &vinfo)
     else {
         sizet bucket_i{0};
         while (auto iter = hashmap_iter(&val, &bucket_i)) {
-            pup_var(ar, *iter,{to_cstr("{%d}", i), {pack_va_flags::PACK_PAIR_KEY_VAL}});
+            pup_var(ar, *iter, {to_cstr("{%d}", i), {pack_va_flags::PACK_PAIR_KEY_VAL}});
             ++i;
         }
     }

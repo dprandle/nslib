@@ -1194,16 +1194,16 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
     // Rasterizer
     VkPipelineRasterizationStateCreateInfo rstr{};
     rstr.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rstr.depthClampEnable = false;
-    rstr.rasterizerDiscardEnable = false;
-    rstr.polygonMode = VK_POLYGON_MODE_FILL;
-    rstr.lineWidth = 1.0f;
-    rstr.cullMode = VK_CULL_MODE_BACK_BIT;
-    rstr.frontFace = VK_FRONT_FACE_CLOCKWISE;
-    rstr.depthBiasEnable = false;
-    rstr.depthBiasConstantFactor = 0.0f;
-    rstr.depthBiasClamp = 0.0f;
-    rstr.depthBiasSlopeFactor = 0.0f;
+    rstr.depthClampEnable = cfg->raster.depth_clamp_enable;
+    rstr.rasterizerDiscardEnable = cfg->raster.rasterizer_discard_enable;
+    rstr.polygonMode = cfg->raster.polygon_mode;
+    rstr.lineWidth = cfg->raster.line_width;
+    rstr.cullMode = cfg->raster.cull_mode;
+    rstr.frontFace = cfg->raster.front_face;
+    rstr.depthBiasEnable = cfg->raster.depth_bias_enable;
+    rstr.depthBiasConstantFactor = cfg->raster.depth_bias_constant_factor;
+    rstr.depthBiasClamp = cfg->raster.depth_bias_clamp;
+    rstr.depthBiasSlopeFactor = cfg->raster.depth_bias_slope_factor;
 
     // Multisampling
     VkPipelineMultisampleStateCreateInfo multisampling{};

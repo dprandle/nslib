@@ -41,6 +41,7 @@ struct array
     T *data{};
     sizet size{};
     sizet capacity{};
+    sizet mem_alignment{};
     
     array(){
         arr_init(this);
@@ -83,7 +84,7 @@ void swap(array<T> *lhs, array<T> *rhs)
 }
 
 template<class T>
-void arr_init(array<T> *arr, mem_arena *arena = nullptr, sizet initial_capacity = 0)
+void arr_init(array<T> *arr, mem_arena *arena = nullptr, sizet initial_capacity = 0, sizet mem_alignment=DEFAULT_MIN_ALIGNMENT)
 {
     if (arena) {
         arr->arena = arena;
@@ -91,6 +92,7 @@ void arr_init(array<T> *arr, mem_arena *arena = nullptr, sizet initial_capacity 
     else if (!arr->arena) {
         arr->arena = mem_global_arena();
     }
+    arr->mem_alignment = mem_alignment;
     arr_set_capacity(arr, initial_capacity);
 }
 
@@ -173,7 +175,7 @@ void arr_set_capacity(array<T> *arr, sizet new_cap)
         // New cap can't be any smaller than mem_nod since we are using free list allocator
         while (new_cap * sizeof(T) < sizeof(mem_node))
             ++new_cap;
-        arr->data = (T *)mem_realloc(arr->data, new_cap * sizeof(T), arr->arena);
+        arr->data = (T *)mem_realloc(arr->data, new_cap * sizeof(T), arr->arena, arr->mem_alignment);
     }
     else if (arr->data){
         mem_free(arr->data, arr->arena);

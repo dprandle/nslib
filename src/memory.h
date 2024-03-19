@@ -8,6 +8,9 @@
 namespace nslib
 {
 
+static constexpr inline const sizet DEFAULT_MIN_ALIGNMENT = 8;
+static constexpr inline const sizet SIMD_MIN_ALIGNMENT = 16;
+
 enum struct mem_alloc_type
 {
     FREE_LIST,

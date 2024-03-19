@@ -29,11 +29,10 @@ enum comp_flags:u64 {
 struct transform
 {
     COMP(TRANSFORM)
+    mat4 cached;
     vec3 world_pos;
     quat orientation;
     vec3 scale{1};
-
-    mat4 cached;
 };
 
 struct static_model
@@ -77,30 +76,31 @@ struct sim_region
 };
 
 template<class T>
-void init_comp_tbl(comp_table<T> *tbl, mem_arena *arena, sizet initial_capacity = 64)
+void init_comp_tbl(comp_table<T> *tbl, mem_arena *arena, sizet initial_capacity, sizet mem_alignment)
 {
-    arr_init(&tbl->entries, arena, initial_capacity);
+    arr_init(&tbl->entries, arena, initial_capacity, mem_alignment);
     hashmap_init(&tbl->entc_hm, arena);
 }
 
 template<class T>
-void init_comp_tbl(comp_table<T> *tbl)
+void terminate_comp_tbl(comp_table<T> *tbl)
 {
     hashmap_terminate(&tbl->entc_hm);
     arr_terminate(&tbl->entries);
 }
 
 template<class T>
-void add_comp_tbl(comp_db *cdb)
+comp_table<T>* add_comp_tbl(comp_db *cdb, sizet initial_capacity=64, sizet mem_alignment=DEFAULT_MIN_ALIGNMENT)
 {
     if ((T::type_id + 1) > cdb->comp_tables.size) {
         arr_resize(&cdb->comp_tables, T::type_id + 1);
     }
     if (!cdb->comp_tables[T::type_id]) {
         auto ctbl = (comp_table<T> *)mem_alloc(sizeof(comp_table<T>), cdb->comp_tables.arena);
-        init_comp_tbl(ctbl, cdb->comp_tables.arena);
+        init_comp_tbl(ctbl, cdb->comp_tables.arena, initial_capacity, mem_alignment);
         cdb->comp_tables[T::type_id] = ctbl;
     }
+    return (comp_table<T> *)cdb->comp_tables[T::type_id];
 }
 
 template<class T>
@@ -110,14 +110,16 @@ comp_table<T> *get_comp_tbl(comp_db *cdb)
 }
 
 template<class T>
-void remove_comp_tbl(comp_db *cdb)
+bool remove_comp_tbl(comp_db *cdb)
 {
     auto ctbl = get_comp_tbl<T>(cdb);
     if (ctbl) {
-        init_comp_tbl(ctbl);
+        terminate_comp_tbl(ctbl);
         mem_free(ctbl, cdb->comp_tables.arena);
         cdb->comp_tables[T::type_id] = {};
+        return true;
     }
+    return false;
 }
 
 void init_comp_db(comp_db *cdb, mem_arena *arena);

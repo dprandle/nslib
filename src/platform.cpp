@@ -374,14 +374,10 @@ bool platform_window_resized(void *win_hndl)
     return frame_has_event_type(platform_window_event_type::WIN_RESIZE, &pf->fwind);
 }
 
-
 void start_platform_frame(platform_ctxt *ctxt)
 {
     ptimer_split(&ctxt->time_pts);
     process_platform_window_input(ctxt);
-    // if (ctxt->arenas.frame_linear.used > 0) {
-    //     dlog("Clearing %d used bytes from frame linear arena", ctxt->arenas.frame_linear.used);
-    // }
     mem_reset_arena(&ctxt->arenas.frame_linear);
 }
 

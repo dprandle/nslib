@@ -170,7 +170,7 @@ void hashset_terminate(hashset<T> *hs)
 }
 
 template<class T>
-void hashset_init(hashset<T> *hs, mem_arena *arena)
+void hashset_init(hashset<T> *hs, mem_arena *arena, sizet mem_alignment = DEFAULT_MIN_ALIGNMENT)
 {
     int seed0 = generate_rand_seed();
     int seed1 = generate_rand_seed();
@@ -189,8 +189,8 @@ void hashset_init(hashset<T> *hs, mem_arena *arena)
         return (*cast_a == *cast_b) ? 0 : 1;
     };
 
-    hs->hm = ihashmap_new_with_allocator(
-        mem_alloc, mem_realloc, mem_free, arena, sizeof(T), 0, seed0, seed1, hash_func, compare_func, nullptr, hs);
+    hs->hm = ihashmap_new(
+        mem_alloc, mem_realloc, mem_free, arena, mem_alignment, sizeof(T), 0, seed0, seed1, hash_func, compare_func, nullptr, hs);
 }
 
 template<class ArchiveT, class T>

@@ -17,6 +17,21 @@ struct fancy_struct
     string strarr[5];
 };
 
+enum robj_user_type
+{
+    ROBJ_TYPE_EXAMPLE_ROBJ = ROBJ_TYPE_USER
+};
+
+struct example_robj
+{
+    ROBJ(EXAMPLE_ROBJ)
+};
+
+pup_func(example_robj)
+{
+    PUP_ROBJ
+}    
+
 pup_func(fancy_struct)
 {
     pup_member(str1);
@@ -26,7 +41,7 @@ pup_func(fancy_struct)
 
 struct data_to_pup
 {
-    robj_common robj;
+    example_robj robj;
     fancy_struct fs;
     vec4 v4;
     vec4 v4_arr[5];
@@ -55,7 +70,6 @@ struct data_to_pup
     hashset<u8> hs_u8;
     hashset<i8> hs_i8;
     hashset<rid> hs_no_simp;
-    
 };
 
 pup_func(data_to_pup)
@@ -77,7 +91,7 @@ pup_func(data_to_pup)
     pup_member(hm_u8);
     pup_member(hm_i8);
     pup_member(hm_no_simp);
-    
+
     pup_member(hs);
     pup_member(hs_u64);
     pup_member(hs_i64);
@@ -88,7 +102,6 @@ pup_func(data_to_pup)
     pup_member(hs_u8);
     pup_member(hs_i8);
     pup_member(hs_no_simp);
-    
 }
 
 void seed_data(data_to_pup *data)
@@ -103,8 +116,8 @@ void seed_data(data_to_pup *data)
         for (int j = 0; j < 5; ++j) {
             data->v4_arr_of_arr[i][j] = {i + j * 1.4f, i + 2.8f * j, i + 3.3f * j, i + 4.2f * j};
         }
-        arr_emplace_back(&data->v2_dyn_arr, i*4.4, i*2.2f);
-    }    
+        arr_emplace_back(&data->v2_dyn_arr, i * 4.4, i * 2.2f);
+    }
     data->hm[string("key1")] = 1;
     data->hm[string("key2")] = 2;
     data->hm[string("key3")] = 3;
@@ -120,7 +133,7 @@ void seed_data(data_to_pup *data)
     data->hm_u32[2000000000u] = 1;
     data->hm_u32[3000000000u] = 2;
     data->hm_u32[4000000000u] = 3;
-    
+
     data->hm_i32[200000000] = 1;
     data->hm_i32[300000000] = 2;
     data->hm_i32[400000000] = 3;
@@ -128,7 +141,7 @@ void seed_data(data_to_pup *data)
     data->hm_u16[20000u] = 1;
     data->hm_u16[30000u] = 2;
     data->hm_u16[40000u] = 3;
-    
+
     data->hm_i16[2000] = 1;
     data->hm_i16[3000] = 2;
     data->hm_i16[4000] = 3;
@@ -136,7 +149,7 @@ void seed_data(data_to_pup *data)
     data->hm_u8[20u] = 1;
     data->hm_u8[30u] = 2;
     data->hm_u8[40u] = 3;
-    
+
     data->hm_i8[2] = 1;
     data->hm_i8[3] = 2;
     data->hm_i8[4] = 3;
@@ -145,46 +158,45 @@ void seed_data(data_to_pup *data)
     data->hm_no_simp[rid("key2")] = 2;
     data->hm_no_simp[rid("key3")] = 3;
 
-    hashset_insert(&data->hs,string("key1"));
-    hashset_insert(&data->hs,string("key2"));
-    hashset_insert(&data->hs,string("key3"));
+    hashset_insert(&data->hs, string("key1"));
+    hashset_insert(&data->hs, string("key2"));
+    hashset_insert(&data->hs, string("key3"));
 
-    hashset_insert(&data->hs_u64,(u64)12000000000000000000u);
-    hashset_insert(&data->hs_u64,(u64)13000000000000000000u);
-    hashset_insert(&data->hs_u64,(u64)14000000000000000000u);
+    hashset_insert(&data->hs_u64, (u64)12000000000000000000u);
+    hashset_insert(&data->hs_u64, (u64)13000000000000000000u);
+    hashset_insert(&data->hs_u64, (u64)14000000000000000000u);
 
-    hashset_insert(&data->hs_i64,(i64)2000000000000000000);
-    hashset_insert(&data->hs_i64,(i64)3000000000000000000);
-    hashset_insert(&data->hs_i64,(i64)4000000000000000000);
+    hashset_insert(&data->hs_i64, (i64)2000000000000000000);
+    hashset_insert(&data->hs_i64, (i64)3000000000000000000);
+    hashset_insert(&data->hs_i64, (i64)4000000000000000000);
 
-    hashset_insert(&data->hs_u32,2000000000u);
-    hashset_insert(&data->hs_u32,3000000000u);
-    hashset_insert(&data->hs_u32,4000000000u);
-    
-    hashset_insert(&data->hs_i32,200000000);
-    hashset_insert(&data->hs_i32,300000000);
-    hashset_insert(&data->hs_i32,400000000);
+    hashset_insert(&data->hs_u32, 2000000000u);
+    hashset_insert(&data->hs_u32, 3000000000u);
+    hashset_insert(&data->hs_u32, 4000000000u);
 
-    hashset_insert(&data->hs_u16,(u16)20000u);
-    hashset_insert(&data->hs_u16,(u16)30000u);
-    hashset_insert(&data->hs_u16,(u16)40000u);
-    
-    hashset_insert(&data->hs_i16,(i16)2000);
-    hashset_insert(&data->hs_i16,(i16)3000);
-    hashset_insert(&data->hs_i16,(i16)4000);
+    hashset_insert(&data->hs_i32, 200000000);
+    hashset_insert(&data->hs_i32, 300000000);
+    hashset_insert(&data->hs_i32, 400000000);
 
-    hashset_insert(&data->hs_u8,(u8)20u);
-    hashset_insert(&data->hs_u8,(u8)30u);
-    hashset_insert(&data->hs_u8,(u8)40u);
-    
-    hashset_insert(&data->hs_i8,(i8)2);
-    hashset_insert(&data->hs_i8,(i8)3);
-    hashset_insert(&data->hs_i8,(i8)4);
+    hashset_insert(&data->hs_u16, (u16)20000u);
+    hashset_insert(&data->hs_u16, (u16)30000u);
+    hashset_insert(&data->hs_u16, (u16)40000u);
 
-    hashset_insert(&data->hs_no_simp,rid("key1"));
-    hashset_insert(&data->hs_no_simp,rid("key2"));
-    hashset_insert(&data->hs_no_simp,rid("key3"));
-    
+    hashset_insert(&data->hs_i16, (i16)2000);
+    hashset_insert(&data->hs_i16, (i16)3000);
+    hashset_insert(&data->hs_i16, (i16)4000);
+
+    hashset_insert(&data->hs_u8, (u8)20u);
+    hashset_insert(&data->hs_u8, (u8)30u);
+    hashset_insert(&data->hs_u8, (u8)40u);
+
+    hashset_insert(&data->hs_i8, (i8)2);
+    hashset_insert(&data->hs_i8, (i8)3);
+    hashset_insert(&data->hs_i8, (i8)4);
+
+    hashset_insert(&data->hs_no_simp, rid("key1"));
+    hashset_insert(&data->hs_no_simp, rid("key2"));
+    hashset_insert(&data->hs_no_simp, rid("key3"));
 }
 
 void clear_data(data_to_pup *data)
@@ -215,7 +227,7 @@ void clear_data(data_to_pup *data)
 
 int app_init(platform_ctxt *ctxt, void *user_data)
 {
-    auto app = (app_data*)user_data;
+    auto app = (app_data *)user_data;
     ilog("App init");
     data_to_pup data{};
     hashmap_init(&data.hm, nullptr);
@@ -266,23 +278,23 @@ int app_init(platform_ctxt *ctxt, void *user_data)
 
     // ilog("Unpacking binary buffer archive to data_to_pup");
     // pup_var(&ba, data, {"data_to_pup"});
-    
+
     // ilog("data_to_pup after unpacking: \n%s", to_cstr(data));
-    
+
     json_archive ja{};
     init_jsa(&ja);
     ilog("Packing data_to_pup to json archive");
     pup_var(&ja, data, {"data_to_pup"});
     string js_str = jsa_to_json_string(&ja, true);
     string js_compact_str = jsa_to_json_string(&ja, false);
-    
+
     terminate_jsa(&ja);
     ilog("Resulting JSON pretty string:\n%s", str_cstr(js_str));
     ilog("Resulting JSON compact string:\n%s", str_cstr(js_compact_str));
     write_file("data.json", str_cstr(js_str), 1, str_len(js_str));
 
     clear_data(&data);
-    
+
     json_archive ja_in{};
     init_jsa(&ja_in, str_cstr(js_str));
     pup_var(&ja_in, data, {"data_to_pup"});

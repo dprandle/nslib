@@ -87,8 +87,8 @@ void init_sim_region(sim_region *reg, mem_arena *arena)
     hashmap_init(&reg->entmap, arena);
 
     add_comp_tbl<static_model>(&reg->cdb);
-    add_comp_tbl<camera>(&reg->cdb);
-    add_comp_tbl<transform>(&reg->cdb);
+    add_comp_tbl<camera>(&reg->cdb, 64, SIMD_MIN_ALIGNMENT);
+    add_comp_tbl<transform>(&reg->cdb, 5000, SIMD_MIN_ALIGNMENT);
 }
 
 void terminate_sim_region(sim_region *reg)

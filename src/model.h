@@ -33,9 +33,21 @@ struct submesh
     array<u16> inds;
 };
 
+struct mesh {
+    ROBJ(MESH)
+    array<submesh> submeshes;
+};
+
+pup_func(mesh)
+{
+    pup_member(submeshes);
+}
+
 void init_submesh(submesh *sm, mem_arena *arena);
 void terminate_submesh(submesh *sm);
 void make_rect(submesh *sm);
 void make_cube(submesh *sm);
+
+
 
 } // namespace nslib

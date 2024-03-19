@@ -176,13 +176,22 @@ intern int setup_pipeline(renderer *rndr)
     // Color blending
     VkPipelineColorBlendAttachmentState col_blnd_att{};
     col_blnd_att.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    col_blnd_att.blendEnable = VK_FALSE;
-    col_blnd_att.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;  // Optional
-    col_blnd_att.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
-    col_blnd_att.colorBlendOp = VK_BLEND_OP_ADD;             // Optional
-    col_blnd_att.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;  // Optional
-    col_blnd_att.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
-    col_blnd_att.alphaBlendOp = VK_BLEND_OP_ADD;             // Optional
+    col_blnd_att.blendEnable = true;
+    col_blnd_att.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    col_blnd_att.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    col_blnd_att.colorBlendOp = VK_BLEND_OP_ADD;
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // This is to do alpha blending - though it seems it doesn't really matter about the src and dest alpha and alpha blend op                  //
+    // col_blnd_att.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT; //
+    // col_blnd_att.blendEnable = true;                                                                                                         //
+    // col_blnd_att.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;           // VK_BLEND_FACTOR_ONE;  // Optional                             //
+    // col_blnd_att.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA; // VK_BLEND_FACTOR_ZERO; // Optional                             //
+    // col_blnd_att.colorBlendOp = VK_BLEND_OP_ADD;                            // Optional                                                      //
+    // col_blnd_att.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;           // VK_BLEND_FACTOR_ONE;  // Optional                             //
+    // col_blnd_att.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA; // VK_BLEND_FACTOR_ZERO; // Optional                             //
+    // col_blnd_att.alphaBlendOp = VK_BLEND_OP_ADD;                            // Optional                                                      //
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    
     arr_push_back(&info.col_blend.attachments, col_blnd_att);
 
     // Depth Stencil
@@ -570,7 +579,7 @@ intern void recreate_swapchain(renderer *rndr)
 intern i32 acquire_swapchain_image(renderer *rndr, vkr_frame *cur_frame, u32 *im_ind)
 {
     auto dev = &rndr->vk->inst.device;
-    
+
     // Acquire the image, signal the image_avail semaphore once the image has been acquired. We get the index back, but
     // that doesn't mean the image is ready. The image is only ready (on the GPU side) once the image avail semaphore is triggered
     VkResult result = vkAcquireNextImageKHR(dev->hndl, dev->swapchain.swapchain, UINT64_MAX, cur_frame->image_avail, VK_NULL_HANDLE, im_ind);
@@ -632,7 +641,7 @@ int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_fram
 {
     mem_reset_arena(&rndr->vk_frame_linear);
     auto dev = &rndr->vk->inst.device;
-    
+
     // Grab the current in flight frame and its command buffer
     int current_frame_ind = finished_frame_count % MAX_FRAMES_IN_FLIGHT;
     auto cur_frame = &dev->rframes[current_frame_ind];
@@ -642,6 +651,8 @@ int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_fram
     // based on return value
     if (platform_framebuffer_resized(rndr->vk->cfg.window)) {
         recreate_swapchain(rndr);
+        ivec2 sz = get_framebuffer_size(rndr->vk->cfg.window);
+        cam->proj = (math::perspective(60.0f, (f32)sz.w / (f32)sz.h, 0.1f, 1000.0f));
     }
 
     // Get the next available swapchain image index
@@ -660,7 +671,7 @@ int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_fram
         elog("Failed to wait for fence");
         return err_code::RENDER_WAIT_FENCE_FAIL;
     }
-    
+
     vk_err = vkResetFences(dev->hndl, 1, &cur_frame->in_flight);
     if (vk_err != VK_SUCCESS) {
         elog("Failed to reset fence");

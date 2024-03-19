@@ -3,21 +3,21 @@
 namespace nslib
 {
 
-intern const vertex RECT_VERTS[] = {{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}, 0xffff0000}, // Colors are ARGB - msb gets alpha
-                                    {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}, 0xff00ff00},
-                                    {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}, 0xff0000ff},
-                                    {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}, 0xff00ffff}};
+intern const vertex RECT_VERTS[] = {{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}, 0xa0ff0000}, // Colors are ARGB - msb gets alpha
+                                    {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}, 0xa000ff00},
+                                    {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}, 0xa00000ff},
+                                    {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}, 0xa000ffff}};
 
 intern const u16 RECT_INDS_TRI_LIST[] = {0, 1, 2, 2, 3, 0};
 
 intern vertex CUBE_VERTS[] = {{{-0.5f, 0.5f, 0.5f}, {0.0f, 1.0f}, 0xff000000},
                               {{0.5f, 0.5f, 0.5f}, {1.0f, 1.0f}, 0xff0000ff},
-                              {{-0.5f, -0.5f, 0.5f}, {0.0f, 0.0f},0xff00ff00},
-                              {{0.5f, -0.5f, 0.5f}, {1.0f, 0.0f},0xff00ffff},
-                              {{-0.5f, 0.5f, -0.5f}, {0.0f, 1.0f},0xffff0000},
-                              {{0.5f, 0.5f, -0.5f}, {1.0f, 1.0f},0xffff00ff},
-                              {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f},0xffffff00},
-                              {{0.5f, -0.5f, -0.5f}, {1.0f, 0.0f},0xffffffff}};
+                              {{-0.5f, -0.5f, 0.5f}, {0.0f, 0.0f}, 0xff00ff00},
+                              {{0.5f, -0.5f, 0.5f}, {1.0f, 0.0f}, 0xff00ffff},
+                              {{-0.5f, 0.5f, -0.5f}, {0.0f, 1.0f}, 0xffff0000},
+                              {{0.5f, 0.5f, -0.5f}, {1.0f, 1.0f}, 0xffff00ff},
+                              {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, 0xffffff00},
+                              {{0.5f, -0.5f, -0.5f}, {1.0f, 0.0f}, 0xffffffff}};
 
 intern const u16 CUBE_INDS_TRI_LIST[] = {0, 1, 2,          // 0
                                          1, 3, 2, 4, 6, 5, // 2

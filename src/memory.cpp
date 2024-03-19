@@ -117,8 +117,8 @@ intern void *mem_free_list_alloc(mem_arena *arena, sizet size, sizet alignment_p
         size = sizeof(mem_node);
     }
     sizet alignment(alignment_p);
-    if (alignment < 8) {
-        alignment = 8;
+    if (alignment < DEFAULT_MIN_ALIGNMENT) {
+        alignment = DEFAULT_MIN_ALIGNMENT;
     }
 
     // Padding is the amount of padding we need considering the passed in alignment and the size of our header address
@@ -373,7 +373,7 @@ void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment)
 
 void *mem_alloc(sizet bytes, mem_arena *arena)
 {
-    return mem_alloc(bytes, arena, 8);
+    return mem_alloc(bytes, arena, DEFAULT_MIN_ALIGNMENT);
 }
 
 void *mem_alloc(sizet bytes)
@@ -442,7 +442,7 @@ void *mem_realloc(void *ptr, sizet size, mem_arena *arena, sizet alignment)
 
 void *mem_realloc(void *ptr, sizet size, mem_arena *arena)
 {
-    return mem_realloc(ptr, size, arena, 8);
+    return mem_realloc(ptr, size, arena, DEFAULT_MIN_ALIGNMENT);
 }
 
 void *mem_realloc(void *ptr, sizet size)
@@ -528,7 +528,7 @@ void mem_init_arena(sizet total_size, mem_alloc_type mtype, mem_arena *arena)
 
     // If pool allocator total size must be multiple of chunk size, and chunk size must not be zero
     assert(arena->alloc_type != mem_alloc_type::POOL ||
-           (((arena->total_size % arena->mpool.chunk_size) == 0) && (arena->mpool.chunk_size >= 8)));
+           (((arena->total_size % arena->mpool.chunk_size) == 0) && (arena->mpool.chunk_size >= DEFAULT_MIN_ALIGNMENT)));
 
     if (!arena->upstream_allocator)
         arena->start = platform_alloc(arena->total_size);

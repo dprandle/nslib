@@ -7,8 +7,8 @@
 namespace nslib
 {
 struct mem_arena;
-using malloc_func_type = void *(sizet, mem_arena *);
-using realloc_func_type = void *(void *, sizet, mem_arena *);
+using malloc_func_type = void *(sizet, mem_arena *, sizet);
+using realloc_func_type = void *(void *, sizet, mem_arena *, sizet);
 using free_func_type = void(void *, mem_arena *);
 
 struct ihashmap_bucket
@@ -19,22 +19,11 @@ struct ihashmap_bucket
 
 struct ihashmap
 {
-    // Always allow a zero initialized hmap
-    ihashmap(){};
-
-    // Deep copy the contents of copy in to this hashmap - use the same allocators as copy as well
-    ihashmap(const ihashmap &copy);
-
-    // Clear all items and release associated memory
-    ~ihashmap();
-
-    // Operator= uses copy and swap idiom
-    ihashmap &operator=(ihashmap rhs);
-
     malloc_func_type *malloc;
     realloc_func_type *realloc;
     free_func_type *free;
     mem_arena *arena;
+    sizet mem_alignment;
     sizet elsize;
     sizet cap;
     u64 seed0;
@@ -73,11 +62,7 @@ struct ihashmap
 // The hashmap must be freed with hashmap_free().
 // Param `elfree` is a function that frees a specific item. This should be NULL
 // unless you're storing some kind of reference data in the hash.
-ihashmap *ihashmap_new(malloc_func_type *malloc,
-                       realloc_func_type *realloc,
-                       free_func_type *free,
-                       mem_arena *arena,
-                       sizet elsize,
+ihashmap *ihashmap_new(sizet elsize,
                        sizet cap,
                        u64 seed0,
                        u64 seed1,
@@ -86,18 +71,19 @@ ihashmap *ihashmap_new(malloc_func_type *malloc,
                        void (*elfree)(void *item),
                        void *udata);
 
-ihashmap *ihashmap_new_with_allocator(malloc_func_type *malloc,
-                                      realloc_func_type *realloc,
-                                      free_func_type *free,
-                                      mem_arena *arena,
-                                      sizet elsize,
-                                      sizet cap,
-                                      u64 seed0,
-                                      u64 seed1,
-                                      u64 (*hash)(const void *item, u64 seed0, u64 seed1),
-                                      int (*compare)(const void *a, const void *b, void *udata),
-                                      void (*elfree)(void *item),
-                                      void *udata);
+ihashmap *ihashmap_new(malloc_func_type *malloc,
+                       realloc_func_type *realloc,
+                       free_func_type *free,
+                       mem_arena *arena,
+                       sizet mem_alighment,
+                       sizet elsize,
+                       sizet cap,
+                       u64 seed0,
+                       u64 seed1,
+                       u64 (*hash)(const void *item, u64 seed0, u64 seed1),
+                       int (*compare)(const void *a, const void *b, void *udata),
+                       void (*elfree)(void *item),
+                       void *udata);
 
 ihashmap *ihashmap_new(const struct ihashmap *copy_from);
 
