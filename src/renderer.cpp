@@ -84,6 +84,7 @@ intern int setup_pipeline(renderer *rndr)
 {
     auto vk = rndr->vk;
     vkr_pipeline_cfg info{};
+    
     arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_VIEWPORT);
     arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_SCISSOR);
 
@@ -181,17 +182,17 @@ intern int setup_pipeline(renderer *rndr)
     col_blnd_att.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
     col_blnd_att.colorBlendOp = VK_BLEND_OP_ADD;
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // This is to do alpha blending - though it seems it doesn't really matter about the src and dest alpha and alpha blend op                  //
-    // col_blnd_att.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT; //
-    // col_blnd_att.blendEnable = true;                                                                                                         //
-    // col_blnd_att.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;           // VK_BLEND_FACTOR_ONE;  // Optional                             //
-    // col_blnd_att.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA; // VK_BLEND_FACTOR_ZERO; // Optional                             //
-    // col_blnd_att.colorBlendOp = VK_BLEND_OP_ADD;                            // Optional                                                      //
-    // col_blnd_att.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;           // VK_BLEND_FACTOR_ONE;  // Optional                             //
-    // col_blnd_att.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA; // VK_BLEND_FACTOR_ZERO; // Optional                             //
-    // col_blnd_att.alphaBlendOp = VK_BLEND_OP_ADD;                            // Optional                                                      //
+    // This is to do alpha blending - though it seems it doesn't really matter about the src and dest alpha and alpha blend op //
+    // col_blnd_att.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
+    // VK_COLOR_COMPONENT_A_BIT; // col_blnd_att.blendEnable = true; // col_blnd_att.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA; //
+    // VK_BLEND_FACTOR_ONE;  // Optional                             // col_blnd_att.dstColorBlendFactor =
+    // VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA; // VK_BLEND_FACTOR_ZERO; // Optional                             // col_blnd_att.colorBlendOp =
+    // VK_BLEND_OP_ADD;                            // Optional                                                      //
+    // col_blnd_att.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;           // VK_BLEND_FACTOR_ONE;  // Optional //
+    // col_blnd_att.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA; // VK_BLEND_FACTOR_ZERO; // Optional //
+    // col_blnd_att.alphaBlendOp = VK_BLEND_OP_ADD;                            // Optional //
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    
+
     arr_push_back(&info.col_blend.attachments, col_blnd_att);
 
     // Depth Stencil
@@ -206,13 +207,14 @@ intern int setup_pipeline(renderer *rndr)
     const char *fnames[] = {"data/shaders/rdev.vert.spv", "data/shaders/rdev.frag.spv"};
     for (int i = 0; i <= VKR_SHADER_STAGE_FRAG; ++i) {
         platform_file_err_desc err{};
+        arr_init(&info.shader_stages[i].code, &rndr->vk_frame_linear);
         read_file(fnames[i], &info.shader_stages[i].code, 0, &err);
         if (err.code != err_code::PLATFORM_NO_ERROR) {
             wlog("Error reading file %s from disk (code %d): %s", fnames[i], err.code, err.str);
             return err_code::RENDER_LOAD_SHADERS_FAIL;
         }
         info.shader_stages[i].entry_point = "main";
-    }
+    }    
 
     info.rpass = &vk->inst.device.render_passes[rndr->render_pass_ind];
     rndr->pipeline_ind = vkr_add_pipeline(&vk->inst.device, {});
@@ -509,15 +511,17 @@ intern int record_command_buffer(renderer *rndr, sim_region *rgn, vkr_framebuffe
     auto sm_tbl = get_comp_tbl<static_model>(&rgn->cdb);
     vkCmdSetPrimitiveTopology(cmd_buf->hndl, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
-    for (int i = 0; i < tf_tbl->entries.size; ++i) {
-        auto curtf = &tf_tbl->entries[i];
-        auto rc = get_comp(curtf->ent_id, sm_tbl);
+    if (tf_tbl && sm_tbl) {
+        for (int i = 0; i < tf_tbl->entries.size; ++i) {
+            auto curtf = &tf_tbl->entries[i];
+            auto rc = get_comp(curtf->ent_id, sm_tbl);
 
-        if (rc) {
-            pc.model = curtf->cached;
+            if (rc) {
+                pc.model = curtf->cached;
 
-            vkCmdPushConstants(cmd_buf->hndl, pipeline->layout_hndl, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push_constants), &pc);
-            vkCmdDrawIndexed(cmd_buf->hndl, rndr->rect.inds.size, 1, 0, 0, 0);
+                vkCmdPushConstants(cmd_buf->hndl, pipeline->layout_hndl, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push_constants), &pc);
+                vkCmdDrawIndexed(cmd_buf->hndl, rndr->rect.inds.size, 1, 0, 0, 0);
+            }
         }
     }
 
@@ -652,7 +656,9 @@ int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_fram
     if (platform_framebuffer_resized(rndr->vk->cfg.window)) {
         recreate_swapchain(rndr);
         ivec2 sz = get_framebuffer_size(rndr->vk->cfg.window);
-        cam->proj = (math::perspective(60.0f, (f32)sz.w / (f32)sz.h, 0.1f, 1000.0f));
+        if (cam) {
+            cam->proj = (math::perspective(60.0f, (f32)sz.w / (f32)sz.h, 0.1f, 1000.0f));
+        }
     }
 
     // Get the next available swapchain image index
@@ -679,10 +685,12 @@ int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_fram
     }
 
     // Update uniform buffer with some matrices
-    uniform_buffer_object ubo{};
-    ubo.proj_view = cam->proj * cam->view;
-    int ubo_ind = cur_frame->uniform_buffer_ind;
-    memcpy(dev->buffers[ubo_ind].mem_info.pMappedData, &ubo, sizeof(uniform_buffer_object));
+    if (cam) {
+        uniform_buffer_object ubo{};
+        ubo.proj_view = cam->proj * cam->view;
+        int ubo_ind = cur_frame->uniform_buffer_ind;
+        memcpy(dev->buffers[ubo_ind].mem_info.pMappedData, &ubo, sizeof(uniform_buffer_object));
+    }
 
     // The command buf index struct has an ind struct into the pool the cmd buf comes from, and then an ind into the buffer
     // The ind into the pool has an ind into the queue family (as that contains our array of command pools) and then and

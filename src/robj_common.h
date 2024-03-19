@@ -62,17 +62,23 @@ inline bool operator!=(const rid &lhs, const rid &rhs)
     pup_member(id);                                                                                                                        \
     pup_member(flags);
 
+template<class T>
 struct robj_cache
 {
+    using robj_type = T;
+    using iter = key_val_pair<rid, T *> *;
+
     // Resource id to pointer to resource obj
-    hashmap<rid, void *> rmap{};
-    u32 rtype{};
+    hashmap<rid, T *> rmap{};
     mem_arena arena{};
+    sizet mem_alignment{};
 };
+
+using mesh_cache = robj_cache<struct mesh>;
 
 struct robj_cache_group
 {
-    array<robj_cache *> caches{};
+    array<void *> caches{};
 };
 
 // Initialize cache group with arena - all caches added to group will use this area
@@ -83,104 +89,164 @@ void init_cache_group_default_types(robj_cache_group *cg, mem_arena *arena);
 
 void terminate_cache_group(robj_cache_group *cg);
 
-// Initialize cache of type rtype with a mem pool of total size item_budget * sizeof(item_size)
-void init_cache(robj_cache *cache, u32 rtype, sizet item_size, sizet item_budget, mem_arena *upstream);
+// Terminate all of the default robj types from the above enum and typedefs
+void terminate_cache_group_default_types(robj_cache_group *cg);
 
 // Initialize cache of type rtype with a mem pool of total size item_budget * sizeof(item_size)
 template<class T>
-void init_cache(robj_cache *cache, sizet item_budget, mem_arena *upstream)
+void init_cache(robj_cache<T> *cache, sizet item_budget, sizet mem_alignment, mem_arena *upstream)
 {
-    init_cache(cache, T::type, sizeof(T), item_budget, upstream);
+    hashmap_init(&cache->rmap, upstream);
+    cache->arena.mpool.chunk_size = sizeof(T);
+    cache->arena.upstream_allocator = upstream;
+    cache->mem_alignment = mem_alignment;
+    mem_init_arena(item_budget * cache->arena.mpool.chunk_size, mem_alloc_type::POOL, &cache->arena);
 }
 
-void terminate_cache(robj_cache *cache);
+template<class T>
+void terminate_cache(robj_cache<T> *cache)
+{
+    // NOTE: We might want to call terminate on each robj here
+    sizet i{};
+    while (auto iter = cache_iter(&i, cache)) {
+        terminate_robj(iter->value);
+        mem_free(iter->value, &cache->arena);
+    }
+    mem_terminate_arena(&cache->arena);
+    hashmap_terminate(&cache->rmap);
+}
 
-robj_cache *add_cache(u32 rtype, sizet item_size, sizet item_budget, robj_cache_group *cg);
 // Add and initialize a cache to the passed in cache group
-
 template<class T>
-robj_cache *add_cache(sizet item_budget, robj_cache_group *cg)
+robj_cache<T> *add_cache(sizet item_budget, sizet mem_alignment, robj_cache_group *cg)
 {
-    return add_cache(T::type, sizeof(T), item_budget, cg);
+    if ((T::type_id + 1) > cg->caches.size) {
+        arr_resize(&cg->caches, T::type_id + 1);
+    }
+    if (!cg->caches[T::type_id]) {
+        auto cache = (robj_cache<T> *)mem_alloc(sizeof(robj_cache<T>), cg->caches.arena);
+        init_cache(cache, item_budget, mem_alignment, cg->caches.arena);
+        cg->caches[T::type_id] = cache;
+    }
+    return (robj_cache<T> *)cg->caches[T::type_id];
 }
 
-robj_cache *get_cache(u32 rtype, const robj_cache_group *cg);
+template<class T>
+robj_cache<T> *add_cache(sizet item_budget, robj_cache_group *cg)
+{
+    return add_cache<T>(item_budget, DEFAULT_MIN_ALIGNMENT, cg);
+}
 
 template<class T>
-robj_cache *get_cache(const robj_cache_group *cg)
+robj_cache<T> *get_cache(const robj_cache_group *cg)
 {
-    return get_cache(T::type_id, cg);
+    if (T::type_id < cg->caches.size) {
+        return (robj_cache<T> *)cg->caches[T::type_id];
+    }
+    return nullptr;
+}
+
+template<class T>
+typename robj_cache<T>::iter cache_iter(sizet *i, robj_cache<T> *cache)
+{
+    return hashmap_iter(&cache->rmap, i);
+}
+
+// Remove and terminates cache from the cache group - true on success or if the cache is not there false
+template<class T>
+bool remove_cache(robj_cache<T> *cache, robj_cache_group *cg)
+{
+    if (cache) {
+        assert(cache == cg->caches[T::type_id]);
+        terminate_cache(cache);
+        mem_free(cache, cg->caches.arena);
+        cg->caches[T::type_id] = {};
+        return true;
+    }
+    return false;
 }
 
 // Remove and terminate a cache of type rtype from the cache group - true on success or if the cache is not there false
-bool remove_cache(u32 rtype, robj_cache_group *cg);
-
-// Remove and terminates cache from the cache group - true on success or if the cache is not there false
-bool remove_cache(robj_cache *cache, robj_cache_group *cg);
-
-// This will add a new robj to the cache, but it will be completely zeroed out so you gotta set the id manually
-void *add_robj(const rid &id, robj_cache *cache);
-
-// This will add a new robj to the cache, but it will be completely zeroed out so you gotta set the id manually
-void *add_robj(robj_cache *cache);
-
-// This will add a new robj to the cache, zero it out, then set the id of it
 template<class T>
-T *add_robj(const rid &id, robj_cache *cache)
+bool remove_cache(robj_cache_group *cg)
 {
-    assert(T::type_id == cache->rtype);
-    auto ret = (T *)add_robj(id, cache);
-    ret->id = id;
-    return ret;
+    auto cache = get_cache<T>(cg);
+    return remove_cache(cache, cg);
 }
 
-// This will add a new robj to the cache, zero it out, then set the id of it
+// This will add a new robj to the cache, but it will be completely zeroed out so you gotta set the id manually
 template<class T>
-T *add_robj(robj_cache *cache)
+T *add_robj(const rid &id, robj_cache<T> *cache)
 {
-    return add_robj<T>(generate_id(), cache);
+    auto ret = (T *)mem_alloc(cache->arena.mpool.chunk_size, &cache->arena, cache->mem_alignment);
+    memset(ret, 0, cache->arena.mpool.chunk_size);
+    ret->id = id;
+    hashmap_set(&cache->rmap, id, ret);
+    return ret;
 }
 
 // This will add a new robj to the cache, zero it out, set it to the copy, and then set the id to copy_id
 template<class T>
-T *add_robj(const T &copy, const rid &copy_id, robj_cache *cache)
+T *add_robj(const T &copy, const rid &copy_id, robj_cache<T> *cache)
 {
-    assert(T::type_id == cache->rtype);
     auto cpy = add_robj<T>(cache, copy_id);
     *cpy = copy;
     cpy->id = copy_id;
     return cpy;
 }
 
-// This will add a new robj to the cache, zero it out, set it to the copy, and then set the id to copy_id
+// This will add a new robj to the cache, zero it out, then set the id of it
 template<class T>
-T *add_robj(const T &copy, robj_cache *cache)
+T *add_robj(robj_cache<T> *cache)
+{
+    return add_robj<T>(generate_id(), cache);
+}
+
+// This will add a new robj to the cache, zero it out, set it to the copy, and then set the id to a generated id
+template<class T>
+T *add_robj(const T &copy, robj_cache<T> *cache)
 {
     return add_robj<T>(copy, generate_id(), cache);
 }
 
-void *get_robj(const rid &id, const robj_cache *cache);
-
-void *get_robj(const rid &id, u32 rtype, const robj_cache_group *cg);
-
 template<class T>
-T *get_robj(const rid &id, const robj_cache *cache)
+T *get_robj(const rid &id, const robj_cache<T> *cache)
 {
-    return (T *)get_robj(id, cache);
+    auto item = hashmap_find(&cache->rmap, id);
+    if (item) {
+        return item->value;
+    }
+    return nullptr;
 }
 
 template<class T>
 T *get_robj(const rid &id, const robj_cache_group *cg)
 {
-    return (T *)get_robj(id, T::type_id, cg);
+    auto cache = get_cache<T>(cg);
+    return get_robj(id, cache);
 }
-
-bool remove_robj(const rid &id, robj_cache *cache);
 
 template<class T>
-bool remove_robj(const T &item, robj_cache *cache)  {
-    return remove_obj(item->id, cache);
+bool remove_robj(const rid &id, robj_cache<T> *cache)
+{
+    auto obj = get_robj(id, cache);
+    return remove_robj(obj, cache);
 }
 
+template<class T>
+bool remove_robj(const T &item, robj_cache<T> *cache)
+{
+    if (item) {
+        hashmap_remove(&cache->rmap, item->id);
+        mem_free(item, &cache->arena);
+        return true;
+    }
+    return false;
+}
+
+template<class T>
+void terminate_robj(T *robj) {
+    ilog("Teminate %s id %s", robj->type_str, str_cstr(robj->id.str));
+}
 
 } // namespace nslib

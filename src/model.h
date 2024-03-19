@@ -48,6 +48,12 @@ void terminate_submesh(submesh *sm);
 void make_rect(submesh *sm);
 void make_cube(submesh *sm);
 
+void init_mesh(mesh *mesh, mem_arena *arena);
+void terminate_mesh(mesh *mesh);
+
+inline void terminate_robj(mesh *mesh) {
+    terminate_mesh(mesh);
+}
 
 
 } // namespace nslib

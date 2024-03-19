@@ -149,31 +149,37 @@ int init(platform_ctxt *ctxt, void *user_data)
 {
     auto app = (app_data *)user_data;
 
-    init_cache_group_default_types(&app->cg, mem_global_arena());
-    auto mc = get_cache<mesh>(&app->cg);
-    auto msh = (mesh*)add_robj(mc);
-    
-    init_sim_region(&app->rgn, mem_global_arena());
+    // init_cache_group_default_types(&app->cg, mem_global_arena());
+    // auto mc = get_cache<mesh>(&app->cg);
 
-    // Create a bunch of entities
-    int count = 347;
-    add_entities(count, &app->rgn);
-
-    for (int i = 0; i < app->rgn.ents.size; ++i) {
-        auto tfcomp = add_comp<transform>(&app->rgn.ents[i]);
-        add_comp<static_model>(&app->rgn.ents[i]);
-        int mod = i - count / 2;
-        tfcomp->world_pos = vec3{0, 0, -mod * 0.05f};
-        tfcomp->cached = math::model_tform(tfcomp->world_pos, tfcomp->orientation, tfcomp->scale);
-    }
+    // auto msh = add_robj(mc);
+    // init_mesh(msh, mem_global_arena());
     
-    //Create input map
-    init_keymap("global", &app->global_km, &ctxt->arenas.free_list);
-
-    // Create and setup input for camera
-    setup_camera_controller(ctxt, app, &app->global_km);
+    // submesh sm{};
+    // make_cube(&sm);
+    // arr_emplace_back(&msh->submeshes, sm);
     
-    push_keymap(&app->global_km, &app->stack);
+    // init_sim_region(&app->rgn, mem_global_arena());
+
+    // // Create a bunch of entities
+    // int count = 347;
+    // add_entities(count, &app->rgn);
+
+    // for (int i = 0; i < app->rgn.ents.size; ++i) {
+    //     auto tfcomp = add_comp<transform>(&app->rgn.ents[i]);
+    //     add_comp<static_model>(&app->rgn.ents[i]);
+    //     int mod = i - count / 2;
+    //     tfcomp->world_pos = vec3{0, 0, -mod * 0.05f};
+    //     tfcomp->cached = math::model_tform(tfcomp->world_pos, tfcomp->orientation, tfcomp->scale);
+    // }
+    
+    // //Create input map
+    // init_keymap("global", &app->global_km, &ctxt->arenas.free_list);
+
+    // // Create and setup input for camera
+    // setup_camera_controller(ctxt, app, &app->global_km);
+    
+    // push_keymap(&app->global_km, &app->stack);
     
     return init_renderer(&app->rndr, ctxt->win_hndl, &ctxt->arenas.free_list);
 }
@@ -182,33 +188,33 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
 {
     auto app = (app_data *)user_data;
     
-    map_input_frame(&ctxt->finp, &app->stack);
-    f64 elapsed_s = nanos_to_sec(ptimer_elapsed_dt(&ctxt->time_pts));
+    // map_input_frame(&ctxt->finp, &app->stack);
+    // f64 elapsed_s = nanos_to_sec(ptimer_elapsed_dt(&ctxt->time_pts));
 
-    // Move the cam if needed
-    auto cam = get_comp<camera>(app->cam_id, &app->rgn.cdb);    
-    if (app->movement != ivec2{}) {
-        auto cam_tform = get_comp<transform>(app->cam_id, &app->rgn.cdb);
-        auto right = math::right_vec(cam_tform->orientation);
-        auto target = math::target_vec(cam_tform->orientation);
-        cam_tform->world_pos += (right * app->movement.x + target * app->movement.y) * ctxt->time_pts.dt * 10;
-        cam_tform->cached = math::model_tform(cam_tform->world_pos, cam_tform->orientation, cam_tform->scale);
-        cam->view = math::inverse(cam_tform->cached);
-    }
+    // // Move the cam if needed
+    // auto cam = get_comp<camera>(app->cam_id, &app->rgn.cdb);    
+    // if (app->movement != ivec2{}) {
+    //     auto cam_tform = get_comp<transform>(app->cam_id, &app->rgn.cdb);
+    //     auto right = math::right_vec(cam_tform->orientation);
+    //     auto target = math::target_vec(cam_tform->orientation);
+    //     cam_tform->world_pos += (right * app->movement.x + target * app->movement.y) * ctxt->time_pts.dt * 10;
+    //     cam_tform->cached = math::model_tform(cam_tform->world_pos, cam_tform->orientation, cam_tform->scale);
+    //     cam->view = math::inverse(cam_tform->cached);
+    // }
 
-    // Spin some pictures
-    auto tform_tbl = get_comp_tbl<transform>(&app->rgn.cdb);
-    for (sizet i = 0; i < tform_tbl->entries.size; ++i) {
-        auto curtf = &tform_tbl->entries[i];
-        if (i % 100 == 0 && curtf->ent_id != app->cam_id) {
-            curtf->orientation *= math::orientation(vec4{1.0, 0.0, 0.0, (f32)ctxt->time_pts.dt});
-            curtf->world_pos.x = math::sin((f32)elapsed_s);
-            curtf->world_pos.y = math::cos((f32)elapsed_s);
-            curtf->flags = COMP_FLAG_DIRTY;
-            curtf->cached = math::model_tform(curtf->world_pos, curtf->orientation, curtf->scale);
-        }
-    }
-    return render_frame(&app->rndr, &app->rgn, cam, ctxt->finished_frames);
+    // // Spin some pictures
+    // auto tform_tbl = get_comp_tbl<transform>(&app->rgn.cdb);
+    // for (sizet i = 0; i < tform_tbl->entries.size; ++i) {
+    //     auto curtf = &tform_tbl->entries[i];
+    //     if (i % 100 == 0 && curtf->ent_id != app->cam_id) {
+    //         curtf->orientation *= math::orientation(vec4{1.0, 0.0, 0.0, (f32)ctxt->time_pts.dt});
+    //         curtf->world_pos.x = math::sin((f32)elapsed_s);
+    //         curtf->world_pos.y = math::cos((f32)elapsed_s);
+    //         curtf->flags = COMP_FLAG_DIRTY;
+    //         curtf->cached = math::model_tform(curtf->world_pos, curtf->orientation, curtf->scale);
+    //     }
+    // }
+    return render_frame(&app->rndr, &app->rgn, nullptr, ctxt->finished_frames);
 }
 
 int terminate(platform_ctxt *ctxt, void *user_data)
@@ -217,7 +223,7 @@ int terminate(platform_ctxt *ctxt, void *user_data)
     terminate_renderer(&app->rndr);
     terminate_keymap(&app->global_km);
     terminate_sim_region(&app->rgn);
-    terminate_cache_group(&app->cg);
+    terminate_cache_group_default_types(&app->cg);
     return err_code::PLATFORM_NO_ERROR;
 }
 

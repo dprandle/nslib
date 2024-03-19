@@ -49,8 +49,8 @@ void make_rect(submesh *sm)
 
 void init_submesh(submesh *sm, mem_arena *arena)
 {
-    arr_init(&sm->verts, arena);
-    arr_init(&sm->cjoints, arena);
+    arr_init(&sm->verts, arena, SIMD_MIN_ALIGNMENT);
+    arr_init(&sm->cjoints, arena, SIMD_MIN_ALIGNMENT);
     arr_init(&sm->inds, arena);
 }
 
@@ -60,4 +60,18 @@ void terminate_submesh(submesh *sm)
     arr_terminate(&sm->cjoints);
     arr_terminate(&sm->inds);
 }
+
+void init_mesh(mesh *mesh, mem_arena *arena)
+{
+    arr_init(&mesh->submeshes, arena);
+}
+
+void terminate_mesh(mesh *mesh)
+{
+    for (int i = 0; i < mesh->submeshes.size; ++i) {
+        terminate_submesh(&mesh->submeshes[i]);
+    }
+    arr_terminate(&mesh->submeshes);
+}
+
 } // namespace nslib

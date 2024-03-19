@@ -16,7 +16,8 @@ enum comp_type
     COMP_TYPE_USER
 };
 
-enum comp_flags:u64 {
+enum comp_flags : u64
+{
     COMP_FLAG_DIRTY = 1
 };
 
@@ -90,7 +91,7 @@ void terminate_comp_tbl(comp_table<T> *tbl)
 }
 
 template<class T>
-comp_table<T>* add_comp_tbl(comp_db *cdb, sizet initial_capacity=64, sizet mem_alignment=DEFAULT_MIN_ALIGNMENT)
+comp_table<T> *add_comp_tbl(comp_db *cdb, sizet initial_capacity = 64, sizet mem_alignment = DEFAULT_MIN_ALIGNMENT)
 {
     if ((T::type_id + 1) > cdb->comp_tables.size) {
         arr_resize(&cdb->comp_tables, T::type_id + 1);
@@ -106,7 +107,10 @@ comp_table<T>* add_comp_tbl(comp_db *cdb, sizet initial_capacity=64, sizet mem_a
 template<class T>
 comp_table<T> *get_comp_tbl(comp_db *cdb)
 {
-    return (comp_table<T> *)cdb->comp_tables[T::type_id];
+    if (T::type_id < cdb->comp_tables.size) {
+        return (comp_table<T> *)cdb->comp_tables[T::type_id];
+    }
+    return nullptr;
 }
 
 template<class T>

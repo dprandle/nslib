@@ -1967,14 +1967,14 @@ void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
     vkr_terminate_render_frames(dev, vk);
     vkr_terminate_swapchain(&dev->swapchain, vk);
 
-    for (int i = 0; i < dev->pipelines.size; ++i) {
-        vkr_terminate_pipeline(vk, &dev->pipelines[i]);
+    for (int i = 0; i < dev->render_passes.size; ++i) {
+        vkr_terminate_render_pass(vk, &dev->render_passes[i]);
     }
     for (int i = 0; i < dev->framebuffers.size; ++i) {
         vkr_terminate_framebuffer(vk, &dev->framebuffers[i]);
     }
-    for (int i = 0; i < dev->render_passes.size; ++i) {
-        vkr_terminate_render_pass(vk, &dev->render_passes[i]);
+    for (int i = 0; i < dev->pipelines.size; ++i) {
+        vkr_terminate_pipeline(vk, &dev->pipelines[i]);
     }
     for (int i = 0; i < dev->buffers.size; ++i) {
         vkr_terminate_buffer(&dev->buffers[i], vk);
@@ -1990,11 +1990,13 @@ void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
     }
 
     arr_terminate(&dev->render_passes);
-    arr_terminate(&dev->pipelines);
     arr_terminate(&dev->framebuffers);
+    arr_terminate(&dev->pipelines);
     arr_terminate(&dev->buffers);
     arr_terminate(&dev->images);
-
+    arr_terminate(&dev->image_views);
+    arr_terminate(&dev->samplers);
+    
     for (sizet qfam_i = 0; qfam_i < VKR_QUEUE_FAM_TYPE_COUNT; ++qfam_i) {
         auto cur_fam = &dev->qfams[qfam_i];
         arr_terminate(&cur_fam->qs);
