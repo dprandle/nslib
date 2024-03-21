@@ -221,15 +221,15 @@ intern int setup_pipeline(renderer *rndr)
     return vkr_init_pipeline(vk, &info, &vk->inst.device.pipelines[rndr->pipeline_ind]);
 }
 
-intern int create_vertex_indice_buffers(renderer *rndr)
+intern int init_rmesh_info(renderer *rndr)
 {
     auto vk = rndr->vk;
     auto dev = &vk->inst.device;
 
     // Create vertex buffer on GPU
     vkr_buffer_cfg b_cfg{};
-    rndr->vert_buf_ind = vkr_add_buffer(dev, {});
-    rndr->ind_buf_ind = vkr_add_buffer(dev, {});
+    rndr->rmi.verts.buf_ind = vkr_add_buffer(dev, {});
+    rndr->rmi.inds.buf_ind = vkr_add_buffer(dev, {});
 
     // Common to all buffer options
     b_cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
@@ -240,20 +240,23 @@ intern int create_vertex_indice_buffers(renderer *rndr)
     ilog("Creating vertex buffer");
     b_cfg.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     b_cfg.buffer_size = DEFAULT_VERT_BUFFER_SIZE;
-    int err = vkr_init_buffer(&dev->buffers[rndr->vert_buf_ind], &b_cfg);
+    int err = vkr_init_buffer(&dev->buffers[rndr->rmi.verts.buf_ind], &b_cfg);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
-
+    
     // Ind buffer
     ilog("Creating index buffer");
     b_cfg.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     b_cfg.buffer_size = DEFAULT_IND_BUFFER_SIZE;
-    err = vkr_init_buffer(&dev->buffers[rndr->ind_buf_ind], &b_cfg);
+    err = vkr_init_buffer(&dev->buffers[rndr->rmi.inds.buf_ind], &b_cfg);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
 
+    mem_init_pool_arena(&rndr->rmi.verts.node_pool, sizeof(sbuffer_entry), MAX_FREE_SBUFFER_NODE_COUNT, mem_global_stack_arena());
+    mem_init_pool_arena(&rndr->rmi.inds.node_pool, sizeof(sbuffer_entry), MAX_FREE_SBUFFER_NODE_COUNT, mem_global_stack_arena());
+    
     return err_code::VKR_NO_ERROR;
 }
 
@@ -386,7 +389,7 @@ intern int setup_rendering(renderer *rndr)
         return err;
     }
 
-    err = create_vertex_indice_buffers(rndr);
+    err = init_rmesh_info(rndr);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
@@ -463,8 +466,8 @@ intern int record_command_buffer(renderer *rndr, sim_region *rgn, vkr_framebuffe
 
     auto desc_set = &cur_frame->desc_pool.desc_sets[0];
     auto pipeline = &dev->pipelines[0];
-    auto vert_buf = &dev->buffers[rndr->vert_buf_ind];
-    auto ind_buf = &dev->buffers[rndr->ind_buf_ind];
+    auto vert_buf = &dev->buffers[rndr->rmi.verts.buf_ind];
+    auto ind_buf = &dev->buffers[rndr->rmi.inds.buf_ind];
 
     int err = vkr_begin_cmd_buf(cmd_buf);
     if (err != err_code::VKR_NO_ERROR) {
@@ -512,7 +515,7 @@ intern int record_command_buffer(renderer *rndr, sim_region *rgn, vkr_framebuffe
                 pc.model = curtf->cached;
 
                 vkCmdPushConstants(cmd_buf->hndl, pipeline->layout_hndl, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push_constants), &pc);
-                vkCmdDrawIndexed(cmd_buf->hndl, rndr->rect.inds.size, 1, 0, 0, 0);
+                //vkCmdDrawIndexed(cmd_buf->hndl, rndr->rect.inds.size, 1, 0, 0, 0);
             }
         }
     }
@@ -526,10 +529,10 @@ int init_renderer(renderer *rndr, void *win_hndl, mem_arena *fl_arena)
 {
     assert(fl_arena->alloc_type == mem_alloc_type::FREE_LIST);
     rndr->upstream_fl_arena = fl_arena;
-    rndr->vk_free_list.upstream_allocator = fl_arena;
+    
     rndr->vk_frame_linear.upstream_allocator = fl_arena;
-    mem_init_arena(100 * MB_SIZE, mem_alloc_type::FREE_LIST, &rndr->vk_free_list);
-    mem_init_arena(10 * MB_SIZE, mem_alloc_type::LINEAR, &rndr->vk_frame_linear);
+    mem_init_fl_arena(&rndr->vk_free_list, 100 * MB_SIZE, fl_arena);
+    mem_init_lin_arena(&rndr->vk_frame_linear, 10 * MB_SIZE, mem_global_stack_arena());
     rndr->vk = (vkr_context *)mem_alloc(sizeof(vkr_context), &rndr->vk_free_list, 8);
 
     vkr_cfg vkii{"rdev",
@@ -551,14 +554,13 @@ int init_renderer(renderer *rndr, void *win_hndl, mem_arena *fl_arena)
         return err_code::RENDER_INIT_FAIL;
     }
 
-    init_submesh(&rndr->rect, rndr->upstream_fl_arena);
-    make_rect(&rndr->rect);
-
     int err = setup_rendering(rndr);
     if (err != err_code::VKR_NO_ERROR) {
         elog("Failed to initialize renderer with code %d", err);
         return err;
     }
+    
+    // Setup our indice and vert buffer sbuffer
     return err_code::RENDER_NO_ERROR;
 }
 
@@ -661,7 +663,7 @@ int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_fram
     // handle recreation for other things that might happen so keep the acquire image and present image recreations
     // based on return value
     if (platform_framebuffer_resized(rndr->vk->cfg.window)) {
-        recreate_swapchain(rndr);
+        //recreate_swapchain(rndr);
         ivec2 sz = get_framebuffer_size(rndr->vk->cfg.window);
         if (cam) {
             cam->proj = (math::perspective(60.0f, (f32)sz.w / (f32)sz.h, 0.1f, 1000.0f));
@@ -724,8 +726,11 @@ int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_fram
 
 void terminate_renderer(renderer *rndr)
 {
+    // These are stack arenas so must go in this order
+    mem_terminate_arena(&rndr->rmi.inds.node_pool);
+    mem_terminate_arena(&rndr->rmi.verts.node_pool);
+    
     auto dev = &rndr->vk->inst.device;
-    terminate_submesh(&rndr->rect);
     vkr_terminate(rndr->vk);
     mem_free(rndr->vk, &rndr->vk_free_list);
     mem_terminate_arena(&rndr->vk_free_list);

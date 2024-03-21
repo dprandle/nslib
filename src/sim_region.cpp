@@ -38,7 +38,7 @@ entity *add_entity(const entity &copy, sim_region *reg)
 entity *add_entity(const char *name, sim_region *reg)
 {
     sizet ind = reg->ents.size;
-    arr_emplace_back(&reg->ents, ++reg->last_id, name, &reg->cdb);
+    arr_emplace_back(&reg->ents, entity{++reg->last_id, name, &reg->cdb});
     auto iter = hashmap_set(&reg->entmap, reg->ents[ind].id, ind);
     assert(!iter);
     return &reg->ents[ind];

@@ -6,7 +6,8 @@
 namespace nslib
 {
 
-const i32 JOINTS_PER_VERTEX = 4;
+const sizet JOINTS_PER_VERTEX = 4;
+const sizet MAX_SUBMESH_COUNT = 32;
 
 struct material{
     rid id;
@@ -34,8 +35,8 @@ struct submesh
 };
 
 struct mesh {
-    ROBJ(MESH)
-    array<submesh> submeshes;
+    ROBJ(MESH);
+    static_array<submesh, MAX_SUBMESH_COUNT> submeshes;
 };
 
 pup_func(mesh)
@@ -48,12 +49,6 @@ void terminate_submesh(submesh *sm);
 void make_rect(submesh *sm);
 void make_cube(submesh *sm);
 
-void init_mesh(mesh *mesh, mem_arena *arena);
-void terminate_mesh(mesh *mesh);
-
-inline void terminate_robj(mesh *mesh) {
-    terminate_mesh(mesh);
-}
-
+void terminate_robj(mesh *mesh);
 
 } // namespace nslib

@@ -153,7 +153,6 @@ int init(platform_ctxt *ctxt, void *user_data)
     auto mc = get_cache<mesh>(&app->cg);
 
     auto msh = add_robj(mc);
-    init_mesh(msh, mem_global_arena());
     
     submesh sm{};
     make_cube(&sm);

@@ -61,17 +61,11 @@ void terminate_submesh(submesh *sm)
     arr_terminate(&sm->inds);
 }
 
-void init_mesh(mesh *mesh, mem_arena *arena)
-{
-    arr_init(&mesh->submeshes, arena);
-}
-
-void terminate_mesh(mesh *mesh)
+void terminate_robj(mesh *mesh)
 {
     for (int i = 0; i < mesh->submeshes.size; ++i) {
         terminate_submesh(&mesh->submeshes[i]);
     }
-    arr_terminate(&mesh->submeshes);
 }
 
 } // namespace nslib

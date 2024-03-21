@@ -318,14 +318,6 @@ template<class T>
 typename T::iterator arr_find(T *bufobj, const typename T::value_type &item)
 {
     return std::find(arr_begin(bufobj), arr_end(bufobj), item);
-    // auto iter = arr_begin(bufobj);
-    // while (iter != arr_end(bufobj)) {
-    //     if (*iter == item) {
-    //         return iter;
-    //     }
-    //     ++iter;
-    // }
-    // return iter;
 }
 
 template<class T, class... Args>

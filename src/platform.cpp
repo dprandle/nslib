@@ -209,9 +209,12 @@ intern void set_glfw_callbacks(platform_ctxt *ctxt)
 
 intern void init_mem_arenas(const platform_memory_init_info *info, platform_memory *mem)
 {
-    mem_init_arena(info->free_list_size, mem_alloc_type::FREE_LIST, &mem->free_list);
-    mem_init_arena(info->stack_size, mem_alloc_type::STACK, &mem->stack);
-    mem_init_arena(info->frame_linear_size, mem_alloc_type::LINEAR, &mem->frame_linear);
+    // Null to indicate these get platform_alloc'd
+    mem_init_fl_arena(&mem->free_list, info->free_list_size, nullptr);
+    mem_init_stack_arena(&mem->stack, info->stack_size, nullptr);
+    mem_init_lin_arena(&mem->frame_linear, info->frame_linear_size, nullptr);
+
+    // Then these become our global mem arenas
     mem_set_global_arena(&mem->free_list);
     mem_set_global_stack_arena(&mem->stack);
     mem_set_global_frame_lin_arena(&mem->frame_linear);

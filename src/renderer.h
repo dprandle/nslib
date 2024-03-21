@@ -15,6 +15,7 @@ struct camera;
 
 const sizet DEFAULT_VERT_BUFFER_SIZE = sizeof(vertex) * 10000000;
 const sizet DEFAULT_IND_BUFFER_SIZE = sizeof(u16) * 50000000;
+const sizet MAX_FREE_SBUFFER_NODE_COUNT = 1024;
 
 namespace err_code
 {
@@ -47,10 +48,29 @@ struct sbuffer_entry
     sizet avail;
 };
 
-struct sbuffer_free_list
+struct sbuffer_info
 {
+    u32 buf_ind;
     slist<sbuffer_entry> fl;
     mem_arena node_pool;
+};
+
+struct rsubmesh_entry
+{
+    sbuffer_entry verts;
+    sbuffer_entry inds;
+};
+
+struct rmesh_entry
+{
+    static_array<rsubmesh_entry, MAX_SUBMESH_COUNT> submesh_entrees;
+};
+
+struct rmesh_info
+{
+    hashmap<rid, rmesh_entry> meshes;
+    sbuffer_info verts;
+    sbuffer_info inds;
 };
 
 struct renderer
@@ -65,17 +85,16 @@ struct renderer
 
     sizet render_pass_ind;
     sizet pipeline_ind;
-    sizet vert_buf_ind;
-    sizet ind_buf_ind;
 
+    // Contains all info about meshes and where they are in the vert/ind buffers
+    rmesh_info rmi;
+    
     sizet default_image_ind;
     sizet default_image_view_ind;
     sizet default_sampler_ind;
 
     sizet swapchain_fb_depth_stencil_iview_ind{INVALID_IND};
     sizet swapchain_fb_depth_stencil_im_ind{INVALID_IND};
-
-    submesh rect;
 };
 
 void upload_to_gpu(mesh *msh, renderer *rdnr);

@@ -9,8 +9,9 @@
 
 #include <iostream>
 
-#define DO_DEBUG_PRINT false
+#define DO_DEBUG_FL_ALLOC false
 #define DO_DEBUG_LINEAR_ALLOC false
+#define DO_DEBUG_STACK_ALLOC true
 
 namespace nslib
 {
@@ -166,7 +167,7 @@ intern void *mem_free_list_alloc(mem_arena *arena, sizet size, sizet alignment_p
     arena->used += required_size;
     arena->peak = std::max(arena->peak, arena->used);
 
-#if DO_DEBUG_PRINT
+#if DO_DEBUG_FL_ALLOC
     dlog("Blck:%p Hdr:%p Dptr:%p RqstS:%lu RqrdS:%lu BlkSz:%lu AlgnPdng:%lu Pdng:%lu Mused:%lu Rest:%lu",
          (void *)affected_node,
          (void *)header_addr,
@@ -211,11 +212,11 @@ intern void mem_free_list_free(mem_arena *arena, void *ptr)
     sizet current_addr = (sizet)ptr;
     sizet header_addr = current_addr - sizeof(alloc_header);
     auto aheader = (alloc_header *)header_addr;
-    
-#if DO_DEBUG_PRINT
+
+#if DO_DEBUG_FL_ALLOC
     sizet algn_padding = aheader->algn_padding;
 #endif
-    
+
     mem_node *free_node = (mem_node *)(header_addr - aheader->algn_padding);
     free_node->data.block_size = aheader->block_size;
     free_node->next = nullptr;
@@ -235,7 +236,7 @@ intern void mem_free_list_free(mem_arena *arena, void *ptr)
     }
 
     arena->used -= free_node->data.block_size;
-#if DO_DEBUG_PRINT
+#if DO_DEBUG_FL_ALLOC
     sizet orig_sz = free_node->data.block_size - algn_padding - sizeof(alloc_header);
     dlog("Dptr:%p FHdr:%p AHdr:%p BlckS:%lu APdng:%lu Size:%lu Mused:%lu",
          ptr,
@@ -277,29 +278,50 @@ intern void *mem_stack_alloc(mem_arena *arena, sizet size, sizet alignment)
     sizet current_addr = (sizet)arena->start + arena->mstack.offset;
     sizet padding = calc_padding_with_header(current_addr, alignment, sizeof(stack_alloc_header));
 
-    if ((arena->mstack.offset + padding + size) > arena->total_size)
-        return nullptr;
+    assert((arena->mstack.offset + padding + size) <= arena->total_size);
 
-    arena->mstack.offset += padding + size;
     sizet next_addr = current_addr + padding;
     sizet header_addr = next_addr - sizeof(stack_alloc_header);
-    ((stack_alloc_header *)header_addr)->padding = padding;
+    auto hdr = (stack_alloc_header *)header_addr;
+    hdr->padding = padding;
 
-    arena->mstack.offset += size;
+    // Set the prev in the header so we can set the arena->mstack.prev when freeing this node
+    hdr->prev = arena->mstack.prev;
+
+    arena->mstack.offset += (padding + size);
     arena->used = arena->mstack.offset;
     arena->peak = std::max(arena->peak, arena->used);
-    return (void *)next_addr;
+
+#if DO_DEBUG_STACK_ALLOC
+    dlog("ptr:%p rqst:%lu pdg:%lu blk:%lu used:%lu", (void *)next_addr, size, padding, padding + size, arena->used);
+#endif
+    arena->mstack.prev = (void*)next_addr;
+    return arena->mstack.prev;
 }
 
 intern void mem_stack_free(mem_arena *arena, void *ptr)
 {
+    // Assert that we are freeing the stack in the correct order - the arena prev should match the ptr
+    assert(ptr == arena->mstack.prev);
+    
     // Move offset back to clear address
     sizet current_addr = (sizet)ptr;
     sizet header_addr = current_addr - sizeof(stack_alloc_header);
-    stack_alloc_header *alloc_header{(stack_alloc_header *)header_addr};
+    auto alloc_header = (stack_alloc_header *)header_addr;
 
+#if DO_DEBUG_STACK_ALLOC
+    sizet rqst_size = ((sizet)arena->start + arena->mstack.offset) - current_addr;
+#endif
+    // Set our arena prev to the block that preceded the block we are freeing - this is to make sure our stack allocs
+    // and frees are in the correct order
+    arena->mstack.prev = alloc_header->prev;
+    
     arena->mstack.offset = current_addr - alloc_header->padding - (sizet)arena->start;
     arena->used = arena->mstack.offset;
+
+#if DO_DEBUG_STACK_ALLOC
+    dlog("ptr:%p rqst:%lu pdg:%lu blk:%lu used:%lu", ptr, rqst_size, alloc_header->padding, rqst_size + alloc_header->padding, arena->used);
+#endif
 }
 
 intern void *mem_linear_alloc(mem_arena *arena, sizet size, sizet alignment)
@@ -318,10 +340,10 @@ intern void *mem_linear_alloc(mem_arena *arena, sizet size, sizet alignment)
     // Setting up a block header is purely to make realloc work with a linear allocator
     auto alignment_padding = padding - header_size;
     auto hdr_address = block_addr + alignment_padding;
-    auto hdr = (alloc_header*)hdr_address;
+    auto hdr = (alloc_header *)hdr_address;
     hdr->algn_padding = alignment_padding;
     hdr->block_size = padding + size;
-    
+
     arena->mlin.offset += padding + size;
     sizet next_addr = hdr_address + header_size;
     arena->used = arena->mlin.offset;
@@ -369,7 +391,6 @@ void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment)
 #endif
     return ret;
 }
-
 
 void *mem_alloc(sizet bytes, mem_arena *arena)
 {
@@ -517,10 +538,11 @@ void mem_reset_arena(mem_arena *arena)
     }
 }
 
-void mem_init_arena(sizet total_size, mem_alloc_type mtype, mem_arena *arena)
+void mem_init_arena(mem_arena *arena, sizet total_size, mem_alloc_type mtype, mem_arena *upstream)
 {
     arena->total_size = total_size;
     arena->alloc_type = mtype;
+    arena->upstream_allocator = upstream;
     ilog("Initializing %s arena with %lu available", mem_arena_type_str(arena->alloc_type), arena->total_size);
 
     // Make sure user filled out a size before passsing in
@@ -536,6 +558,27 @@ void mem_init_arena(sizet total_size, mem_alloc_type mtype, mem_arena *arena)
         arena->start = mem_alloc(arena->total_size, arena->upstream_allocator);
 
     mem_reset_arena(arena);
+}
+
+void mem_init_fl_arena(mem_arena *arena, sizet total_size, mem_arena *upstream)
+{
+    mem_init_arena(arena, total_size, mem_alloc_type::FREE_LIST, upstream);
+}
+
+void mem_init_stack_arena(mem_arena *arena, sizet total_size, mem_arena *upstream)
+{
+    mem_init_arena(arena, total_size, mem_alloc_type::STACK, upstream);
+}
+
+void mem_init_lin_arena(mem_arena *arena, sizet total_size, mem_arena *upstream)
+{
+    mem_init_arena(arena, total_size, mem_alloc_type::LINEAR, upstream);
+}
+
+void mem_init_pool_arena(mem_arena *arena, sizet chunk_size, sizet chunk_count, mem_arena *upstream)
+{
+    arena->mpool.chunk_size = chunk_size;
+    mem_init_arena(arena, chunk_size * chunk_count, mem_alloc_type::POOL, upstream);
 }
 
 void mem_terminate_arena(mem_arena *arena)

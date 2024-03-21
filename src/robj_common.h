@@ -96,11 +96,9 @@ void terminate_cache_group_default_types(robj_cache_group *cg);
 template<class T>
 void init_cache(robj_cache<T> *cache, sizet item_budget, sizet mem_alignment, mem_arena *upstream)
 {
-    hashmap_init(&cache->rmap, upstream);
-    cache->arena.mpool.chunk_size = sizeof(T);
-    cache->arena.upstream_allocator = upstream;
     cache->mem_alignment = mem_alignment;
-    mem_init_arena(item_budget * cache->arena.mpool.chunk_size, mem_alloc_type::POOL, &cache->arena);
+    hashmap_init(&cache->rmap, upstream);
+    mem_init_pool_arena(&cache->arena, sizeof(T), item_budget, upstream);
 }
 
 template<class T>

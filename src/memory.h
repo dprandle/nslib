@@ -33,6 +33,7 @@ struct alloc_header
 struct stack_alloc_header
 {
     sizet padding;
+    void* prev;
 };
 
 enum placement_policy
@@ -58,6 +59,7 @@ struct mem_pool
 struct mem_stack
 {
     sizet offset;
+    void* prev;
 };
 
 struct mem_linear
@@ -145,7 +147,13 @@ void mem_delete(T *item, mem_arena *arena)
 
 // Reset the store without actually freeing the memory so it can be reused
 void mem_reset_arena(mem_arena *arena);
-void mem_init_arena(sizet total_size, mem_alloc_type atype, mem_arena *arena);
+void mem_init_arena(mem_arena *arena, sizet total_size, mem_alloc_type atype, mem_arena *upstream);
+
+void mem_init_pool_arena(mem_arena *arena, sizet chunk_size, sizet chunk_count, mem_arena *upstream);
+void mem_init_fl_arena(mem_arena *arena, sizet total_size, mem_arena *upstream);
+void mem_init_stack_arena(mem_arena *arena, sizet total_size, mem_arena *upstream);
+void mem_init_lin_arena(mem_arena *arena, sizet total_size, mem_arena *upstream);
+
 void mem_terminate_arena(mem_arena *arena);
 const char *mem_arena_type_str(mem_alloc_type atype);
 

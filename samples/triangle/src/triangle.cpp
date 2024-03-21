@@ -325,8 +325,8 @@ int app_init(platform_ctxt *ctxt, void *user_data)
     ilog("App init");
     version_info v{1, 0, 0};
 
-    mem_init_arena(100 * MB_SIZE, mem_alloc_type::FREE_LIST, &app->vk_free_list);
-    mem_init_arena(10 * MB_SIZE, mem_alloc_type::LINEAR, &app->vk_frame_linear);
+    mem_init_fl_arena(&app->vk_free_list, 100 * MB_SIZE, mem_global_arena());
+    mem_init_lin_arena(&app->vk_frame_linear, 10 * MB_SIZE, mem_global_arena());
 
     vkr_cfg vkii{"Triangle",
                  {1, 0, 0},
