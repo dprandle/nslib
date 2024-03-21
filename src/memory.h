@@ -41,18 +41,18 @@ enum placement_policy
     FIND_BEST
 };
 
-using mem_node = ll_node<free_header>;
+using mem_node = slnode<free_header>;
 
 struct mem_free_list
 {
     placement_policy p_policy;
-    singly_linked_list<free_header> free_list;
+    slist<free_header> free_list;
 };
 
 struct mem_pool
 {
     sizet chunk_size;
-    singly_linked_list<free_header> free_list;
+    slist<free_header> free_list;
 };
 
 struct mem_stack

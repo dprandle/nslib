@@ -239,29 +239,21 @@ intern int create_vertex_indice_buffers(renderer *rndr)
     // Vert buffer
     ilog("Creating vertex buffer");
     b_cfg.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    b_cfg.buffer_size = sizeof(vertex) * rndr->rect.verts.size;
-    dlog("Vert buffer size %d", b_cfg.buffer_size);
+    b_cfg.buffer_size = DEFAULT_VERT_BUFFER_SIZE;
     int err = vkr_init_buffer(&dev->buffers[rndr->vert_buf_ind], &b_cfg);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
 
-    // Init and copy data to staging buffer, then copy staging buf to vert buffer, then delete staging buf
-    vkr_stage_and_upload_buffer_data(
-        &dev->buffers[rndr->vert_buf_ind], rndr->rect.verts.data, b_cfg.buffer_size, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
-
     // Ind buffer
     ilog("Creating index buffer");
     b_cfg.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    b_cfg.buffer_size = sizeof(u32) * rndr->rect.inds.size;
+    b_cfg.buffer_size = DEFAULT_IND_BUFFER_SIZE;
     err = vkr_init_buffer(&dev->buffers[rndr->ind_buf_ind], &b_cfg);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
 
-    // Init and copy data to staging buffer, then copy staging buf to vert buffer, then delete staging buf
-    vkr_stage_and_upload_buffer_data(
-        &dev->buffers[rndr->ind_buf_ind], rndr->rect.inds.data, b_cfg.buffer_size, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
     return err_code::VKR_NO_ERROR;
 }
 
@@ -640,6 +632,21 @@ intern i32 present_image(renderer *rndr, vkr_frame *cur_frame, u32 image_ind)
     }
     return err_code::RENDER_NO_ERROR;
 }
+
+void upload_to_gpu(mesh *msh, renderer *rdnr)
+{
+    // Somehow we need to upload our submeshes and need info about our current vert buffer
+    
+    // Init and copy data to staging buffer, then copy staging buf to vert buffer, then delete staging buf
+    // vkr_stage_and_upload_buffer_data(
+    //     &dev->buffers[rndr->vert_buf_ind], mesh verts.data, arr_sizeof(rndr->rect.verts), &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
+    
+
+    // // Init and copy data to staging buffer, then copy staging buf to vert buffer, then delete staging buf
+    // vkr_stage_and_upload_buffer_data(
+    //     &dev->buffers[rndr->ind_buf_ind], rndr->rect.inds.data, arr_sizeof(rndr->rect.inds), &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
+}
+
 
 int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_frame_count)
 {

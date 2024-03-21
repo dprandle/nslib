@@ -594,6 +594,12 @@ void vkr_unmap_buffer(vkr_buffer *buf, const vkr_gpu_allocator *vma);
 int vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
                                      const void *src_data,
                                      sizet src_data_size,
+                                     const VkBufferCopy *region,
+                                     vkr_device_queue_fam_info *cmd_q,
+                                     const vkr_context *vk);
+int vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
+                                     const void *src_data,
+                                     sizet src_data_size,
                                      vkr_device_queue_fam_info *cmd_q,
                                      const vkr_context *vk);
 
@@ -604,6 +610,12 @@ void vkr_terminate_image(vkr_image *image);
 int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
                                     const void *src_data,
                                     sizet src_data_size,
+                                    vkr_device_queue_fam_info *cmd_q,
+                                    const vkr_context *vk);
+int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
+                                    const void *src_data,
+                                    sizet src_data_size,
+                                    const VkBufferImageCopy *region,
                                     vkr_device_queue_fam_info *cmd_q,
                                     const vkr_context *vk);
 sizet vkr_add_image_view(vkr_device *device, const vkr_image_view &copy = {});
@@ -689,7 +701,7 @@ struct vkr_image_transition_cfg
     VkImageSubresourceRange srange;
 };
 
-int vkr_copy_buffer(vkr_buffer *dest, const vkr_buffer *src, vkr_device_queue_fam_info *cmd_q, const vkr_context *vk, VkBufferCopy region = {});
+int vkr_copy_buffer(vkr_buffer *dest, const vkr_buffer *src, const VkBufferCopy *region, vkr_device_queue_fam_info *cmd_q, const vkr_context *vk);
 int vkr_copy_buffer_to_image(vkr_image *dest,
                              const vkr_buffer *src,
                              const VkBufferImageCopy *region,

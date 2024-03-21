@@ -13,6 +13,9 @@ struct vkr_context;
 struct sim_region;
 struct camera;
 
+const sizet DEFAULT_VERT_BUFFER_SIZE = sizeof(vertex) * 10000000;
+const sizet DEFAULT_IND_BUFFER_SIZE = sizeof(u16) * 50000000;
+
 namespace err_code
 {
 enum render
@@ -36,6 +39,18 @@ struct push_constants
 struct uniform_buffer_object
 {
     mat4 proj_view;
+};
+
+struct sbuffer_entry
+{
+    sizet offset;
+    sizet avail;
+};
+
+struct sbuffer_free_list
+{
+    slist<sbuffer_entry> fl;
+    mem_arena node_pool;
 };
 
 struct renderer
@@ -63,10 +78,12 @@ struct renderer
     submesh rect;
 };
 
-
+void upload_to_gpu(mesh *msh, renderer *rdnr);
 
 int init_renderer(renderer *rndr, void *win_hndl, mem_arena *fl_arena);
+
 int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_frame_count);
+
 void terminate_renderer(renderer *rndr);
 
 } // namespace nslib

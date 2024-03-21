@@ -1455,6 +1455,7 @@ void vkr_unmap_buffer(vkr_buffer *buf, const vkr_gpu_allocator *vma)
 int vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
                                      const void *src_data,
                                      sizet src_data_size,
+                                     const VkBufferCopy * region,
                                      vkr_device_queue_fam_info *cmd_q,
                                      const vkr_context *vk)
 {
@@ -1475,9 +1476,20 @@ int vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
     memcpy(mem, src_data, src_data_size);
     vkr_unmap_buffer(&staging_buf, &vk->inst.device.vma_alloc);
 
-    err = vkr_copy_buffer(dest_buffer, &staging_buf, cmd_q, vk);
+    err = vkr_copy_buffer(dest_buffer, &staging_buf, region, cmd_q, vk);
     vkr_terminate_buffer(&staging_buf, vk);
     return err;
+}
+
+int vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
+                                     const void *src_data,
+                                     sizet src_data_size,
+                                     vkr_device_queue_fam_info *cmd_q,
+                                     const vkr_context *vk)
+{
+    VkBufferCopy region{};
+    region.size = src_data_size;
+    return vkr_stage_and_upload_buffer_data(dest_buffer, src_data, src_data_size, &region, cmd_q, vk);
 }
 
 sizet vkr_add_buffer(vkr_device *device, const vkr_buffer &copy)
@@ -1657,6 +1669,20 @@ int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
                                     vkr_device_queue_fam_info *cmd_q,
                                     const vkr_context *vk)
 {
+    VkBufferImageCopy region{};
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.layerCount = 1;
+    region.imageExtent = {dest_buffer->dims.x, dest_buffer->dims.y, dest_buffer->dims.z};
+    return vkr_stage_and_upload_image_data(dest_buffer, src_data, src_data_size, &region, cmd_q, vk);
+}
+
+int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
+                                    const void *src_data,
+                                    sizet src_data_size,
+                                    const VkBufferImageCopy *region,
+                                    vkr_device_queue_fam_info *cmd_q,
+                                    const vkr_context *vk)
+{
     vkr_buffer staging_buf{};
     vkr_buffer_cfg buf_cfg{};
     buf_cfg.buffer_size = src_data_size;
@@ -1688,11 +1714,7 @@ int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
         return err;
     }
 
-    VkBufferImageCopy region{};
-    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    region.imageSubresource.layerCount = 1;
-    region.imageExtent = {dest_buffer->dims.x, dest_buffer->dims.y, dest_buffer->dims.z};
-    err = vkr_copy_buffer_to_image(dest_buffer, &staging_buf, &region, cmd_q, vk);
+    err = vkr_copy_buffer_to_image(dest_buffer, &staging_buf, region, cmd_q, vk);
     if (err != err_code::VKR_NO_ERROR) {
         vkr_terminate_buffer(&staging_buf, vk);
         return err;
@@ -1996,7 +2018,7 @@ void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
     arr_terminate(&dev->images);
     arr_terminate(&dev->image_views);
     arr_terminate(&dev->samplers);
-    
+
     for (sizet qfam_i = 0; qfam_i < VKR_QUEUE_FAM_TYPE_COUNT; ++qfam_i) {
         auto cur_fam = &dev->qfams[qfam_i];
         arr_terminate(&cur_fam->qs);
@@ -2138,16 +2160,13 @@ intern int cmd_buf_end(vkr_add_result tmp_buf, vkr_command_pool *pool, vkr_devic
     return err_code::VKR_NO_ERROR;
 }
 
-int vkr_copy_buffer(vkr_buffer *dest, const vkr_buffer *src, vkr_device_queue_fam_info *cmd_q, const vkr_context *vk, VkBufferCopy region)
+int vkr_copy_buffer(vkr_buffer *dest, const vkr_buffer *src, const VkBufferCopy *region, vkr_device_queue_fam_info *cmd_q, const vkr_context *vk)
 {
     ilog("Starting buffer copy");
-    if (region.size == 0) {
-        region.size = src->mem_info.size;
-    }
     auto pool = &cmd_q->cmd_pools[cmd_q->transient_pool];
     auto tmp_buf = cmd_buf_begin(pool, cmd_q, vk);
     if (tmp_buf.err_code == err_code::VKR_NO_ERROR) {
-        vkCmdCopyBuffer(pool->buffers[tmp_buf.begin].hndl, src->hndl, dest->hndl, 1, &region);
+        vkCmdCopyBuffer(pool->buffers[tmp_buf.begin].hndl, src->hndl, dest->hndl, 1, region);
         ilog("Finished copying buffer");
         return cmd_buf_end(tmp_buf, pool, cmd_q, vk);
     }

@@ -109,6 +109,30 @@ typename T::iterator arr_begin(T *arrobj)
 }
 
 template<class T>
+sizet arr_len(const array<T> *arr)
+{
+    return arr->size;
+}
+
+template<class T>
+sizet arr_len(const array<T> &arr)
+{
+    return arr.size;
+}
+
+template<class T>
+sizet arr_sizeof(const array<T> *arr)
+{
+    return sizeof(T) * arr->size;
+}
+
+template<class T>
+sizet arr_sizeof(const array<T> &arr)
+{
+    return sizeof(T) * arr.size;
+}
+
+template<class T>
 typename T::iterator arr_end(T *arrobj)
 {
     return arr_begin(arrobj) + arrobj->size;

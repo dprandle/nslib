@@ -254,7 +254,7 @@ intern void mem_free_list_free(mem_arena *arena, void *ptr)
 
 intern void *mem_pool_alloc(mem_arena *arena)
 {
-    mem_node *free_pos = ll_pop(&arena->mpool.free_list);
+    mem_node *free_pos = ll_pop_front(&arena->mpool.free_list);
     assert(free_pos);
     arena->used += arena->mpool.chunk_size;
     arena->peak = std::max(arena->peak, arena->used);
@@ -269,7 +269,7 @@ intern sizet mem_pool_block_size(mem_arena *arena, void *ptr)
 intern void mem_pool_free(mem_arena *mem, void *ptr)
 {
     mem->used -= mem->mpool.chunk_size;
-    ll_push(&mem->mpool.free_list, (mem_node *)ptr);
+    ll_push_front(&mem->mpool.free_list, (mem_node *)ptr);
 }
 
 intern void *mem_stack_alloc(mem_arena *arena, sizet size, sizet alignment)
@@ -496,7 +496,7 @@ void mem_reset_arena(mem_arena *arena)
         sizet nchunks = arena->total_size / arena->mpool.chunk_size;
         for (sizet i = 0; i < nchunks; ++i) {
             sizet address = (sizet)arena->start + i * arena->mpool.chunk_size;
-            ll_push(&arena->mpool.free_list, (mem_node *)address);
+            ll_push_front(&arena->mpool.free_list, (mem_node *)address);
         }
     } break;
     case (mem_alloc_type::FREE_LIST): {
@@ -504,7 +504,7 @@ void mem_reset_arena(mem_arena *arena)
         first_node->data.block_size = arena->total_size;
         first_node->next = nullptr;
         arena->mfl.free_list.head = nullptr;
-        ll_node<free_header> *dummy = nullptr;
+        slnode<free_header> *dummy = nullptr;
         ll_insert(&arena->mfl.free_list, dummy, first_node);
         arena->alloc_type = mem_alloc_type::FREE_LIST;
     } break;
