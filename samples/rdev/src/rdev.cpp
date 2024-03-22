@@ -20,6 +20,9 @@ struct app_data
     u32 cam_id;
     vec2 mpos;
     ivec2 movement{};
+
+    u32 cube_1;
+    u32 plane_1;
 };
 
 intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_keymap *kmap)
@@ -150,26 +153,36 @@ int init(platform_ctxt *ctxt, void *user_data)
     auto app = (app_data *)user_data;
 
     init_cache_group_default_types(&app->cg, mem_global_arena());
-    auto mc = get_cache<mesh>(&app->cg);
 
-    auto msh = add_robj(mc);
-    
-    submesh sm{};
-    make_cube(&sm);
-    arr_emplace_back(&msh->submeshes, sm);
-    
+    // Create meshes 
+    auto mc = get_cache<mesh>(&app->cg);
+    auto cube_msh = add_robj(mc);
+    auto rect_msh = add_robj(mc);
+    init_mesh(cube_msh, mem_global_arena());
+    init_mesh(rect_msh, mem_global_arena());
+    make_cube(cube_msh);
+    make_rect(rect_msh);
+
+    // Create our sim region aka scene
     init_sim_region(&app->rgn, mem_global_arena());
 
-    // Create a bunch of entities
-    int count = 347;
-    add_entities(count, &app->rgn);
-
-    for (int i = 0; i < app->rgn.ents.size; ++i) {
-        auto tfcomp = add_comp<transform>(&app->rgn.ents[i]);
-        add_comp<static_model>(&app->rgn.ents[i]);
-        int mod = i - count / 2;
-        tfcomp->world_pos = vec3{0, 0, -mod * 0.05f};
-        tfcomp->cached = math::model_tform(tfcomp->world_pos, tfcomp->orientation, tfcomp->scale);
+    // Create a grid of entities with odd ones being cubes and even being rectangles
+    int len = 10, width = 10;
+    add_entities(len*width, &app->rgn);
+    for (int yind = 0; yind < len; ++yind) {
+        for (int xind = 0; xind < width; ++xind) {
+            auto tfcomp = add_comp<transform>(&app->rgn.ents[xind + yind*width]);
+            auto sc = add_comp<static_model>(&app->rgn.ents[xind + yind*width]);
+            if (xind % 2) {
+                sc->mesh_id = cube_msh->id;
+            }
+            else {
+                sc->mesh_id = rect_msh->id;
+            }
+            
+            tfcomp->world_pos = vec3{xind * 2.0f, yind * 2.0f, 0.0f};
+            tfcomp->cached = math::model_tform(tfcomp->world_pos, tfcomp->orientation, tfcomp->scale);
+        }
     }
     
     //Create input map
@@ -228,7 +241,7 @@ int terminate(platform_ctxt *ctxt, void *user_data)
 
 int configure_platform(platform_init_info *settings, app_data *app)
 {
-    settings->wind.resolution = {1920, 1080};
+    settings->wind.resolution = {800, 600};
     settings->wind.title = "RDev";
     settings->user_cb.init = init;
     settings->user_cb.run_frame = run_frame;

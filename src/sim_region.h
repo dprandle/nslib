@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rid.h"
 #include "memory.h"
 #include "math/matrix4.h"
 #include "containers/array.h"
@@ -39,7 +40,7 @@ struct transform
 struct static_model
 {
     COMP(STATIC_MODEL)
-    submesh *geometry;
+    rid mesh_id;
 };
 
 struct camera

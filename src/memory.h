@@ -33,7 +33,7 @@ struct alloc_header
 struct stack_alloc_header
 {
     sizet padding;
-    void* prev;
+    void *prev;
 };
 
 enum placement_policy
@@ -59,7 +59,7 @@ struct mem_pool
 struct mem_stack
 {
     sizet offset;
-    void* prev;
+    void *prev;
 };
 
 struct mem_linear
@@ -78,7 +78,7 @@ struct mem_arena
     /// If null, the allocator memory pool will be allocated with platform_alloc, otherwise the
     /// upstream_allocator's alloc will be used with ns_alloc (same is true for free). Once an allocator gets its memory,
     /// don't change this to something different as it will likely crash (cant free from an allocator different than allocated from)
-    mem_arena * upstream_allocator {nullptr};
+    mem_arena *upstream_allocator{nullptr};
 
     sizet used{0};
     sizet peak{0};
@@ -113,23 +113,23 @@ sizet mem_block_size(void *ptr, mem_arena *arena);
 sizet mem_block_user_size(void *ptr, mem_arena *arena);
 
 template<class T>
-T * mem_alloc(mem_arena *arena, sizet alignment=8)
+T *mem_alloc(mem_arena *arena, sizet alignment = 8)
 {
-    return (T*)mem_alloc(sizeof(T), arena, alignment);
+    return (T *)mem_alloc(sizeof(T), arena, alignment);
 }
 
 template<class T, class... Args>
-T * mem_new(mem_arena *arena, sizet alignment, Args&&... args)
+T *mem_new(mem_arena *arena, sizet alignment, Args &&...args)
 {
-    T * item = mem_alloc<T>(arena, alignment);
+    T *item = mem_alloc<T>(arena, alignment);
     new (item) T(std::forward<Args>(args)...);
     return item;
 }
 
 template<class T, class... Args>
-T * mem_new(mem_arena *arena, Args&&... args)
+T *mem_new(mem_arena *arena, Args &&...args)
 {
-    T * item = mem_alloc<T>(arena);
+    T *item = mem_alloc<T>(arena);
     new (item) T(std::forward<Args>(args)...);
     return item;
 }
@@ -150,6 +150,15 @@ void mem_reset_arena(mem_arena *arena);
 void mem_init_arena(mem_arena *arena, sizet total_size, mem_alloc_type atype, mem_arena *upstream);
 
 void mem_init_pool_arena(mem_arena *arena, sizet chunk_size, sizet chunk_count, mem_arena *upstream);
+
+template<class T>
+void mem_init_pool_arena(mem_arena *arena, sizet chunk_count, mem_arena *upstream)
+{
+    mem_init_pool_arena(arena, sizeof(T), chunk_count, upstream);
+}
+
+void mem_init_pool_arena(mem_arena *arena, sizet chunk_size, sizet chunk_count, mem_arena *upstream);
+
 void mem_init_fl_arena(mem_arena *arena, sizet total_size, mem_arena *upstream);
 void mem_init_stack_arena(mem_arena *arena, sizet total_size, mem_arena *upstream);
 void mem_init_lin_arena(mem_arena *arena, sizet total_size, mem_arena *upstream);

@@ -132,6 +132,20 @@ sizet arr_sizeof(const array<T> &arr)
     return sizeof(T) * arr.size;
 }
 
+// Get the used byte size of the static array (the capacity is just N)
+template<class T, sizet N>
+sizet arr_sizeof(const static_array<T, N> *arr)
+{
+    return sizeof(T) * arr->size;
+}
+
+// Get the used byte size of the static array (the capacity is just N)
+template<class T, sizet N>
+sizet arr_sizeof(const static_array<T, N> &arr)
+{
+    return sizeof(T) * arr.size;
+}
+
 template<class T>
 typename T::iterator arr_end(T *arrobj)
 {
@@ -241,8 +255,7 @@ T *arr_push_back(array<T> *arr, const T &item)
 template<class T, sizet N>
 T *arr_push_back(static_array<T, N> *arr, const T &item)
 {
-    if (arr->size == arr->capacity)
-        return nullptr;
+    assert(arr->size < arr->capacity);
     sizet sz = arr->size;
     ++arr->size;
     arr->data[sz] = item;

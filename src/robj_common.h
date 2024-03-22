@@ -1,8 +1,9 @@
+#pragma once
+
 #include "archive_common.h"
-#include "containers/string.h"
+#include "rid.h"
 #include "containers/hashmap.h"
 
-#pragma once
 namespace nslib
 {
 
@@ -14,43 +15,6 @@ enum robj_type : u32
 
 const sizet ROBJ_TYPE_DEFAULT_BUDGET[ROBJ_TYPE_USER] = {256};
 
-struct rid
-{
-    rid()
-    {}
-    explicit rid(const string &str);
-    explicit rid(const char *str);
-
-    string str;
-    u64 id{0};
-};
-
-pup_func(rid)
-{
-    pup_member_info(str, vinfo);
-    if (ar->opmode == archive_opmode::UNPACK) {
-        val.id = hash_type(val.str, 0, 0);
-    }
-}
-
-string to_str(const rid &rid);
-
-inline u64 hash_type(const rid &id, u64, u64)
-{
-    return id.id;
-}
-
-rid generate_id();
-
-inline bool operator==(const rid &lhs, const rid &rhs)
-{
-    return lhs.id == rhs.id;
-}
-
-inline bool operator!=(const rid &lhs, const rid &rhs)
-{
-    return !(lhs == rhs);
-}
 
 #define ROBJ(type)                                                                                                                         \
     static constexpr const char *type_str = #type;                                                                                         \

@@ -37,6 +37,7 @@ struct submesh
 struct mesh {
     ROBJ(MESH);
     static_array<submesh, MAX_SUBMESH_COUNT> submeshes;
+    mem_arena *sub_arena;
 };
 
 pup_func(mesh)
@@ -46,9 +47,13 @@ pup_func(mesh)
 
 void init_submesh(submesh *sm, mem_arena *arena);
 void terminate_submesh(submesh *sm);
-void make_rect(submesh *sm);
-void make_cube(submesh *sm);
 
-void terminate_robj(mesh *mesh);
+void make_rect(mesh *msh);
+void make_cube(mesh *msh);
+
+void init_mesh(mesh *msh, mem_arena *arena);
+void terminate_mesh(mesh *msh);
+
+void terminate_robj(mesh *msh);
 
 } // namespace nslib

@@ -156,25 +156,24 @@ dlnode<T> *ll_find_prev(dlist<T> *ll, dlnode<T> *node)
 
 template<class T>
 slnode<T> * ll_end(slist<T> *ll) {
-    return ll_find_prev(ll, nullptr);
+    return ll_find_prev(ll, {});
 }
 
 template<class T>
 dlnode<T> * ll_end(dlist<T> *ll) {
-    return ll_find_prev(ll, nullptr);
+    return ll_find_prev(ll, {});
 }
 
 template<class T>
 void ll_push_front(slist<T> *ll, slnode<T> *new_node)
 {
-    slnode<T> *np = nullptr;
-    ll_insert(ll, np, new_node);
+    ll_insert(ll, {}, new_node);
 }
 
 template<class T>
 void ll_push_front(dlist<T> *ll, dlnode<T> *new_node)
 {
-    ll_insert(ll, nullptr, new_node);
+    ll_insert(ll, {}, new_node);
 }
 
 template<class T>
@@ -195,8 +194,7 @@ template<class T>
 slnode<T> *ll_pop_front(slist<T> *ll)
 {
     slnode<T> *top = ll->head;
-    slnode<T> *np = nullptr;
-    ll_remove(ll, np, top);
+    ll_remove(ll, {}, top);
     return top;
 }
 

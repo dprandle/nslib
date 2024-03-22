@@ -35,16 +35,32 @@ intern const u16 CUBE_INDS_LINE_STRIP[] = {0, 2, 3, 1, 5, 7, 6, 4, 0, 2, 6, 4, 5
 
 intern const u16 CUBE_INDS_POINTS[] = {0, 1, 2, 3, 4, 5, 6, 7};
 
-void make_cube(submesh *sm)
+intern void make_cube_submesh(submesh *sm)
 {
     arr_copy(&sm->verts, CUBE_VERTS, 8);
     arr_copy(&sm->inds, CUBE_INDS_TRI_LIST, 6);
 }
 
-void make_rect(submesh *sm)
+intern void make_rect_submesh(submesh *sm)
 {
     arr_copy(&sm->verts, RECT_VERTS, 4);
     arr_copy(&sm->inds, RECT_INDS_TRI_LIST, 6);
+}
+
+void make_rect(mesh *msh)
+{
+    assert(msh->submeshes.size == 0);
+    msh->submeshes.size = 1;
+    init_submesh(msh->submeshes.data, msh->sub_arena);
+    make_rect_submesh(msh->submeshes.data);
+}
+
+void make_cube(mesh *msh)
+{
+    assert(msh->submeshes.size == 0);
+    msh->submeshes.size = 1;
+    init_submesh(msh->submeshes.data, msh->sub_arena);
+    make_cube_submesh(msh->submeshes.data);
 }
 
 void init_submesh(submesh *sm, mem_arena *arena)
@@ -61,11 +77,22 @@ void terminate_submesh(submesh *sm)
     arr_terminate(&sm->inds);
 }
 
-void terminate_robj(mesh *mesh)
+void init_mesh(mesh *msh, mem_arena *arena)
 {
-    for (int i = 0; i < mesh->submeshes.size; ++i) {
-        terminate_submesh(&mesh->submeshes[i]);
+    assert(msh->submeshes.size == 0);
+    msh->sub_arena = arena;
+}
+
+void terminate_mesh(mesh *msh)
+{
+    for (int i = 0; i < msh->submeshes.size; ++i) {
+        terminate_submesh(&msh->submeshes[i]);
     }
+}
+
+void terminate_robj(mesh *msh)
+{
+    terminate_mesh(msh);
 }
 
 } // namespace nslib

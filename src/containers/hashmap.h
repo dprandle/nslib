@@ -133,6 +133,10 @@ void hashmap_clear(hashmap<K, T> *hm, bool update_cap)
     ihashmap_clear(hm->hm, update_cap);
 }
 
+// hashmap_set inserts or replaces an item in the hash map. If an item is
+// replaced then it is returned otherwise nullptr is returned. This operation
+// may allocate memory. If the system is unable to allocate additional
+// memory then nullptr
 template<class K, class T>
 typename hashmap<K, T>::iterator hashmap_set(hashmap<K, T> *hm, const K &key, const T &value)
 {
@@ -141,6 +145,10 @@ typename hashmap<K, T>::iterator hashmap_set(hashmap<K, T> *hm, const K &key, co
     return (typename hashmap<K, T>::iterator)ihashmap_set(hm->hm, &item);
 }
 
+// hashmap_set inserts or replaces an item in the hash map. If an item is
+// replaced then it is returned otherwise nullptr is returned. This operation
+// may allocate memory. If the system is unable to allocate additional
+// memory then nullptr
 template<class K, class T>
 typename hashmap<K, T>::iterator hashmap_set(hashmap<K, T> *hm, const typename hashmap<K, T>::value_type &item)
 {
@@ -148,6 +156,8 @@ typename hashmap<K, T>::iterator hashmap_set(hashmap<K, T> *hm, const typename h
     return (typename hashmap<K, T>::iterator)ihashmap_set(hm->hm, &item);
 }
 
+// hashmap_find returns the item based on the provided key. If the item is not
+// found then nullptr is returned.
 template<class K, class T>
 typename hashmap<K, T>::const_iterator hashmap_find(const hashmap<K, T> *hm, const K &key)
 {
@@ -156,6 +166,8 @@ typename hashmap<K, T>::const_iterator hashmap_find(const hashmap<K, T> *hm, con
     return (typename hashmap<K, T>::const_iterator)ihashmap_get(hm->hm, &find_item);
 }
 
+// hashmap_find returns the item based on the provided key. If the item is not
+// found then nullptr is returned.
 template<class K, class T>
 typename hashmap<K, T>::iterator hashmap_find(hashmap<K, T> *hm, const K &key)
 {
@@ -164,6 +176,8 @@ typename hashmap<K, T>::iterator hashmap_find(hashmap<K, T> *hm, const K &key)
     return (typename hashmap<K, T>::iterator)ihashmap_get(hm->hm, &find_item);
 }
 
+// hashmap_remove removes an item from the hash map and returns it. If the
+// item is not found then nullptr is returned.
 template<class K, class T>
 typename hashmap<K, T>::iterator hashmap_remove(hashmap<K, T> *hm, const K &key)
 {

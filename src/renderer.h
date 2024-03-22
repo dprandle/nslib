@@ -16,6 +16,8 @@ struct camera;
 const sizet DEFAULT_VERT_BUFFER_SIZE = sizeof(vertex) * 10000000;
 const sizet DEFAULT_IND_BUFFER_SIZE = sizeof(u16) * 50000000;
 const sizet MAX_FREE_SBUFFER_NODE_COUNT = 1024;
+const sizet MIN_VERT_FREE_BLOCK_SIZE = sizeof(vertex) * 4;
+const sizet MIN_IND_FREE_BLOCK_SIZE = sizeof(u16) * 6;
 
 namespace err_code
 {
@@ -48,9 +50,12 @@ struct sbuffer_entry
     sizet avail;
 };
 
+using sbuffer_entry_slnode = slnode<sbuffer_entry>;
+
 struct sbuffer_info
 {
     u32 buf_ind;
+    sizet min_free_block_size;
     slist<sbuffer_entry> fl;
     mem_arena node_pool;
 };
@@ -97,7 +102,7 @@ struct renderer
     sizet swapchain_fb_depth_stencil_im_ind{INVALID_IND};
 };
 
-void upload_to_gpu(mesh *msh, renderer *rdnr);
+bool upload_to_gpu(mesh *msh, renderer *rdnr);
 
 int init_renderer(renderer *rndr, void *win_hndl, mem_arena *fl_arena);
 
