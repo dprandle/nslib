@@ -221,7 +221,7 @@ intern int setup_pipeline(renderer *rndr)
     return vkr_init_pipeline(vk, &info, &vk->inst.device.pipelines[rndr->pipeline_ind]);
 }
 
-intern int init_rmesh_info(renderer *rndr)
+intern int setup_rmesh_info(renderer *rndr)
 {
     auto vk = rndr->vk;
     auto dev = &vk->inst.device;
@@ -259,6 +259,7 @@ intern int init_rmesh_info(renderer *rndr)
 
     mem_init_pool_arena<sbuffer_entry_slnode>(&rndr->rmi.verts.node_pool, MAX_FREE_SBUFFER_NODE_COUNT, mem_global_stack_arena());
     mem_init_pool_arena<sbuffer_entry_slnode>(&rndr->rmi.inds.node_pool, MAX_FREE_SBUFFER_NODE_COUNT, mem_global_stack_arena());
+    hashmap_init(&rndr->rmi.meshes, mem_global_arena());
 
     // Create the head nodes of our vert and index buffer free list - indice 0 and full buffer size
     auto vert_head = mem_alloc<sbuffer_entry_slnode>(&rndr->rmi.verts.node_pool);
@@ -355,18 +356,18 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
         assert(ret == err_code::VKR_NO_ERROR);
 
         // Upload our ind data to the GPU
-        ret = vkr_stage_and_upload_buffer_data(&dev->buffers[rndr->rmi.verts.buf_ind],
-                                         msh->submeshes[subi].verts.data,
-                                         req_vert_size,
-                                         &vert_region,
-                                         &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX],
-                                         rndr->vk);
+        ret = vkr_stage_and_upload_buffer_data(&dev->buffers[rndr->rmi.inds.buf_ind],
+                                               msh->submeshes[subi].inds.data,
+                                               req_inds_size,
+                                               &ind_region,
+                                               &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX],
+                                               rndr->vk);
         assert(ret == err_code::VKR_NO_ERROR);
-        
     }
 
     // Add the smesh entry we just built to the renderer mesh entry map (stored by id)
     hashmap_set(&rndr->rmi.meshes, msh->id, new_mentry);
+    
     return true;
 }
 
@@ -499,7 +500,7 @@ intern int setup_rendering(renderer *rndr)
         return err;
     }
 
-    err = init_rmesh_info(rndr);
+    err = setup_rmesh_info(rndr);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
@@ -620,12 +621,21 @@ intern int record_command_buffer(renderer *rndr, sim_region *rgn, vkr_framebuffe
         for (int i = 0; i < tf_tbl->entries.size; ++i) {
             auto curtf = &tf_tbl->entries[i];
             auto rc = get_comp(curtf->ent_id, sm_tbl);
+            auto ent = get_entity(curtf->ent_id, rgn);
 
             if (rc) {
-                pc.model = curtf->cached;
-
-                vkCmdPushConstants(cmd_buf->hndl, pipeline->layout_hndl, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push_constants), &pc);
-                // vkCmdDrawIndexed(cmd_buf->hndl, rndr->rect.inds.size, 1, 0, 0, 0);
+                auto rmesh = hashmap_find(&rndr->rmi.meshes, rc->mesh_id);
+                if (rmesh) {
+                    for (int i = 0; i < rmesh->value.submesh_entrees.size; ++i) {
+                        auto sm = &rmesh->value.submesh_entrees[i];
+                        pc.model = curtf->cached;
+                        u32 ind_count = sm->inds.avail/sizeof(u16);
+                        u32 ind_offset = sm->inds.offset/sizeof(u16);
+                        u32 vert_offset = sm->verts.offset/sizeof(vertex);
+                        vkCmdPushConstants(cmd_buf->hndl, pipeline->layout_hndl, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push_constants), &pc);
+                        vkCmdDrawIndexed(cmd_buf->hndl, ind_count, 1, ind_offset, vert_offset, 0);
+                    }
+                }
             }
         }
     }
@@ -822,6 +832,7 @@ int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_fram
 void terminate_renderer(renderer *rndr)
 {
     // These are stack arenas so must go in this order
+    hashmap_terminate(&rndr->rmi.meshes);
     mem_terminate_arena(&rndr->rmi.inds.node_pool);
     mem_terminate_arena(&rndr->rmi.verts.node_pool);
 

@@ -20,6 +20,9 @@ sizet add_entities(sizet count, sim_region *reg)
     for (sizet i = 0; i < count; ++i) {
         reg->ents[ind + i].id = ++reg->last_id;
         reg->ents[ind + i].cdb = &reg->cdb;
+        auto iter = hashmap_set(&reg->entmap, reg->ents[ind + i].id, ind + i);
+        assert(!iter);
+        
     }
     return ind;
 }

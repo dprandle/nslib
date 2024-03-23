@@ -16,7 +16,7 @@ struct app_data
 
     input_keymap global_km;
     input_keymap_stack stack{};
-    
+
     u32 cam_id;
     vec2 mpos;
     ivec2 movement{};
@@ -35,7 +35,7 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_ke
 
     cam_comp->proj = (math::perspective(60.0f, (f32)sz.w / (f32)sz.h, 0.1f, 1000.0f));
     cam_comp->view = (math::look_at(vec3{0.0f, 10.0f, -5.0f}, vec3{0.0f}, vec3{0.0f, 1.0f, 0.0f}));
-    
+
     cam_tcomp->cached = math::inverse(cam_comp->view);
     cam_tcomp->orientation = math::orientation(cam_tcomp->cached);
     cam_tcomp->scale = math::scaling_vec(cam_tcomp->cached);
@@ -60,8 +60,8 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_ke
 
         vec3 right = math::right_vec(camt->orientation);
         f32 factor = 2.5;
-        vec4 horizontal = {right, -(f32)delta.y*factor};
-        vec4 vertical = {{0, 0, 1}, (f32)delta.x*factor};
+        vec4 horizontal = {right, -(f32)delta.y * factor};
+        vec4 vertical = {{0, 0, 1}, (f32)delta.x * factor};
         camt->orientation = math::orientation(vertical) * math::orientation(horizontal) * camt->orientation;
         camt->cached = math::model_tform(camt->world_pos, camt->orientation, camt->scale);
         camc->view = math::inverse(camt->cached);
@@ -96,7 +96,7 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_ke
     };
     k = keymap_button_key(KEY_W, MOD_NONE, INPUT_ACTION_RELEASE);
     set_keymap_entry(k, &cam_move, kmap);
-    
+
     cam_move.name = "cam_back_press";
     cam_move.cb = [](const input_event *ev, void *data) {
         auto app = (app_data *)data;
@@ -112,7 +112,6 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_ke
     };
     k = keymap_button_key(KEY_S, MOD_NONE, INPUT_ACTION_RELEASE);
     set_keymap_entry(k, &cam_move, kmap);
-    
 
     cam_move.name = "cam_left_press";
     cam_move.cb = [](const input_event *ev, void *data) {
@@ -129,7 +128,7 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_ke
     };
     k = keymap_button_key(KEY_A, MOD_NONE, INPUT_ACTION_RELEASE);
     set_keymap_entry(k, &cam_move, kmap);
-    
+
     cam_move.name = "cam_right_press";
     cam_move.cb = [](const input_event *ev, void *data) {
         auto app = (app_data *)data;
@@ -145,7 +144,6 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_ke
     };
     k = keymap_button_key(KEY_D, MOD_NONE, INPUT_ACTION_RELEASE);
     set_keymap_entry(k, &cam_move, kmap);
-    
 }
 
 int init(platform_ctxt *ctxt, void *user_data)
@@ -154,57 +152,73 @@ int init(platform_ctxt *ctxt, void *user_data)
 
     init_cache_group_default_types(&app->cg, mem_global_arena());
 
-    // Create meshes 
+    // Create meshes
     auto mc = get_cache<mesh>(&app->cg);
     auto cube_msh = add_robj(mc);
     auto rect_msh = add_robj(mc);
     init_mesh(cube_msh, mem_global_arena());
     init_mesh(rect_msh, mem_global_arena());
-    make_cube(cube_msh);
     make_rect(rect_msh);
+    make_cube(cube_msh);
+
+    ilog("Rect mesh submesh count %d and vert count %d and ind count %d",
+         rect_msh->submeshes.size,
+         rect_msh->submeshes[0].verts.size,
+         rect_msh->submeshes[0].inds.size);
+    ilog("Cube mesh submesh count %d and vert count %d and ind count %d",
+         cube_msh->submeshes.size,
+         cube_msh->submeshes[0].verts.size,
+         cube_msh->submeshes[0].inds.size);
 
     // Create our sim region aka scene
     init_sim_region(&app->rgn, mem_global_arena());
 
     // Create a grid of entities with odd ones being cubes and even being rectangles
     int len = 10, width = 10;
-    add_entities(len*width, &app->rgn);
+    add_entities(len * width, &app->rgn);
+
     for (int yind = 0; yind < len; ++yind) {
         for (int xind = 0; xind < width; ++xind) {
-            auto tfcomp = add_comp<transform>(&app->rgn.ents[xind + yind*width]);
-            auto sc = add_comp<static_model>(&app->rgn.ents[xind + yind*width]);
+            auto ent = &app->rgn.ents[xind + yind * width];
+            auto tfcomp = add_comp<transform>(ent);
+            auto sc = add_comp<static_model>(ent);
             if (xind % 2) {
                 sc->mesh_id = cube_msh->id;
+                ent->name = to_str("Cube %d", xind + yind * width);
             }
             else {
                 sc->mesh_id = rect_msh->id;
+                ent->name = to_str("Rect %d", xind + yind * width);
             }
-            
             tfcomp->world_pos = vec3{xind * 2.0f, yind * 2.0f, 0.0f};
             tfcomp->cached = math::model_tform(tfcomp->world_pos, tfcomp->orientation, tfcomp->scale);
         }
     }
-    
-    //Create input map
+
+    // Create input map
     init_keymap("global", &app->global_km, &ctxt->arenas.free_list);
 
     // Create and setup input for camera
     setup_camera_controller(ctxt, app, &app->global_km);
-    
+
     push_keymap(&app->global_km, &app->stack);
-    
-    return init_renderer(&app->rndr, ctxt->win_hndl, &ctxt->arenas.free_list);
+
+    int ret = init_renderer(&app->rndr, ctxt->win_hndl, &ctxt->arenas.free_list);
+
+    upload_to_gpu(rect_msh, &app->rndr);
+    upload_to_gpu(cube_msh, &app->rndr);
+    return ret;
 }
 
 int run_frame(platform_ctxt *ctxt, void *user_data)
 {
     auto app = (app_data *)user_data;
-    
+
     map_input_frame(&ctxt->finp, &app->stack);
     f64 elapsed_s = nanos_to_sec(ptimer_elapsed_dt(&ctxt->time_pts));
 
     // Move the cam if needed
-    auto cam = get_comp<camera>(app->cam_id, &app->rgn.cdb);    
+    auto cam = get_comp<camera>(app->cam_id, &app->rgn.cdb);
     if (app->movement != ivec2{}) {
         auto cam_tform = get_comp<transform>(app->cam_id, &app->rgn.cdb);
         auto right = math::right_vec(cam_tform->orientation);
@@ -214,14 +228,12 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
         cam->view = math::inverse(cam_tform->cached);
     }
 
-    // Spin some pictures
+    // Spin some entities
     auto tform_tbl = get_comp_tbl<transform>(&app->rgn.cdb);
     for (sizet i = 0; i < tform_tbl->entries.size; ++i) {
         auto curtf = &tform_tbl->entries[i];
-        if (i % 100 == 0 && curtf->ent_id != app->cam_id) {
+        if (i % 2 != 0 && curtf->ent_id != app->cam_id) {
             curtf->orientation *= math::orientation(vec4{1.0, 0.0, 0.0, (f32)ctxt->time_pts.dt});
-            curtf->world_pos.x = math::sin((f32)elapsed_s);
-            curtf->world_pos.y = math::cos((f32)elapsed_s);
             curtf->flags = COMP_FLAG_DIRTY;
             curtf->cached = math::model_tform(curtf->world_pos, curtf->orientation, curtf->scale);
         }

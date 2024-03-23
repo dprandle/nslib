@@ -38,13 +38,13 @@ intern const u16 CUBE_INDS_POINTS[] = {0, 1, 2, 3, 4, 5, 6, 7};
 intern void make_cube_submesh(submesh *sm)
 {
     arr_copy(&sm->verts, CUBE_VERTS, 8);
-    arr_copy(&sm->inds, CUBE_INDS_TRI_LIST, 6);
+    arr_copy(&sm->inds, CUBE_INDS_TRI_LIST, sizeof(CUBE_INDS_TRI_LIST) / sizeof(u16));
 }
 
 intern void make_rect_submesh(submesh *sm)
 {
     arr_copy(&sm->verts, RECT_VERTS, 4);
-    arr_copy(&sm->inds, RECT_INDS_TRI_LIST, 6);
+    arr_copy(&sm->inds, RECT_INDS_TRI_LIST, sizeof(RECT_INDS_TRI_LIST) / sizeof(u16));
 }
 
 void make_rect(mesh *msh)
