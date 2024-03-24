@@ -8,6 +8,7 @@ namespace nslib
 
 const sizet JOINTS_PER_VERTEX = 4;
 const sizet MAX_SUBMESH_COUNT = 32;
+using ind_t = u16;
 
 struct material{
     rid id;
@@ -31,7 +32,7 @@ struct submesh
 {
     array<vertex> verts;
     array<vertex_cjoints> cjoints;
-    array<u16> inds;
+    array<ind_t> inds;
 };
 
 struct mesh {

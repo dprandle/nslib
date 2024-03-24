@@ -26,9 +26,6 @@ create_sample(basic_window)
 
 create_sample(input_keymaps)
 
-create_sample(triangle)
-add_sample_compile_shaders_target(triangle)
-
 create_sample(containers)
 
 create_sample(pack_unpack)

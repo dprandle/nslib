@@ -242,7 +242,7 @@ intern int setup_rmesh_info(renderer *rndr)
     // Vert buffer
     ilog("Creating vertex buffer");
     b_cfg.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    b_cfg.buffer_size = DEFAULT_VERT_BUFFER_SIZE;
+    b_cfg.buffer_size = DEFAULT_VERT_BUFFER_SIZE * sizeof(vertex);
     int err = vkr_init_buffer(&dev->buffers[rndr->rmi.verts.buf_ind], &b_cfg);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
@@ -251,7 +251,7 @@ intern int setup_rmesh_info(renderer *rndr)
     // Ind buffer
     ilog("Creating index buffer");
     b_cfg.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    b_cfg.buffer_size = DEFAULT_IND_BUFFER_SIZE;
+    b_cfg.buffer_size = DEFAULT_IND_BUFFER_SIZE * sizeof(ind_t);
     err = vkr_init_buffer(&dev->buffers[rndr->rmi.inds.buf_ind], &b_cfg);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
@@ -263,12 +263,12 @@ intern int setup_rmesh_info(renderer *rndr)
 
     // Create the head nodes of our vert and index buffer free list - indice 0 and full buffer size
     auto vert_head = mem_alloc<sbuffer_entry_slnode>(&rndr->rmi.verts.node_pool);
-    vert_head->data.avail = DEFAULT_VERT_BUFFER_SIZE;
+    vert_head->data.size = DEFAULT_VERT_BUFFER_SIZE;
     vert_head->data.offset = 0;
     ll_push_back(&rndr->rmi.verts.fl, vert_head);
 
     auto ind_head = mem_alloc<sbuffer_entry_slnode>(&rndr->rmi.inds.node_pool);
-    ind_head->data.avail = DEFAULT_IND_BUFFER_SIZE;
+    ind_head->data.size = DEFAULT_IND_BUFFER_SIZE;
     ind_head->data.offset = 0;
     ll_push_back(&rndr->rmi.inds.fl, ind_head);
 
@@ -280,7 +280,7 @@ intern sbuffer_entry find_sbuffer_block(sbuffer_info *sbuf, sizet req_size)
     // Find the first node with enough available memory
     auto node = sbuf->fl.head;
     sbuffer_entry_slnode *prev_node{};
-    while (node && req_size > node->data.avail) {
+    while (node && req_size > node->data.size) {
         prev_node = node;
         node = node->next;
     }
@@ -294,20 +294,20 @@ intern sbuffer_entry find_sbuffer_block(sbuffer_info *sbuf, sizet req_size)
     mem_free(node, &sbuf->node_pool);
 
     // If the remaining is enough to hold at least a quad we should insert a new free entry at the proper spot
-    sizet remain = ret_entry.avail - req_size;
+    sizet remain = ret_entry.size - req_size;
     if (remain >= sbuf->min_free_block_size) {
 
         auto fnode = sbuf->fl.head;
         sbuffer_entry_slnode *prev_fnode{};
-        while (fnode && fnode->data.avail < remain) {
+        while (fnode && fnode->data.size < remain) {
             prev_fnode = fnode;
             fnode = fnode->next;
         }
 
         auto new_node = mem_alloc<sbuffer_entry_slnode>(&sbuf->node_pool);
-        ret_entry.avail -= remain;
-        new_node->data.avail = remain;
-        new_node->data.offset = ret_entry.offset + ret_entry.avail;
+        ret_entry.size -= remain;
+        new_node->data.size = remain;
+        new_node->data.offset = ret_entry.offset + ret_entry.size;
         ll_insert(&sbuf->fl, prev_fnode, new_node);
     }
     return ret_entry;
@@ -323,25 +323,28 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
     // Find the first available sbuffer entry in the free list
     rmesh_entry new_mentry{};
     for (int subi = 0; subi < msh->submeshes.size; ++subi) {
-        sizet req_vert_size = arr_sizeof(msh->submeshes[subi].verts);
-        sizet req_inds_size = arr_sizeof(msh->submeshes[subi].inds);
+        sizet req_vert_size = arr_len(msh->submeshes[subi].verts);
+        sizet req_vert_byte_size = arr_sizeof(msh->submeshes[subi].verts);
+        sizet req_inds_size = arr_len(msh->submeshes[subi].inds);
+        sizet req_inds_byte_size = arr_sizeof(msh->submeshes[subi].inds);
 
         // Add an entry in the hashmap for our mesh to refer to this sbuffer entry we just got from the free list
         rsubmesh_entry new_smentry{};
         new_smentry.verts = find_sbuffer_block(&rndr->rmi.verts, req_vert_size);
         new_smentry.inds = find_sbuffer_block(&rndr->rmi.inds, req_inds_size);
-        assert(new_smentry.verts.avail > 0);
-        assert(new_smentry.inds.avail > 0);
+        assert(new_smentry.verts.size > 0);
+        assert(new_smentry.inds.size > 0);
         arr_push_back(&new_mentry.submesh_entrees, new_smentry);
 
         // Our required vert and ind size might be a little less than the avail block size, if a block was picked that
         // was big enough to fit our needs but the remaining available in the block was less than the required min block
         // size fot the sbuffer
         VkBufferCopy vert_region{}, ind_region{};
-        vert_region.size = req_vert_size;
-        vert_region.dstOffset = new_smentry.verts.offset;
-        ind_region.size = req_inds_size;
-        ind_region.dstOffset = new_smentry.inds.offset;
+        vert_region.size = req_vert_byte_size;
+        vert_region.dstOffset = new_smentry.verts.offset * sizeof(vertex);
+        
+        ind_region.size = req_inds_byte_size;
+        ind_region.dstOffset = new_smentry.inds.offset * sizeof(ind_t);
 
         // TODO: Handle error conditions here - there are several reasons why a buffer upload might fail - for new we
         // just assert it worked
@@ -349,7 +352,7 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
         // Upload our vert data to the GPU
         int ret = vkr_stage_and_upload_buffer_data(&dev->buffers[rndr->rmi.verts.buf_ind],
                                          msh->submeshes[subi].verts.data,
-                                         req_vert_size,
+                                         req_vert_byte_size,
                                          &vert_region,
                                          &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX],
                                          rndr->vk);
@@ -358,7 +361,7 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
         // Upload our ind data to the GPU
         ret = vkr_stage_and_upload_buffer_data(&dev->buffers[rndr->rmi.inds.buf_ind],
                                                msh->submeshes[subi].inds.data,
-                                               req_inds_size,
+                                               req_inds_byte_size,
                                                &ind_region,
                                                &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX],
                                                rndr->vk);
@@ -629,11 +632,8 @@ intern int record_command_buffer(renderer *rndr, sim_region *rgn, vkr_framebuffe
                     for (int i = 0; i < rmesh->value.submesh_entrees.size; ++i) {
                         auto sm = &rmesh->value.submesh_entrees[i];
                         pc.model = curtf->cached;
-                        u32 ind_count = sm->inds.avail/sizeof(u16);
-                        u32 ind_offset = sm->inds.offset/sizeof(u16);
-                        u32 vert_offset = sm->verts.offset/sizeof(vertex);
                         vkCmdPushConstants(cmd_buf->hndl, pipeline->layout_hndl, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push_constants), &pc);
-                        vkCmdDrawIndexed(cmd_buf->hndl, ind_count, 1, ind_offset, vert_offset, 0);
+                        vkCmdDrawIndexed(cmd_buf->hndl, sm->inds.size, 1, sm->inds.offset, sm->verts.offset, 0);
                     }
                 }
             }

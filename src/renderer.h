@@ -13,11 +13,16 @@ struct vkr_context;
 struct sim_region;
 struct camera;
 
-const sizet DEFAULT_VERT_BUFFER_SIZE = sizeof(vertex) * 10000000;
-const sizet DEFAULT_IND_BUFFER_SIZE = sizeof(u16) * 50000000;
+// Default vert buffer size (holding all of our verts) in vert count (not byte size)
+const sizet DEFAULT_VERT_BUFFER_SIZE = 10000000;
+// Default ind buffer size (holding all of our inds) in ind count (not byte size)
+const sizet DEFAULT_IND_BUFFER_SIZE = 50000000;
+// Initial mem pool size (in element count) for our sbuffer mem pools
 const sizet MAX_FREE_SBUFFER_NODE_COUNT = 1024;
-const sizet MIN_VERT_FREE_BLOCK_SIZE = sizeof(vertex) * 4;
-const sizet MIN_IND_FREE_BLOCK_SIZE = sizeof(u16) * 6;
+// Minimum allowed sbuffer_entry block size in the free list for verts
+const sizet MIN_VERT_FREE_BLOCK_SIZE = 4;
+// Minimum allowed sbuffer_entry block size in the free list for indices
+const sizet MIN_IND_FREE_BLOCK_SIZE = 6;
 
 namespace err_code
 {
@@ -47,7 +52,7 @@ struct uniform_buffer_object
 struct sbuffer_entry
 {
     sizet offset;
-    sizet avail;
+    sizet size;
 };
 
 using sbuffer_entry_slnode = slnode<sbuffer_entry>;
