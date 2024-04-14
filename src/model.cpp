@@ -34,7 +34,7 @@ intern const ind_t CUBE_INDS_LINE_LIST[] = {0, 1, 0, 2, 0, 4, 1, 3, 1, 5, 2, 3, 
 intern const ind_t CUBE_INDS_LINE_STRIP[] = {0, 2, 3, 1, 5, 7, 6, 4, 0, 2, 6, 4, 5, 7, 3, 1, 0};
 
 intern const ind_t CUBE_INDS_POINTS[] = {0, 1, 2, 3, 4, 5, 6, 7};
-
+// TODO: Need to try this
 intern void make_cube_submesh(submesh *sm)
 {
     arr_copy(&sm->verts, CUBE_VERTS, 8);

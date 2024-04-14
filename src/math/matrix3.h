@@ -424,7 +424,7 @@ quaternion<T> orientation(const matrix3<T> &rotation)
     if (tr > 0)
     {
         s = math::sqrt(tr + 1.0) * 2;
-        ret.w = 0.25 * s;
+        ret.w = T(0.25) * s;
         ret.x = (rotation[2][1] - rotation[1][2]) / s;
         ret.y = (rotation[0][2] - rotation[2][0]) / s;
         ret.z = (rotation[1][0] - rotation[0][1]) / s;
@@ -433,7 +433,7 @@ quaternion<T> orientation(const matrix3<T> &rotation)
     {
         s = math::sqrt(1.0 + rotation[0][0] - rotation[1][1] - rotation[2][2]) * 2;
         ret.w = (rotation[2][1] - rotation[1][2]) / s;
-        ret.x = 0.25 * s;
+        ret.x = T(0.25) * s;
         ret.y = (rotation[0][1] + rotation[1][0]) / s;
         ret.z = (rotation[0][2] + rotation[2][0]) / s;
     }
@@ -442,7 +442,7 @@ quaternion<T> orientation(const matrix3<T> &rotation)
         s = math::sqrt(1.0 + rotation[1][1] - rotation[0][0] - rotation[2][2]) * 2;
         ret.w = (rotation[0][2] - rotation[2][0]) / s;
         ret.x = (rotation[0][1] + rotation[1][0]) / s;
-        ret.y = 0.25 * s;
+        ret.y = T(0.25) * s;
         ret.z = (rotation[1][2] + rotation[2][1]) / s;
     }
     else
@@ -451,7 +451,7 @@ quaternion<T> orientation(const matrix3<T> &rotation)
         ret.w = (rotation[1][0] - rotation[0][1]) / s;
         ret.x = (rotation[0][2] + rotation[2][0]) / s;
         ret.y = (rotation[1][2] + rotation[2][1]) / s;
-        ret.z = 0.25 * s;
+        ret.z = T(0.25) * s;
     }
     return ret;
 }

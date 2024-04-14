@@ -20,7 +20,7 @@ intern void glfw_error_callback(i32 error, const char *description)
 
 platform_window_event * get_latest_window_event(platform_window_event_type type, platform_frame_window_events *fwind)
 {
-    for (int i = fwind->events.size - 1; i >= 0; --i) {
+    for (sizet i = fwind->events.size - 1; i >= 0; --i) {
         if (fwind->events[i].type == type) {
             return &fwind->events[i];
         }

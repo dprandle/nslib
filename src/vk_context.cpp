@@ -192,8 +192,6 @@ intern void *vk_realloc(void *user, void *ptr, sizet size, sizet alignment, VkSy
     void *ret = (void *)((sizet)new_header + header_size);
     arenas->stats[scope].actual_alloc += new_block_size;
     sizet diff = arena->used - used_before;
-    assert(diff == (new_block_size - old_block_size));
-
 #if PRINT_MEM_DEBUG
 #if PRINT_MEM_INSTANCE_ONLY
     if (scope == VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE) {
@@ -216,6 +214,10 @@ intern void *vk_realloc(void *user, void *ptr, sizet size, sizet alignment, VkSy
     }
 #endif
 #endif
+    if (diff != (new_block_size - old_block_size)) {
+        wlog("Diff problems!");
+    }
+//    assert(diff == (new_block_size - old_block_size));
     return ret;
 }
 

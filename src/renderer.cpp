@@ -204,7 +204,7 @@ intern int setup_pipeline(renderer *rndr)
     info.depth_stencil.max_depth_bounds = 1.0f;
 
     // Our basic shaders
-    const char *fnames[] = {"data/shaders/rdev.vert.spv", "data/shaders/rdev.frag.spv"};
+    const char *fnames[] = {"./data/shaders/rdev.vert.spv", "./data/shaders/rdev.frag.spv"};
     for (int i = 0; i <= VKR_SHADER_STAGE_FRAG; ++i) {
         platform_file_err_desc err{};
         arr_init(&info.shader_stages[i].code, &rndr->vk_frame_linear);

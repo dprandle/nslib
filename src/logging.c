@@ -22,7 +22,17 @@
 
 #include "logging.h"
 #include "string.h"
+#if defined(_WIN32)
+#include <stdlib.h>
+char *basename(char *path) {
+    char fname[200];
+    _splitpath(path, NULL, NULL, fname, NULL);
+    strncpy(path, fname, 200);
+    return path;
+}
+#else
 #include "libgen.h"
+#endif
 
 #define MAX_CALLBACKS 32
 #define LOG_USE_COLOR

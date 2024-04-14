@@ -11,6 +11,7 @@ function(create_sample TARGET_NAME)
     RUNTIME_OUTPUT_DIRECTORY $<1:${CMAKE_BINARY_DIR}/bin>)
 
   target_include_directories(${TARGET_NAME} PUBLIC ${NSLIB_SRC_DIR})
+  target_include_directories(${TARGET_NAME} PUBLIC ${GLFW_INCLUDE})
   target_link_libraries(${TARGET_NAME} ${NSLIB_TARGET_NAME})
 endfunction()
 

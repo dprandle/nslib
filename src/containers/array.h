@@ -352,7 +352,7 @@ array<T>* arr_resize(array<T> *arr, sizet new_size, Args &&...args)
         arr_set_capacity(arr, cap);
     }
 
-    for (int i = arr->size; i < new_size; ++i) {
+    for (sizet i = arr->size; i < new_size; ++i) {
         new (&arr->data[i]) T(std::forward<Args>(args)...);
     }
     arr->size = new_size;

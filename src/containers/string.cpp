@@ -242,7 +242,7 @@ string *str_resize(string *str, sizet new_size, char c)
         str_set_capacity(str, cap);
     }
 
-    for (int i = str_len(*str); i < new_size; ++i) {
+    for (sizet i = str_len(*str); i < new_size; ++i) {
         (*str)[i] = c;
     }
     (*str)[new_size] = 0; // null terminator

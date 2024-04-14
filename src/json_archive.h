@@ -14,7 +14,7 @@ namespace nslib
 struct jsa_stack_frame
 {
     json_obj *current{nullptr};
-    sizet cur_arr_ind{0};
+    int cur_arr_ind{0};
 };
 
 struct json_archive
