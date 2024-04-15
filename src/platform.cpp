@@ -20,9 +20,9 @@ intern void glfw_error_callback(i32 error, const char *description)
 
 platform_window_event * get_latest_window_event(platform_window_event_type type, platform_frame_window_events *fwind)
 {
-    for (sizet i = fwind->events.size - 1; i >= 0; --i) {
-        if (fwind->events[i].type == type) {
-            return &fwind->events[i];
+    for (sizet i = fwind->events.size; i > 0; --i) {
+        if (fwind->events[i-1].type == type) {
+            return &fwind->events[i-1];
         }
     }
     return nullptr;
@@ -30,7 +30,7 @@ platform_window_event * get_latest_window_event(platform_window_event_type type,
 
 bool frame_has_event_type(platform_window_event_type type, const platform_frame_window_events *fwind)
 {
-    for (int i = 0; i < fwind->events.size; ++i) {
+    for (sizet i = 0; i < fwind->events.size; ++i) {
         if (fwind->events[i].type == type) {
             return true;
         }
@@ -352,9 +352,7 @@ void process_platform_window_input(platform_ctxt *pf)
 {
     arr_clear(&pf->finp.events);
     arr_clear(&pf->fwind.events);
-    ilog("before: %lu %lu", pf->finp.events.size, pf->fwind.events.size);
     glfwPollEvents();
-    wlog("after: %lu %lu", pf->finp.events.size, pf->fwind.events.size);
 }
 
 bool platform_window_should_close(void *window_hndl)

@@ -221,7 +221,7 @@ template<arithmetic_type T, holds_basic_arithmetic_type U>
 U operator*(U lhs_, T rhs_)
 {
     for (auto &&element : lhs_)
-        element *= U::value_type(rhs_);
+        element *= typename U::value_type(rhs_);
     return lhs_;
 }
 

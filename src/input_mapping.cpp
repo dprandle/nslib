@@ -218,10 +218,11 @@ void map_input_frame(const platform_frame_input_events *frame, const input_keyma
 {
     assert(frame);
     assert(stack);
-    ilog("Size: %lu", frame->events.size);
+    assert(frame->events.size <= frame->events.capacity);
     for (sizet i = 0; i < frame->events.size; ++i) {
         map_input_event(&frame->events[i], stack);
     }
+    assert(frame->events.size <= frame->events.capacity);
 }
 
 } // namespace nslib
