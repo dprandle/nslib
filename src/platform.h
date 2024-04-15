@@ -100,12 +100,12 @@ struct platform_window_event
 
 struct platform_frame_input_events
 {
-    static_array<platform_input_event, 255> events{};
+    static_array<platform_input_event, 1024> events{};
 };
 
 struct platform_frame_window_events
 {
-    static_array<platform_window_event, 32> events{};
+    static_array<platform_window_event, 1024> events{};
 
     // Screen coords
     ivec2 win_size;

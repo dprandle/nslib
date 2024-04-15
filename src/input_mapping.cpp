@@ -218,7 +218,8 @@ void map_input_frame(const platform_frame_input_events *frame, const input_keyma
 {
     assert(frame);
     assert(stack);
-    for (int i = 0; i < frame->events.size; ++i) {
+    ilog("Size: %lu", frame->events.size);
+    for (sizet i = 0; i < frame->events.size; ++i) {
         map_input_event(&frame->events[i], stack);
     }
 }
