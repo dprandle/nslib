@@ -596,8 +596,8 @@ intern int record_command_buffer(renderer *rndr, sim_region *rgn, vkr_framebuffe
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = fb->size.w;
-    viewport.height = fb->size.h;
+    viewport.width = (float)fb->size.w;
+    viewport.height = (float)fb->size.h;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(cmd_buf->hndl, 0, 1, &viewport);
@@ -633,7 +633,7 @@ intern int record_command_buffer(renderer *rndr, sim_region *rgn, vkr_framebuffe
                         auto sm = &rmesh->value.submesh_entrees[i];
                         pc.model = curtf->cached;
                         vkCmdPushConstants(cmd_buf->hndl, pipeline->layout_hndl, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push_constants), &pc);
-                        vkCmdDrawIndexed(cmd_buf->hndl, sm->inds.size, 1, sm->inds.offset, sm->verts.offset, 0);
+                        vkCmdDrawIndexed(cmd_buf->hndl, (u32)sm->inds.size, 1, (u32)sm->inds.offset, (u32)sm->verts.offset, 0);
                     }
                 }
             }
@@ -802,7 +802,7 @@ int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_fram
     if (cam) {
         uniform_buffer_object ubo{};
         ubo.proj_view = cam->proj * cam->view;
-        int ubo_ind = cur_frame->uniform_buffer_ind;
+        sizet ubo_ind = cur_frame->uniform_buffer_ind;
         memcpy(dev->buffers[ubo_ind].mem_info.pMappedData, &ubo, sizeof(uniform_buffer_object));
     }
 

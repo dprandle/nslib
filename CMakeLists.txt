@@ -51,7 +51,7 @@ target_link_libraries(${NSLIB_TARGET_NAME} PRIVATE glfw PUBLIC ${Vulkan_LIBRARIE
 
 if(WIN32)
   add_custom_target(link_target ALL
-    COMMAND ${CMAKE_COMMAND} -E create_symlink ${BUILD_DIR}/debug/compile_commands.json ${CMAKE_SOURCE_DIR}/compile_commands.json)
+    COMMAND ${CMAKE_COMMAND} -E copy ${BUILD_DIR}/debug/compile_commands.json ${CMAKE_SOURCE_DIR}/compile_commands.json)
 else() # Unix
   target_compile_options(${NSLIB_TARGET_NAME} PUBLIC -msse4.1)
   if(APPLE)

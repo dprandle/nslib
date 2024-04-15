@@ -59,7 +59,7 @@ using sbuffer_entry_slnode = slnode<sbuffer_entry>;
 
 struct sbuffer_info
 {
-    u32 buf_ind;
+    sizet buf_ind;
     sizet min_free_block_size;
     slist<sbuffer_entry> fl;
     mem_arena node_pool;

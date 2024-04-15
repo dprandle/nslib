@@ -109,14 +109,14 @@ void seed_data(data_to_pup *data)
     ilog("Seeding data");
     data->robj.id = rid("sample_id");
     data->fs = {"str1_text", "str2_text", {"choice1", "choice2", "choice3", "choice4", "choice5"}};
-    data->v2_sa = {{2, 3, 4.4, 9.1, 2.3}, 2};
+    data->v2_sa = {{2, 3, 4.4f, 9.1f, 2.3f}, 2};
     data->v4 = {4, 3, 2, 1};
     for (int i = 0; i < 5; ++i) {
         data->v4_arr[i] = {i * 1.5f, i * 2.2f, i * 3.5f, i * 4.2f};
         for (int j = 0; j < 5; ++j) {
             data->v4_arr_of_arr[i][j] = {i + j * 1.4f, i + 2.8f * j, i + 3.3f * j, i + 4.2f * j};
         }
-        arr_emplace_back(&data->v2_dyn_arr, i * 4.4, i * 2.2f);
+        arr_emplace_back(&data->v2_dyn_arr, i * 4.4f, i * 2.2f);
     }
     data->hm[string("key1")] = 1;
     data->hm[string("key2")] = 2;

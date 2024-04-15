@@ -595,14 +595,15 @@ int vkr_init_device(vkr_device *dev,
         }
 
         vkr_command_pool qpool{};
+        
         if (vkr_init_cmd_pool(vk, dev->qfams[i].fam_ind, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, &qpool) == err_code::VKR_NO_ERROR) {
-            u32 dpool = vkr_add_cmd_pool(&dev->qfams[i], qpool);
+            sizet dpool = vkr_add_cmd_pool(&dev->qfams[i], qpool);
             dev->qfams[i].default_pool = dpool;
         }
 
         vkr_command_pool qpool_transient{};
         if (vkr_init_cmd_pool(vk, dev->qfams[i].fam_ind, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, &qpool_transient) == err_code::VKR_NO_ERROR) {
-            u32 pool_transient_ind = vkr_add_cmd_pool(&dev->qfams[i], qpool_transient);
+            sizet pool_transient_ind = vkr_add_cmd_pool(&dev->qfams[i], qpool_transient);
             dev->qfams[i].transient_pool = pool_transient_ind;
         }
     }
@@ -906,7 +907,7 @@ vkr_add_result vkr_add_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, s
     info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     info.commandPool = pool->hndl;
     info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    info.commandBufferCount = count;
+    info.commandBufferCount = (u32)count;
     int err = vkAllocateCommandBuffers(vk->inst.device.hndl, &info, hndls.data);
     if (err != VK_SUCCESS) {
         elog("Failed to create command buffer/s with code %d", err);
@@ -932,10 +933,10 @@ void vkr_remove_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, sizet in
     array<VkCommandBuffer> hndls{};
     arr_init(&hndls, vk->cfg.arenas.command_arena);
     arr_resize(&hndls, count);
-    for (u32 i = 0; i < count; ++i) {
+    for (sizet i = 0; i < count; ++i) {
         hndls[i] = pool->buffers[ind + i].hndl;
     }
-    vkFreeCommandBuffers(vk->inst.device.hndl, pool->hndl, count, hndls.data);
+    vkFreeCommandBuffers(vk->inst.device.hndl, pool->hndl, (u32)count, hndls.data);
     arr_erase(&pool->buffers, &pool->buffers[ind], &pool->buffers[ind + count]);
     arr_terminate(&hndls);
 }
@@ -951,7 +952,7 @@ vkr_add_result vkr_add_descriptor_sets(vkr_descriptor_pool *pool, const vkr_cont
     VkDescriptorSetAllocateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     info.descriptorPool = pool->hndl;
-    info.descriptorSetCount = count;
+    info.descriptorSetCount = (u32)count;
     info.pSetLayouts = layouts;
     int err = vkAllocateDescriptorSets(vk->inst.device.hndl, &info, hndls.data);
     if (err != VK_SUCCESS) {
@@ -1056,17 +1057,17 @@ int vkr_init_render_pass(const vkr_context *vk, const vkr_rpass_cfg *cfg, vkr_rp
     for (int i = 0; i < cfg->subpasses.size; ++i) {
         subpasses[i].pipelineBindPoint = cfg->subpasses[i].pipeline_bind_point;
 
-        subpasses[i].colorAttachmentCount = cfg->subpasses[i].color_attachments.size;
+        subpasses[i].colorAttachmentCount = (u32)cfg->subpasses[i].color_attachments.size;
         if (subpasses[i].colorAttachmentCount > 0) {
             subpasses[i].pColorAttachments = cfg->subpasses[i].color_attachments.data;
         }
 
-        subpasses[i].inputAttachmentCount = cfg->subpasses[i].input_attachments.size;
+        subpasses[i].inputAttachmentCount = (u32)cfg->subpasses[i].input_attachments.size;
         if (subpasses[i].inputAttachmentCount > 0) {
             subpasses[i].pInputAttachments = cfg->subpasses[i].input_attachments.data;
         }
 
-        subpasses[i].preserveAttachmentCount = cfg->subpasses[i].preserve_attachments.size;
+        subpasses[i].preserveAttachmentCount = (u32)cfg->subpasses[i].preserve_attachments.size;
         if (subpasses[i].preserveAttachmentCount > 0) {
             subpasses[i].pPreserveAttachments = cfg->subpasses[i].preserve_attachments.data;
         }
@@ -1080,11 +1081,11 @@ int vkr_init_render_pass(const vkr_context *vk, const vkr_rpass_cfg *cfg, vkr_rp
 
     VkRenderPassCreateInfo rpass_info{};
     rpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    rpass_info.attachmentCount = cfg->attachments.size;
+    rpass_info.attachmentCount = (u32)cfg->attachments.size;
     rpass_info.pAttachments = cfg->attachments.data;
-    rpass_info.subpassCount = cfg->subpasses.size;
+    rpass_info.subpassCount = (u32)cfg->subpasses.size;
     rpass_info.pSubpasses = subpasses.data;
-    rpass_info.dependencyCount = cfg->subpass_dependencies.size;
+    rpass_info.dependencyCount = (u32)cfg->subpass_dependencies.size;
     rpass_info.pDependencies = cfg->subpass_dependencies.data;
 
     arr_terminate(&subpasses);
@@ -1143,13 +1144,13 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
 {
     ilog("Initializing pipeline");
     VkPipelineShaderStageCreateInfo stages[VKR_SHADER_STAGE_COUNT]{};
-    u32 actual_stagei = 0;
+    sizet actual_stagei = 0;
     for (u32 stagei = 0; stagei < VKR_SHADER_STAGE_COUNT; ++stagei) {
         if (cfg->shader_stages[stagei].code.size > 0) {
             int err = vkr_init_shader_module(vk, &cfg->shader_stages[stagei].code, &stages[actual_stagei].module);
             if (err != err_code::VKR_NO_ERROR) {
                 // Destroy the previously successfully initialized shader modules
-                for (int previ = 0; previ < actual_stagei; ++previ) {
+                for (sizet previ = 0; previ < actual_stagei; ++previ) {
                     vkr_terminate_shader_module(vk, stages[previ].module);
                 }
                 elog("Could not initialize %s shader module", vkr_shader_stage_type_str((vkr_shader_stage_type)stagei));
@@ -1168,15 +1169,15 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
     // Dynamic state
     VkPipelineDynamicStateCreateInfo dyn_state{};
     dyn_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dyn_state.dynamicStateCount = cfg->dynamic_states.size;
+    dyn_state.dynamicStateCount = (u32)cfg->dynamic_states.size;
     dyn_state.pDynamicStates = cfg->dynamic_states.data;
 
     // Vertex Input
     VkPipelineVertexInputStateCreateInfo vertex_input_info{};
     vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertex_input_info.vertexBindingDescriptionCount = cfg->vert_binding_desc.size;
+    vertex_input_info.vertexBindingDescriptionCount = (u32)cfg->vert_binding_desc.size;
     vertex_input_info.pVertexBindingDescriptions = cfg->vert_binding_desc.data;
-    vertex_input_info.vertexAttributeDescriptionCount = cfg->vert_attrib_desc.size;
+    vertex_input_info.vertexAttributeDescriptionCount = (u32)cfg->vert_attrib_desc.size;
     vertex_input_info.pVertexAttributeDescriptions = cfg->vert_attrib_desc.data;
 
     // Input assembly
@@ -1188,9 +1189,9 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
     // Viewport and scissors (default)
     VkPipelineViewportStateCreateInfo viewport_state{};
     viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewport_state.viewportCount = cfg->viewports.size;
+    viewport_state.viewportCount = (u32)cfg->viewports.size;
     viewport_state.pViewports = cfg->viewports.data;
-    viewport_state.scissorCount = cfg->scissors.size;
+    viewport_state.scissorCount = (u32)cfg->scissors.size;
     viewport_state.pScissors = cfg->scissors.data;
 
     // Rasterizer
@@ -1224,7 +1225,7 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
     col_blend_state.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     col_blend_state.logicOpEnable = cfg->col_blend.logic_op_enabled;
     col_blend_state.logicOp = cfg->col_blend.logic_op;
-    col_blend_state.attachmentCount = cfg->col_blend.attachments.size;
+    col_blend_state.attachmentCount = (u32)cfg->col_blend.attachments.size;
     col_blend_state.pAttachments = cfg->col_blend.attachments.data;
     for (int i = 0; i < cfg->col_blend.blend_constants.size(); ++i) {
         col_blend_state.blendConstants[i] = cfg->col_blend.blend_constants[i];
@@ -1248,7 +1249,7 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
     for (int desc_i = 0; desc_i < cfg->set_layouts.size; ++desc_i) {
         VkDescriptorSetLayoutCreateInfo ci{};
         ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        ci.bindingCount = cfg->set_layouts[desc_i].bindings.size;
+        ci.bindingCount = (u32)cfg->set_layouts[desc_i].bindings.size;
         ci.pBindings = cfg->set_layouts[desc_i].bindings.data;
         VkDescriptorSetLayout hndl{};
         int res = vkCreateDescriptorSetLayout(vk->inst.device.hndl, &ci, &vk->alloc_cbs, &hndl);
@@ -1266,9 +1267,9 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
     // Pipeline layout - where we would bind uniforms and such
     VkPipelineLayoutCreateInfo pipeline_layout_create_inf{};
     pipeline_layout_create_inf.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipeline_layout_create_inf.setLayoutCount = pipe_info->descriptor_layouts.size;
+    pipeline_layout_create_inf.setLayoutCount = (u32)pipe_info->descriptor_layouts.size;
     pipeline_layout_create_inf.pSetLayouts = pipe_info->descriptor_layouts.data;
-    pipeline_layout_create_inf.pushConstantRangeCount = cfg->push_constant_ranges.size;
+    pipeline_layout_create_inf.pushConstantRangeCount = (u32)cfg->push_constant_ranges.size;
     pipeline_layout_create_inf.pPushConstantRanges = cfg->push_constant_ranges.data;
 
     if (vkCreatePipelineLayout(vk->inst.device.hndl, &pipeline_layout_create_inf, &vk->alloc_cbs, &pipe_info->layout_hndl) != VK_SUCCESS) {
@@ -1284,7 +1285,7 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
 
     VkGraphicsPipelineCreateInfo pipeline_info{};
     pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipeline_info.stageCount = actual_stagei;
+    pipeline_info.stageCount = (u32)actual_stagei;
     pipeline_info.pStages = stages;                       // done
     pipeline_info.pVertexInputState = &vertex_input_info; // done
     pipeline_info.pInputAssemblyState = &input_assembly;
@@ -1364,7 +1365,7 @@ int vkr_init_framebuffer(const vkr_context *vk, const vkr_framebuffer_cfg *cfg, 
     create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     create_info.renderPass = cfg->rpass->hndl;
     create_info.pAttachments = att.data;
-    create_info.attachmentCount = att.size;
+    create_info.attachmentCount = (u32)att.size;
     create_info.width = cfg->size.x;
     create_info.height = cfg->size.y;
     create_info.layers = cfg->layers;
@@ -1755,7 +1756,7 @@ void vkr_init_swapchain_framebuffers(vkr_device *device,
         if (other_attachments) {
             arr_append(&atts, (*other_attachments)[i].data, (*other_attachments)[i].size);
         }
-        cfg.attachment_count = atts.size;
+        cfg.attachment_count = (u32)atts.size;
         cfg.attachments = atts.data;
         vkr_init_framebuffer(vk, &cfg, &device->framebuffers[fb_offset + i]);
         arr_terminate(&atts);
@@ -2109,7 +2110,7 @@ void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf, const vkr_framebuffe
     info.renderArea.offset = {0, 0};
 
     // Set the clear values
-    info.clearValueCount = clear_val_size;
+    info.clearValueCount = (u32)clear_val_size;
     info.pClearValues = att_clear_vals;
 
     vkCmdBeginRenderPass(cmd_buf->hndl, &info, VK_SUBPASS_CONTENTS_INLINE);

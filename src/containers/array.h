@@ -18,7 +18,7 @@ struct static_array
     static inline constexpr sizet capacity = N;
 
     T data[N]{};
-    sizet size{};
+    sizet size{0};
 
     inline const T &operator[](sizet ind) const
     {

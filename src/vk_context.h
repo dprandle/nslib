@@ -456,8 +456,8 @@ struct vkr_queue
 struct vkr_device_queue_fam_info
 {
     u32 fam_ind;
-    u32 default_pool;
-    u32 transient_pool;
+    sizet default_pool;
+    sizet transient_pool;
     array<vkr_queue> qs;
     array<vkr_command_pool> cmd_pools;
 };
