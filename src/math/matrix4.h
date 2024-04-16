@@ -203,15 +203,15 @@ matrix4<T> inverse(const matrix4<T> &mat)
 }
 
 template<floating_pt T>
-matrix4<T> ortho(T left, T right, T top, T bottom, T near, T far)
+matrix4<T> ortho(T left, T right, T top, T bottom, T nearz, T farz)
 {
     T w = right - left;
     T h = top - bottom;
-    T p = far - near;
+    T p = farz - nearz;
 
     T x = (right + left) / w;
     T y = (top + bottom) / h;
-    T z = (far + near) / p;
+    T z = (farz + nearz) / p;
 
     matrix4<T> ret;
     set_mat_column(&ret, 3, {-x, -y, -z, 1});

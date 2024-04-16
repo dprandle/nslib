@@ -215,8 +215,7 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
     auto app = (app_data *)user_data;
 
     map_input_frame(&ctxt->finp, &app->stack);
-    f64 elapsed_s = nanos_to_sec(ptimer_elapsed_dt(&ctxt->time_pts));
-
+    
     // Move the cam if needed
     auto cam = get_comp<camera>(app->cam_id, &app->rgn.cdb);
     if (app->movement != ivec2{}) {

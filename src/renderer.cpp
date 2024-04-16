@@ -588,7 +588,7 @@ intern int record_command_buffer(renderer *rndr, sim_region *rgn, vkr_framebuffe
         return err;
     }
 
-    VkClearValue att_clear_vals[] = {{.color{1.0f, 0.0f, 1.0f, 1.0f}}, {.depthStencil{1.0f, 0}}};
+    VkClearValue att_clear_vals[] = {{.color{{1.0f, 0.0f, 1.0f, 1.0f}}}, {.depthStencil{1.0f, 0}}};
     vkr_cmd_begin_rpass(cmd_buf, fb, att_clear_vals, 2);
 
     vkCmdBindPipeline(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->hndl);
