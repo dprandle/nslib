@@ -88,9 +88,6 @@ intern int setup_pipeline(renderer *rndr)
     arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_VIEWPORT);
     arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_SCISSOR);
 
-    // Allow changing to line frame for example
-    arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY);
-
     // Descripitor Set Layouts - Just one layout for the moment with a binding at 0 for uniforms and a binding at 1 for
     // image sampler
     ++info.set_layouts.size;
@@ -137,7 +134,7 @@ intern int setup_pipeline(renderer *rndr)
 
     attrib_desc.binding = 0;
     attrib_desc.location = 2;
-    attrib_desc.format = VK_FORMAT_B8G8R8A8_UINT;
+    attrib_desc.format = VK_FORMAT_R8G8B8A8_UINT;
     attrib_desc.offset = offsetof(vertex, color);
     arr_push_back(&info.vert_attrib_desc, attrib_desc);
 
@@ -618,7 +615,7 @@ intern int record_command_buffer(renderer *rndr, sim_region *rgn, vkr_framebuffe
     push_constants pc;
     auto tf_tbl = get_comp_tbl<transform>(&rgn->cdb);
     auto sm_tbl = get_comp_tbl<static_model>(&rgn->cdb);
-    vkCmdSetPrimitiveTopology(cmd_buf->hndl, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+    
 
     if (tf_tbl && sm_tbl) {
         for (int i = 0; i < tf_tbl->entries.size; ++i) {
@@ -774,13 +771,6 @@ int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_fram
         }
     }
 
-    // Get the next available swapchain image index
-    u32 im_ind{};
-    i32 err = acquire_swapchain_image(rndr, cur_frame, &im_ind);
-    if (err != err_code::RENDER_NO_ERROR) {
-        return err;
-    }
-
     // We wait until this FIF's fence has been triggered before rendering the frame. FIF fences are created in a
     // triggered state so there will be no waiting on the first time. We then reset the fence (aka set it to
     // untriggered) and it is passed to the vkQueueSubmit call to trigger it again. So if not the first time rendering
@@ -789,6 +779,13 @@ int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_fram
     if (vk_err != VK_SUCCESS) {
         elog("Failed to wait for fence");
         return err_code::RENDER_WAIT_FENCE_FAIL;
+    }
+
+    // Get the next available swapchain image index
+    u32 im_ind{};
+    i32 err = acquire_swapchain_image(rndr, cur_frame, &im_ind);
+    if (err != err_code::RENDER_NO_ERROR) {
+        return err;
     }
 
     vk_err = vkResetFences(dev->hndl, 1, &cur_frame->in_flight);

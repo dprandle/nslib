@@ -42,20 +42,24 @@ set_target_properties(${NSLIB_TARGET_NAME} PROPERTIES
 target_compile_definitions(${NSLIB_TARGET_NAME} PUBLIC
   NSLIB_VERSION_MAJOR=${NSLIB_VERSION_MAJOR}
   NSLIB_VERSION_MINOR=${NSLIB_VERSION_MINOR}
-  NSLIB_VERSION_PATCH=${NSLIB_VERSION_PATCH}
-  DLL_EXPORTS
-  _CRT_SECURE_NO_WARNINGS 
-)
+  NSLIB_VERSION_PATCH=${NSLIB_VERSION_PATCH})
 target_include_directories(${NSLIB_TARGET_NAME} PRIVATE ${GLFW_INCLUDE} PUBLIC ${Vulkan_INCLUDE_DIRS})
 target_link_libraries(${NSLIB_TARGET_NAME} PRIVATE glfw PUBLIC ${Vulkan_LIBRARIES})
 
 if(WIN32)
   add_custom_target(link_target ALL
     COMMAND ${CMAKE_COMMAND} -E copy ${BUILD_DIR}/debug/compile_commands.json ${CMAKE_SOURCE_DIR}/compile_commands.json)
+  target_compile_definitions(${NSLIB_TARGET_NAME} PUBLIC
+    NSLIB_ENABLE_SIMD=1
+    DLL_EXPORTS
+    _CRT_SECURE_NO_WARNINGS)
 else() # Unix
-  target_compile_options(${NSLIB_TARGET_NAME} PUBLIC -msse4.1)
   if(APPLE)
+    target_compile_options(${NSLIB_TARGET_NAME} PUBLIC -Wno-nullability-completeness)
   else()
+    target_compile_options(${NSLIB_TARGET_NAME} PUBLIC -msse4.1)
+    target_compile_definitions(${NSLIB_TARGET_NAME} PUBLIC
+      NSLIB_ENABLE_SIMD=1)
   endif()
 endif()
 

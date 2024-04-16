@@ -123,12 +123,12 @@ intern void glfw_focus_change_callback(GLFWwindow *window, i32 focused)
     we.window = window;
     we.focus = focused;
     arr_push_back(&pf->fwind.events, we);
-    dlog("Focus Change");
+    tlog("Focus Change");
 }
 
 intern void glfw_close_window_callback(GLFWwindow *window)
 {
-    dlog("Closing window...");
+    tlog("Closing window...");
 }
 
 intern void glfw_iconify_window_callback(GLFWwindow *window, i32 iconified)
@@ -141,7 +141,7 @@ intern void glfw_iconify_window_callback(GLFWwindow *window, i32 iconified)
     we.window = window;
     we.iconified = iconified;
     arr_push_back(&pf->fwind.events, we);
-    dlog("Window %s", (iconified)?"iconified":"restored");
+    tlog("Window %s", (iconified)?"iconified":"restored");
 }
 
 intern void glfw_maximize_window_callback(GLFWwindow *window, i32 maximized)
@@ -154,7 +154,7 @@ intern void glfw_maximize_window_callback(GLFWwindow *window, i32 maximized)
     we.window = window;
     we.iconified = maximized;
     arr_push_back(&pf->fwind.events, we);
-    dlog("Window %s", (maximized)?"maximized":"restored");
+    tlog("Window %s", (maximized)?"maximized":"restored");
 }
 
 intern void glfw_window_position_callback(GLFWwindow *window, i32 x_pos, i32 y_pos)
@@ -186,7 +186,7 @@ intern void glfw_resize_window_callback(GLFWwindow *window, i32 width, i32 heigh
     ev_ptr->resize.first = {width, height};
     ev_ptr->resize.second = pf->fwind.win_size;
     pf->fwind.win_size = ev_ptr->resize.first;
-    dlog("Resized window from {%d %d} to {%d %d}", ev_ptr->resize.second.w, ev_ptr->resize.second.h, width, height);
+    tlog("Resized window from {%d %d} to {%d %d}", ev_ptr->resize.second.w, ev_ptr->resize.second.h, width, height);
 }
 
 intern void glfw_framebuffer_resized_callback(GLFWwindow *window, i32 width, i32 height)
@@ -204,7 +204,7 @@ intern void glfw_framebuffer_resized_callback(GLFWwindow *window, i32 width, i32
     ev_ptr->resize.first = {width, height};
     ev_ptr->resize.second = pf->fwind.fb_size;
     pf->fwind.fb_size = ev_ptr->resize.first;
-    dlog("Resized framebuffer from {%d %d} to {%d %d}", ev_ptr->resize.second.w, ev_ptr->resize.second.h, width, height);
+    tlog("Resized framebuffer from {%d %d} to {%d %d}", ev_ptr->resize.second.w, ev_ptr->resize.second.h, width, height);
 }
 
 intern void set_glfw_callbacks(platform_ctxt *ctxt)

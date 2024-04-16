@@ -204,9 +204,10 @@ int init(platform_ctxt *ctxt, void *user_data)
     push_keymap(&app->global_km, &app->stack);
 
     int ret = init_renderer(&app->rndr, ctxt->win_hndl, &ctxt->arenas.free_list);
-
-    upload_to_gpu(rect_msh, &app->rndr);
-    upload_to_gpu(cube_msh, &app->rndr);
+    if (ret == err_code::RENDER_NO_ERROR) {
+        upload_to_gpu(rect_msh, &app->rndr);
+        upload_to_gpu(cube_msh, &app->rndr);
+    }
     return ret;
 }
 
@@ -254,6 +255,7 @@ int configure_platform(platform_init_info *settings, app_data *app)
 {
     settings->wind.resolution = {800, 600};
     settings->wind.title = "RDev";
+    settings->default_log_level = LOG_DEBUG;
     settings->user_cb.init = init;
     settings->user_cb.run_frame = run_frame;
     settings->user_cb.terminate = terminate;
