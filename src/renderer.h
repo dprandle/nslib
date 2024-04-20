@@ -76,6 +76,7 @@ struct rmesh_entry
     static_array<rsubmesh_entry, MAX_SUBMESH_COUNT> submesh_entrees;
 };
 
+// We use a single vertex and indice buffer for all meshes
 struct rmesh_info
 {
     hashmap<rid, rmesh_entry> meshes;
@@ -88,13 +89,16 @@ struct renderer
     // Passed in
     mem_arena *upstream_fl_arena;
 
-    // Owned
+    // Owned vulkan context and mem arenas used only for vulkan stuff
     vkr_context *vk;
     mem_arena vk_free_list;
     mem_arena vk_frame_linear;
 
-    sizet render_pass_ind;
-    sizet pipeline_ind;
+    // Pipeline indices referenced by ids
+    hashmap<rid, sizet> pipelines;
+
+    // Render pass indices referenced by ids
+    hashmap<rid, sizet> rpasses;
 
     // Contains all info about meshes and where they are in the vert/ind buffers
     rmesh_info rmi;
@@ -107,7 +111,21 @@ struct renderer
     sizet swapchain_fb_depth_stencil_im_ind{INVALID_IND};
 };
 
+// NOTE: All of these mesh operations kind of need to wait on all rendering operations to complete as they modify the
+// vertex and index buffers - not sure yet if this is better done within the functions or in the caller. Also these should be done at the start
+// of a frame because any indices submitted in command buffers will be invalid after these operations. It almost seems
+// like we should get a list of these and then just do it at start of frame after we wait for sync if there are any to do.
+
+// Upload mesh data to GPU using the shared indice/vertex buffer, also "registers" the mesh with the renderer so it can
+// be drawn
 bool upload_to_gpu(mesh *msh, renderer *rdnr);
+
+// Remove from gpu simply adds the meshes block to the free list, indicating that the block can be overwritten, and then
+// removes the mesh from our mesh entry list.
+void remove_from_gpu(mesh *msh, renderer *rndr);
+
+// This removes all gaps between meshes to make the vert and indice buffers contiguous.
+void defragment_meshes(renderer *rndr);
 
 int init_renderer(renderer *rndr, void *win_hndl, mem_arena *fl_arena);
 

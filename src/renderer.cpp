@@ -33,10 +33,14 @@ intern const u32 DEVICE_EXTENSION_COUNT = 1;
 intern const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 #endif
 
+const intern rid FWD_RPASS("forward");
+const intern rid PLINE_FWD_RPASS_S0_OPAQUE("forward-s0-opaque");
+
 intern int setup_render_pass(renderer *rndr)
 {
     auto vk = rndr->vk;
-    rndr->render_pass_ind = vkr_add_render_pass(&vk->inst.device, {});
+    sizet rpass = vkr_add_render_pass(&vk->inst.device, {});
+
     vkr_rpass_cfg rp_cfg{};
 
     VkAttachmentDescription att{};
@@ -77,7 +81,11 @@ intern int setup_render_pass(renderer *rndr)
     sp_dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     arr_push_back(&rp_cfg.subpass_dependencies, sp_dep);
 
-    return vkr_init_render_pass(vk, &rp_cfg, &vk->inst.device.render_passes[rndr->render_pass_ind]);
+    int ret = vkr_init_render_pass(vk, &rp_cfg, &vk->inst.device.render_passes[rpass]);
+    if (ret == err_code::VKR_NO_ERROR) {
+        hashmap_set(&rndr->rpasses, FWD_RPASS, rpass);
+    }
+    return ret;
 }
 
 intern int setup_pipeline(renderer *rndr)
@@ -213,9 +221,17 @@ intern int setup_pipeline(renderer *rndr)
         info.shader_stages[i].entry_point = "main";
     }
 
-    info.rpass = &vk->inst.device.render_passes[rndr->render_pass_ind];
-    rndr->pipeline_ind = vkr_add_pipeline(&vk->inst.device, {});
-    return vkr_init_pipeline(vk, &info, &vk->inst.device.pipelines[rndr->pipeline_ind]);
+    auto rpass_fiter = hashmap_find(&rndr->rpasses, FWD_RPASS);
+    if (rpass_fiter) {
+        info.rpass = &vk->inst.device.render_passes[rpass_fiter->value];
+        sizet plind = vkr_add_pipeline(&vk->inst.device, {});
+        int code = vkr_init_pipeline(vk, &info, &vk->inst.device.pipelines[plind]);
+        if (code == err_code::VKR_NO_ERROR) {
+            hashmap_set(&rndr->pipelines, PLINE_FWD_RPASS_S0_OPAQUE, plind);
+        }
+        return code;
+    }
+    return err_code::RENDER_INIT_FAIL;
 }
 
 intern int setup_rmesh_info(renderer *rndr)
@@ -472,10 +488,15 @@ intern int init_swapchain_framebuffers(renderer *rndr)
         return err;
     }
 
-    vkr_init_swapchain_framebuffers(dev,
-                                    vk,
-                                    &dev->render_passes[rndr->render_pass_ind],
-                                    vkr_framebuffer_attachment{dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind]});
+    // We need the render pass associated with our main framebuffer
+    auto rp_fiter = hashmap_find(&rndr->rpasses, FWD_RPASS);
+    assert(rp_fiter);
+    if (rp_fiter) {
+        vkr_init_swapchain_framebuffers(dev,
+                                        vk,
+                                        &dev->render_passes[rp_fiter->value],
+                                        vkr_framebuffer_attachment{dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind]});
+    }
     return err;
 }
 
@@ -513,6 +534,11 @@ intern int setup_rendering(renderer *rndr)
     ////////////////////////////////////////////////////////////////////////////////
     // Create uniform buffers and descriptor sets pointing to them for each frame //
     ////////////////////////////////////////////////////////////////////////////////
+    auto pline = hashmap_find(&rndr->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
+    assert(pline);
+    if (!pline) {
+        return err_code::RENDER_INIT_FAIL;
+    }
     for (int i = 0; i < dev->rframes.size; ++i) {
         // Create a uniform buffer for each frame
         vkr_buffer_cfg buf_cfg{};
@@ -531,7 +557,7 @@ intern int setup_rendering(renderer *rndr)
         dev->rframes[i].uniform_buffer_ind = vkr_add_buffer(dev, uniform_buf);
 
         // Add descriptor sets for this frame - we are running a single set with two bindings at the moment
-        auto desc_ind = vkr_add_descriptor_sets(&dev->rframes[i].desc_pool, vk, &dev->pipelines[rndr->pipeline_ind].descriptor_layouts[0], 1);
+        auto desc_ind = vkr_add_descriptor_sets(&dev->rframes[i].desc_pool, vk, &dev->pipelines[pline->value].descriptor_layouts[0], 1);
         if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
             return desc_ind.err_code;
         }
@@ -651,6 +677,9 @@ int init_renderer(renderer *rndr, void *win_hndl, mem_arena *fl_arena)
     mem_init_fl_arena(&rndr->vk_free_list, 100 * MB_SIZE, fl_arena);
     mem_init_lin_arena(&rndr->vk_frame_linear, 10 * MB_SIZE, mem_global_stack_arena());
     rndr->vk = (vkr_context *)mem_alloc(sizeof(vkr_context), &rndr->vk_free_list, 8);
+
+    hashmap_init(&rndr->rpasses, fl_arena);
+    hashmap_init(&rndr->pipelines, fl_arena);
 
     vkr_cfg vkii{"rdev",
                  {1, 0, 0},
@@ -837,6 +866,9 @@ void terminate_renderer(renderer *rndr)
     mem_free(rndr->vk, &rndr->vk_free_list);
     mem_terminate_arena(&rndr->vk_free_list);
     mem_terminate_arena(&rndr->vk_frame_linear);
+
+    hashmap_terminate(&rndr->rpasses);
+    hashmap_terminate(&rndr->pipelines);
 }
 
 } // namespace nslib
