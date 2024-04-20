@@ -20,12 +20,12 @@ intern vertex CUBE_VERTS[] = {{{-0.5f, 0.5f, 0.5f}, {0.0f, 1.0f}, 0xff000000},
                               {{0.5f, -0.5f, -0.5f}, {1.0f, 0.0f}, 0xffffffff}};
 
 intern const ind_t CUBE_INDS_TRI_LIST[] = {0, 1, 2,          // 0
-                                         1, 3, 2, 4, 6, 5, // 2
-                                         5, 6, 7, 0, 2, 4, // 4
-                                         4, 2, 6, 1, 5, 3, // 6
-                                         5, 7, 3, 0, 4, 1, // 8
-                                         4, 5, 1, 2, 3, 6, // 10
-                                         6, 3, 7};
+                                           1, 3, 2, 4, 6, 5, // 2
+                                           5, 6, 7, 0, 2, 4, // 4
+                                           4, 2, 6, 1, 5, 3, // 6
+                                           5, 7, 3, 0, 4, 1, // 8
+                                           4, 5, 1, 2, 3, 6, // 10
+                                           6, 3, 7};
 
 intern const ind_t CUBE_INDS_TRI_STRIP[] = {0, 1, 2, 3, 7, 1, 5, 0, 4, 2, 6, 7, 4, 5};
 
@@ -34,6 +34,27 @@ intern const ind_t CUBE_INDS_LINE_LIST[] = {0, 1, 0, 2, 0, 4, 1, 3, 1, 5, 2, 3, 
 intern const ind_t CUBE_INDS_LINE_STRIP[] = {0, 2, 3, 1, 5, 7, 6, 4, 0, 2, 6, 4, 5, 7, 3, 1, 0};
 
 intern const ind_t CUBE_INDS_POINTS[] = {0, 1, 2, 3, 4, 5, 6, 7};
+
+void init_texture(texture *tex, mem_arena *arena)
+{
+    tex->arena = arena;
+}
+
+void terminate_texture(texture *tex)
+{}
+
+void init_material(material *mat, mem_arena *arena)
+{
+    assert(!mat->pipelines.hm);
+    mat->arena = arena;
+    hashset_init(&mat->pipelines, arena);
+}
+
+void terminate_material(material *mat)
+{
+    hashset_terminate(&mat->pipelines);
+}
+
 // TODO: Need to try this
 intern void make_cube_submesh(submesh *sm)
 {
@@ -51,7 +72,7 @@ void make_rect(mesh *msh)
 {
     assert(msh->submeshes.size == 0);
     msh->submeshes.size = 1;
-    init_submesh(msh->submeshes.data, msh->sub_arena);
+    init_submesh(msh->submeshes.data, msh->arena);
     make_rect_submesh(msh->submeshes.data);
 }
 
@@ -59,7 +80,7 @@ void make_cube(mesh *msh)
 {
     assert(msh->submeshes.size == 0);
     msh->submeshes.size = 1;
-    init_submesh(msh->submeshes.data, msh->sub_arena);
+    init_submesh(msh->submeshes.data, msh->arena);
     make_cube_submesh(msh->submeshes.data);
 }
 
@@ -80,7 +101,7 @@ void terminate_submesh(submesh *sm)
 void init_mesh(mesh *msh, mem_arena *arena)
 {
     assert(msh->submeshes.size == 0);
-    msh->sub_arena = arena;
+    msh->arena = arena;
 }
 
 void terminate_mesh(mesh *msh)
@@ -88,11 +109,6 @@ void terminate_mesh(mesh *msh)
     for (int i = 0; i < msh->submeshes.size; ++i) {
         terminate_submesh(&msh->submeshes[i]);
     }
-}
-
-void terminate_robj(mesh *msh)
-{
-    terminate_mesh(msh);
 }
 
 } // namespace nslib

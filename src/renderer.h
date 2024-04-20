@@ -121,8 +121,8 @@ struct renderer
 bool upload_to_gpu(mesh *msh, renderer *rdnr);
 
 // Remove from gpu simply adds the meshes block to the free list, indicating that the block can be overwritten, and then
-// removes the mesh from our mesh entry list.
-void remove_from_gpu(mesh *msh, renderer *rndr);
+// removes the mesh from our mesh entry list. It does not do any actual gpu uploading
+bool remove_from_gpu(mesh *msh, renderer *rndr);
 
 // This removes all gaps between meshes to make the vert and indice buffers contiguous.
 void defragment_meshes(renderer *rndr);
@@ -134,3 +134,4 @@ int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_fram
 void terminate_renderer(renderer *rndr);
 
 } // namespace nslib
+ 

@@ -54,8 +54,8 @@ if(WIN32)
     DLL_EXPORTS
     _CRT_SECURE_NO_WARNINGS)
 else() # Unix
+  target_compile_options(${NSLIB_TARGET_NAME} PUBLIC -Wno-nullability-completeness)
   if(APPLE)
-    target_compile_options(${NSLIB_TARGET_NAME} PUBLIC -Wno-nullability-completeness)
   else()
     target_compile_options(${NSLIB_TARGET_NAME} PUBLIC -msse4.1)
     target_compile_definitions(${NSLIB_TARGET_NAME} PUBLIC

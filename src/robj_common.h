@@ -10,6 +10,8 @@ namespace nslib
 enum robj_type : u32
 {
     ROBJ_TYPE_MESH,
+    ROBJ_TYPE_TEXTURE,
+    ROBJ_TYPE_MATERIAL,
     ROBJ_TYPE_USER
 };
 

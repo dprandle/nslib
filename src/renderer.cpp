@@ -1,11 +1,13 @@
 #include "sim_region.h"
 #include "string_archive.h"
 #include "containers/string.h"
+#include "containers/linked_list.h"
 #include "math/quaternion.h"
 #include "stb_image.h"
 #include "platform.h"
 #include "vk_context.h"
 #include "renderer.h"
+
 
 namespace nslib
 {
@@ -326,6 +328,8 @@ intern sbuffer_entry find_sbuffer_block(sbuffer_info *sbuf, sizet req_size)
     return ret_entry;
 }
 
+// Upload mesh data to GPU using the shared indice/vertex buffer, also "registers" the mesh with the renderer so it can
+// be drawn
 bool upload_to_gpu(mesh *msh, renderer *rndr)
 {
     auto fiter = hashmap_find(&rndr->rmi.meshes, msh->id);
@@ -386,6 +390,43 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
     
     return true;
 }
+
+intern void insert_node_to_free_list(sbuffer_info *sbuf, const sbuffer_entry *entry)
+{
+    // Iterate over the free list and find the lowest index position to insert the new node
+    auto it = sbuf->fl.head;
+    sbuffer_entry_slnode *it_prev{};
+    while (it && entry->offset < it->data.offset) {
+        it_prev = it;
+        it = it->next;
+    }
+    auto new_node = mem_alloc<sbuffer_entry_slnode>(&sbuf->node_pool);
+    new_node->data = *entry;
+    ll_insert(&sbuf->fl, it_prev, new_node);
+}
+
+bool remove_from_gpu(mesh *msh, renderer *rndr)
+{
+    auto minfo = hashmap_find(&rndr->rmi.meshes, msh->id);
+    if (minfo) {
+        for (int subi = 0; subi < minfo->value.submesh_entrees.size; ++subi) {
+            // Insert the block to our free list
+            auto cur_entry = &minfo->value.submesh_entrees[subi];
+            insert_node_to_free_list(&rndr->rmi.verts, &cur_entry->verts);
+            insert_node_to_free_list(&rndr->rmi.inds, &cur_entry->inds);
+        }
+        hashmap_remove(&rndr->rmi.meshes, msh->id);
+    }
+    return minfo;
+}
+
+void defragment_meshes(renderer *rndr)
+{
+    // If the free list is empty, nothing to do
+    
+       // Find the first entry in our meshes that is after our first entry in the free list..
+}
+
 
 intern int load_default_image_and_sampler(renderer *rndr)
 {
