@@ -27,7 +27,7 @@ string to_str(const rid &rid)
 
 rid generate_id()
 {
-    // Generate in this format 774f0899-9666-471a-b1f9
+    // Generate in this format 774f0899-9666471a-b1f9
     rid ret{};
     u32 r1 = rand();
     u32 r2 = rand();

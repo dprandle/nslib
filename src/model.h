@@ -2,7 +2,7 @@
 #include "robj_common.h"
 #include "math/vector4.h"
 #include "containers/array.h"
-#include "containers/hashset.h"
+#include "containers/hashset.h"
 
 namespace nslib
 {
@@ -11,15 +11,38 @@ const sizet JOINTS_PER_VERTEX = 4;
 const sizet MAX_SUBMESH_COUNT = 32;
 using ind_t = u16;
 
-struct texture{
-    ROBJ(TEXTURE);
-    mem_arena *arena
+enum pipeline_shader_stage
+{
+    PIPELINE_SHADER_STAGE_VERT,
+    PIPELINE_SHADER_STAGE_FRAG,
+    PIPELINE_SHADER_STAGE_COUNT
 };
 
-struct material{
-    ROBJ(MATERIAL);
+struct pipeline
+{
+    ROBJ(PIPELINE);
+    rid rpass;
+    string stages[PIPELINE_SHADER_STAGE_COUNT];
+};
+
+pup_func(pipeline)
+{
+    pup_member(rpass);
+    pup_member(stages);
+}    
+
+struct texture
+{
+    ROBJ(TEXTURE);
     mem_arena *arena;
+};
+
+// Material references textures and pipelines, which both must be uploaded to GPUa
+struct material
+{
+    ROBJ(MATERIAL);
     hashset<rid> pipelines;
+    hashset<rid> textures;
 };
 
 struct vertex
@@ -43,7 +66,8 @@ struct submesh
     array<ind_t> inds;
 };
 
-struct mesh {
+struct mesh
+{
     ROBJ(MESH);
     static_array<submesh, MAX_SUBMESH_COUNT> submeshes;
     mem_arena *arena;
@@ -67,8 +91,17 @@ void make_cube(mesh *msh);
 void init_mesh(mesh *msh, mem_arena *arena);
 void terminate_mesh(mesh *msh);
 
-inline void terminate_robj(material *mat) {terminate_material(mat);}
-inline void terminate_robj(texture *tex) {terminate_texture(tex);}
-inline void terminate_robj(mesh *msh) {terminate_mesh(msh);}
+inline void terminate_robj(material *mat)
+{
+    terminate_material(mat);
+}
+inline void terminate_robj(texture *tex)
+{
+    terminate_texture(tex);
+}
+inline void terminate_robj(mesh *msh)
+{
+    terminate_mesh(msh);
+}
 
 } // namespace nslib

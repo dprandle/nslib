@@ -359,6 +359,17 @@ array<T>* arr_resize(array<T> *arr, sizet new_size, Args &&...args)
     return arr;
 }
 
+template<class T, sizet N, class... Args>
+static_array<T, N> *arr_resize(static_array<T, N> *arr, sizet new_size, Args &&...args)
+{
+    assert(new_size <= N);
+    for (sizet i = arr->size; i < new_size; ++i) {
+        new (&arr->data[i]) T(std::forward<Args>(args)...);
+    }
+    arr->size = new_size;    
+    return arr;
+}
+
 template<class T>
 typename T::iterator arr_erase(T *bufobj, typename T::iterator iter)
 {

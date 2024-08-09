@@ -8,7 +8,6 @@
 #include "vk_context.h"
 #include "renderer.h"
 
-
 namespace nslib
 {
 
@@ -339,6 +338,7 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
     auto dev = &rndr->vk->inst.device;
     // Find the first available sbuffer entry in the free list
     rmesh_entry new_mentry{};
+    //arr_init(&new_mentry.submesh_entrees, rndr->upstream_fl_arena);
     for (int subi = 0; subi < msh->submeshes.size; ++subi) {
         sizet req_vert_size = arr_len(msh->submeshes[subi].verts);
         sizet req_vert_byte_size = arr_sizeof(msh->submeshes[subi].verts);
@@ -351,7 +351,7 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
         new_smentry.inds = find_sbuffer_block(&rndr->rmi.inds, req_inds_size);
         assert(new_smentry.verts.size > 0);
         assert(new_smentry.inds.size > 0);
-        arr_push_back(&new_mentry.submesh_entrees, new_smentry);
+        arr_emplace_back(&new_mentry.submesh_entrees, new_smentry);
 
         // Our required vert and ind size might be a little less than the avail block size, if a block was picked that
         // was big enough to fit our needs but the remaining available in the block was less than the required min block
@@ -359,20 +359,20 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
         VkBufferCopy vert_region{}, ind_region{};
         vert_region.size = req_vert_byte_size;
         vert_region.dstOffset = new_smentry.verts.offset * sizeof(vertex);
-        
+
         ind_region.size = req_inds_byte_size;
         ind_region.dstOffset = new_smentry.inds.offset * sizeof(ind_t);
 
         // TODO: Handle error conditions here - there are several reasons why a buffer upload might fail - for new we
         // just assert it worked
-        
+
         // Upload our vert data to the GPU
         int ret = vkr_stage_and_upload_buffer_data(&dev->buffers[rndr->rmi.verts.buf_ind],
-                                         msh->submeshes[subi].verts.data,
-                                         req_vert_byte_size,
-                                         &vert_region,
-                                         &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX],
-                                         rndr->vk);
+                                                   msh->submeshes[subi].verts.data,
+                                                   req_vert_byte_size,
+                                                   &vert_region,
+                                                   &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX],
+                                                   rndr->vk);
         assert(ret == err_code::VKR_NO_ERROR);
 
         // Upload our ind data to the GPU
@@ -384,10 +384,14 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
                                                rndr->vk);
         assert(ret == err_code::VKR_NO_ERROR);
     }
-
+    dlog("Should be adding mesh id %s %d submeshes", str_cstr(msh->id.str), new_mentry.submesh_entrees.size);
+    for (int si = 0; si < new_mentry.submesh_entrees.size; ++si) {
+        auto sub = &new_mentry.submesh_entrees[si];
+        dlog("submesh %d:  vertsp(offset:%d  size:%d)  inds(offset:%d size:%d)", si, sub->verts.offset, sub->verts.size, sub->inds.offset, sub->inds.size);
+    }
     // Add the smesh entry we just built to the renderer mesh entry map (stored by id)
     hashmap_set(&rndr->rmi.meshes, msh->id, new_mentry);
-    
+
     return true;
 }
 
@@ -407,6 +411,7 @@ intern void insert_node_to_free_list(sbuffer_info *sbuf, const sbuffer_entry *en
 
 bool remove_from_gpu(mesh *msh, renderer *rndr)
 {
+    // TODO: This code is basically completely untested
     auto minfo = hashmap_find(&rndr->rmi.meshes, msh->id);
     if (minfo) {
         for (int subi = 0; subi < minfo->value.submesh_entrees.size; ++subi) {
@@ -419,14 +424,6 @@ bool remove_from_gpu(mesh *msh, renderer *rndr)
     }
     return minfo;
 }
-
-void defragment_meshes(renderer *rndr)
-{
-    // If the free list is empty, nothing to do
-    
-       // Find the first entry in our meshes that is after our first entry in the free list..
-}
-
 
 intern int load_default_image_and_sampler(renderer *rndr)
 {
@@ -638,6 +635,11 @@ intern int setup_rendering(renderer *rndr)
     return err_code::VKR_NO_ERROR;
 }
 
+intern int create_frame_descriptor_set()
+{
+    return 0;
+}
+
 intern int record_command_buffer(renderer *rndr, sim_region *rgn, vkr_framebuffer *fb, vkr_frame *cur_frame, vkr_command_buffer *cmd_buf)
 {
     auto dev = &rndr->vk->inst.device;
@@ -682,14 +684,12 @@ intern int record_command_buffer(renderer *rndr, sim_region *rgn, vkr_framebuffe
     push_constants pc;
     auto tf_tbl = get_comp_tbl<transform>(&rgn->cdb);
     auto sm_tbl = get_comp_tbl<static_model>(&rgn->cdb);
-    
 
     if (tf_tbl && sm_tbl) {
         for (int i = 0; i < tf_tbl->entries.size; ++i) {
             auto curtf = &tf_tbl->entries[i];
             auto rc = get_comp(curtf->ent_id, sm_tbl);
             auto ent = get_entity(curtf->ent_id, rgn);
-
             if (rc) {
                 auto rmesh = hashmap_find(&rndr->rmi.meshes, rc->mesh_id);
                 if (rmesh) {
@@ -821,6 +821,12 @@ intern i32 present_image(renderer *rndr, vkr_frame *cur_frame, u32 image_ind)
     }
     return err_code::RENDER_NO_ERROR;
 }
+
+void rpush_sm(static_model *sm, transform *tf)
+{
+    
+}
+
 
 int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_frame_count)
 {

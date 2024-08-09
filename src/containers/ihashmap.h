@@ -11,6 +11,10 @@ using malloc_func_type = void *(sizet, mem_arena *, sizet);
 using realloc_func_type = void *(void *, sizet, mem_arena *, sizet);
 using free_func_type = void(void *, mem_arena *);
 
+using hash_item_func = u64(const void *, u64, u64);
+using compare_item_func = int(const void *, const void *, void *);
+using free_item_func = void(void *);
+
 struct ihashmap_bucket
 {
     u64 hash : 48;
@@ -28,9 +32,9 @@ struct ihashmap
     sizet cap;
     u64 seed0;
     u64 seed1;
-    u64 (*hash)(const void *item, u64 seed0, u64 seed1);
-    int (*compare)(const void *a, const void *b, void *udata);
-    void (*elfree)(void *item);
+    hash_item_func *hash;
+    compare_item_func *compare;
+    free_item_func *elfree;
     void *udata;
     sizet bucketsz;
     sizet nbuckets;
@@ -66,9 +70,9 @@ ihashmap *ihashmap_new(sizet elsize,
                        sizet cap,
                        u64 seed0,
                        u64 seed1,
-                       u64 (*hash)(const void *item, u64 seed0, u64 seed1),
-                       int (*compare)(const void *a, const void *b, void *udata),
-                       void (*elfree)(void *item),
+                       hash_item_func *hash,
+                       compare_item_func *compare,
+                       free_item_func *elfree,
                        void *udata);
 
 ihashmap *ihashmap_new(malloc_func_type *malloc,
@@ -80,9 +84,9 @@ ihashmap *ihashmap_new(malloc_func_type *malloc,
                        sizet cap,
                        u64 seed0,
                        u64 seed1,
-                       u64 (*hash)(const void *item, u64 seed0, u64 seed1),
-                       int (*compare)(const void *a, const void *b, void *udata),
-                       void (*elfree)(void *item),
+                       hash_item_func *hash,
+                       compare_item_func *compare,
+                       free_item_func *elfree,
                        void *udata);
 
 ihashmap *ihashmap_new(const struct ihashmap *copy_from);

@@ -205,8 +205,8 @@ int init(platform_ctxt *ctxt, void *user_data)
 
     int ret = init_renderer(&app->rndr, ctxt->win_hndl, &ctxt->arenas.free_list);
     if (ret == err_code::RENDER_NO_ERROR) {
-        upload_to_gpu(rect_msh, &app->rndr);
         upload_to_gpu(cube_msh, &app->rndr);
+        upload_to_gpu(rect_msh, &app->rndr);
     }
     return ret;
 }

@@ -46,13 +46,15 @@ void terminate_texture(texture *tex)
 void init_material(material *mat, mem_arena *arena)
 {
     assert(!mat->pipelines.hm);
-    mat->arena = arena;
+    assert(!mat->textures.hm);
     hashset_init(&mat->pipelines, arena);
+    hashset_init(&mat->textures, arena);
 }
 
 void terminate_material(material *mat)
 {
     hashset_terminate(&mat->pipelines);
+    hashset_terminate(&mat->textures);
 }
 
 // TODO: Need to try this
@@ -71,7 +73,7 @@ intern void make_rect_submesh(submesh *sm)
 void make_rect(mesh *msh)
 {
     assert(msh->submeshes.size == 0);
-    msh->submeshes.size = 1;
+    arr_resize(&msh->submeshes, 1);
     init_submesh(msh->submeshes.data, msh->arena);
     make_rect_submesh(msh->submeshes.data);
 }
@@ -79,7 +81,7 @@ void make_rect(mesh *msh)
 void make_cube(mesh *msh)
 {
     assert(msh->submeshes.size == 0);
-    msh->submeshes.size = 1;
+    arr_resize(&msh->submeshes, 1);
     init_submesh(msh->submeshes.data, msh->arena);
     make_cube_submesh(msh->submeshes.data);
 }

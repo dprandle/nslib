@@ -1,10 +1,7 @@
 #pragma once
 
-#include "rid.h"
-#include "memory.h"
 #include "math/matrix4.h"
-#include "containers/array.h"
-#include "containers/hashmap.h"
+#include "model.h"
 
 namespace nslib
 {
@@ -41,6 +38,7 @@ struct static_model
 {
     COMP(STATIC_MODEL)
     rid mesh_id;
+    static_array<rid, MAX_SUBMESH_COUNT> mat_ids{{}, MAX_SUBMESH_COUNT};
 };
 
 struct camera

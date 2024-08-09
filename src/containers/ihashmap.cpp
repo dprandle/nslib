@@ -51,9 +51,9 @@ ihashmap *ihashmap_new(sizet elsize,
                        sizet cap,
                        u64 seed0,
                        u64 seed1,
-                       u64 (*hash)(const void *item, u64 seed0, u64 seed1),
-                       int (*compare)(const void *a, const void *b, void *udata),
-                       void (*elfree)(void *item),
+                       hash_item_func *hash,
+                       compare_item_func *compare,
+                       free_item_func *elfree,
                        void *udata)
 {
     return ihashmap_new(
@@ -69,9 +69,9 @@ ihashmap *ihashmap_new(malloc_func_type *_malloc,
                        sizet cap,
                        u64 seed0,
                        u64 seed1,
-                       u64 (*hash)(const void *item, u64 seed0, u64 seed1),
-                       int (*compare)(const void *a, const void *b, void *udata),
-                       void (*elfree)(void *item),
+                       hash_item_func *hash,
+                       compare_item_func *compare,
+                       free_item_func *elfree,
                        void *udata)
 {
     assert(_malloc);

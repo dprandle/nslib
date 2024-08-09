@@ -188,7 +188,7 @@ void hashset_init(hashset<T> *hs, mem_arena *arena, sizet mem_alignment = DEFAUL
         auto cast_b = (const T *)b;
         return (*cast_a == *cast_b) ? 0 : 1;
     };
-
+    
     hs->hm = ihashmap_new(
         mem_alloc, mem_realloc, mem_free, arena, mem_alignment, sizeof(T), 0, seed0, seed1, hash_func, compare_func, nullptr, hs);
 }

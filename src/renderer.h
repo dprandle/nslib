@@ -12,6 +12,8 @@ namespace nslib
 struct vkr_context;
 struct sim_region;
 struct camera;
+struct static_model;
+struct transform;
 
 // Default vert buffer size (holding all of our verts) in vert count (not byte size)
 const sizet DEFAULT_VERT_BUFFER_SIZE = 10000000;
@@ -59,9 +61,15 @@ using sbuffer_entry_slnode = slnode<sbuffer_entry>;
 
 struct sbuffer_info
 {
+    // Index of vk buffer this shared buffer refers to
     sizet buf_ind;
+    // The smallest allowable block size of free space... ie when searching through the free store we find a block that
+    // will fit the request, the remaining size of that block must be bigger than this to be broken off to its own entry
+    // in the free list
     sizet min_free_block_size;
+    // The free list linked list - each node is allocated using the node pool arena
     slist<sbuffer_entry> fl;
+    // The arena used to allocate each item in the free list
     mem_arena node_pool;
 };
 
@@ -84,6 +92,31 @@ struct rmesh_info
     sbuffer_info inds;
 };
 
+struct render_draw_call
+{};
+
+struct material_draw_group
+{
+    array<render_draw_call> draws;
+};
+
+struct pipeline_draw_group
+{
+    sizet pline_ind;
+    array<material_draw_group> mats;
+};
+
+struct render_pass_draw_group
+{
+    sizet rpass_ind;
+    array<pipeline_draw_group> draw_groups;
+}; 
+
+struct frame_draw_info
+{
+};
+// What we really want to do is have a big SSAO with all transforms for entire scene right?
+
 struct renderer
 {
     // Passed in
@@ -100,9 +133,12 @@ struct renderer
     // Render pass indices referenced by ids
     hashmap<rid, sizet> rpasses;
 
+    // A mapping between framebuffers and render passes
+    hashmap<sizet, array<rid> *> fb_rpasses;
+
     // Contains all info about meshes and where they are in the vert/ind buffers
     rmesh_info rmi;
-    
+
     sizet default_image_ind;
     sizet default_image_view_ind;
     sizet default_sampler_ind;
@@ -111,10 +147,12 @@ struct renderer
     sizet swapchain_fb_depth_stencil_im_ind{INVALID_IND};
 };
 
+void rpush_sm(static_model *sm, transform *tf);
+
 // NOTE: All of these mesh operations kind of need to wait on all rendering operations to complete as they modify the
-// vertex and index buffers - not sure yet if this is better done within the functions or in the caller. Also these should be done at the start
-// of a frame because any indices submitted in command buffers will be invalid after these operations. It almost seems
-// like we should get a list of these and then just do it at start of frame after we wait for sync if there are any to do.
+// vertex and index buffers - not sure yet if this is better done within the functions or in the caller. Also these should be done at the
+// start of a frame because any indices submitted in command buffers will be invalid after these operations. It almost seems like we should
+// get a list of these and then just do it at start of frame after we wait for sync if there are any to do.
 
 // Upload mesh data to GPU using the shared indice/vertex buffer, also "registers" the mesh with the renderer so it can
 // be drawn
@@ -124,9 +162,6 @@ bool upload_to_gpu(mesh *msh, renderer *rdnr);
 // removes the mesh from our mesh entry list. It does not do any actual gpu uploading
 bool remove_from_gpu(mesh *msh, renderer *rndr);
 
-// This removes all gaps between meshes to make the vert and indice buffers contiguous.
-void defragment_meshes(renderer *rndr);
-
 int init_renderer(renderer *rndr, void *win_hndl, mem_arena *fl_arena);
 
 int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_frame_count);
@@ -134,4 +169,3 @@ int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_fram
 void terminate_renderer(renderer *rndr);
 
 } // namespace nslib
- 
