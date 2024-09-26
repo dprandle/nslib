@@ -15,10 +15,13 @@ struct camera;
 struct static_model;
 struct transform;
 
-// Default vert buffer size (holding all of our verts) in vert count (not byte size)
-const sizet DEFAULT_VERT_BUFFER_SIZE = 10000000;
+// 20 million triangles... thats a lot - works on desktop
+const sizet MAX_TRIANGLE_COUNT = 20000000;
 // Default ind buffer size (holding all of our inds) in ind count (not byte size)
-const sizet DEFAULT_IND_BUFFER_SIZE = 50000000;
+const sizet DEFAULT_IND_BUFFER_SIZE = MAX_TRIANGLE_COUNT*3;
+// Default vert buffer size (holding all of our verts) in vert count (not byte size)
+// Consider there is on average 6 shared triangles per vert - i think dividing the above by 3 is plenty
+const sizet DEFAULT_VERT_BUFFER_SIZE = MAX_TRIANGLE_COUNT;
 // Initial mem pool size (in element count) for our sbuffer mem pools
 const sizet MAX_FREE_SBUFFER_NODE_COUNT = 1024;
 // Minimum allowed sbuffer_entry block size in the free list for verts

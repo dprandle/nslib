@@ -73,11 +73,15 @@ intern int setup_render_pass(renderer *rndr)
 
     arr_push_back(&rp_cfg.subpasses, subpass);
 
+    // Because we use this render pass each frame, this dependency makes it so that we won't begin our first subpass
+    // until all color attachment and depth attachment (early fragment tests) operations are done for any subpass
+    // (pipeline) associated with this render pass.
+    // Since the depth image isn't 'presented', we don't have to have a separate depth image across each FIF.
     VkSubpassDependency sp_dep{};
     sp_dep.srcSubpass = VK_SUBPASS_EXTERNAL;
-    sp_dep.dstSubpass = 0;
     sp_dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
     sp_dep.srcAccessMask = 0;
+    sp_dep.dstSubpass = 0;
     sp_dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
     sp_dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     arr_push_back(&rp_cfg.subpass_dependencies, sp_dep);
