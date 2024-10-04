@@ -35,7 +35,7 @@ intern void stdout_callback(log_event *ev)
     auto fp = (FILE *)ev->udata;
 #ifdef LOG_USE_COLOR
     fprintf(fp,
-            "%s %s%-5s \x1b[0m\x1b[90m%x:%s(%s):%d: \x1b[0m",
+            "%s %s%-5s \x1b[0m\x1b[90m%02llx:%s(%s):%d: \x1b[0m",
             buf,
             level_colors[ev->level],
             level_strings[ev->level],
@@ -56,7 +56,7 @@ intern void file_callback(log_event *ev)
     char buf[64];
     buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", ev->time)] = '\0';
     auto fp = (FILE *)ev->udata;
-    fprintf(fp, "%s %-5s %02x:%s(%s):%d: ", buf, level_strings[ev->level], ev->thread_id, ev->file, ev->func, ev->line);
+    fprintf(fp, "%s %-5s %02llx:%s(%s):%d: ", buf, level_strings[ev->level], ev->thread_id, ev->file, ev->func, ev->line);
     vfprintf(fp, ev->fmt, ev->ap);
     fprintf(fp, "\n");
     fflush(fp);
@@ -128,9 +128,6 @@ intern void init_event(log_event *ev, void *udata)
 
 void lprint(logging_ctxt *logger, int level, const char *file, const char *func, int line, const char *fmt, ...)
 {
-    // char tmp_buf[200];
-    // strncpy(tmp_buf, file, 200);
-
     log_event ev = {.fmt = fmt, .file = path_basename(file), .func = func, .line = line, .level = level, .thread_id = get_thread_id()};
 
     lock(logger);

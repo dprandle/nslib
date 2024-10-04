@@ -1,4 +1,4 @@
-#if defined (_WIN32)
+#if defined (PLATFORM_WIN32)
 #define NOMINMAX
 #include <windows.h>
 #endif
@@ -10,7 +10,7 @@ namespace nslib
 ptimespec ptimer_cur(int ptype)
 {
     ptimespec temp;
-#if defined(IS_POSIX_SYSTEM)
+#if defined(PLATFORM_UNIX)
     clockid_t t;
     switch (ptype) {
     case (PTIMER_TYPE_REALTIME):
@@ -24,7 +24,7 @@ ptimespec ptimer_cur(int ptype)
         break;
     }
     clock_gettime(t, &temp.t);
-#elif defined(_WIN32)
+#elif defined(PLATFORM_WIN32)
     LARGE_INTEGER t, f;
     QueryPerformanceCounter(&t);
     QueryPerformanceFrequency(&f);
@@ -38,10 +38,10 @@ ptimespec ptimer_cur(int ptype)
 ptimespec ptimer_diff(const ptimespec *start, const ptimespec *end)
 {
     ptimespec temp;
-#if defined(IS_POSIX_SYSTEM)
+#if defined(PLATFORM_UNIX)
     temp.t.tv_sec = end->t.tv_sec - start->t.tv_sec;
     temp.t.tv_nsec = end->t.tv_nsec - start->t.tv_nsec;
-#elif defined(_WIN32)
+#elif defined(PLATFORM_WIN32)
     temp.t = end->t - start->t;
     temp.f = end->f;
 #endif
@@ -51,9 +51,9 @@ ptimespec ptimer_diff(const ptimespec *start, const ptimespec *end)
 i64 ptimer_nsec(const ptimespec *spec)
 {
     i64 ret{};
-#if defined(IS_POSIX_SYSTEM)
+#if defined(PLATFORM_UNIX)
     ret = spec->t.tv_sec * 1000000000 + spec->t.tv_nsec;
-#elif defined(_WIN32)
+#elif defined(PLATFORM_WIN32)
     ret = SEC_TO_NSEC(spec->t) / spec->f;
 #endif
     return ret;

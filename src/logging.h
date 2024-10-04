@@ -19,7 +19,7 @@ struct log_event
     void *udata;
     int line;
     int level;
-    u32 thread_id;
+    u64 thread_id;
 };
 
 using logging_cbfn = void(log_event *ev);

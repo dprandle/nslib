@@ -2,8 +2,8 @@
 
 #include "basic_types.h"
 
-#if defined(IS_POSIX_SYSTEM)
-#include <time.h>
+#if defined(PLATFORM_UNIX)
+#include <ctime>
 #endif
     
 #define NSEC_TO_SEC(nsec) (((double)nsec) / 1000000000.0)
@@ -25,9 +25,9 @@ enum ptimer_type
 
 struct ptimespec
 {
-#if defined(IS_POSIX_SYSTEM) 
+#if defined(PLATFORM_UNIX) 
     timespec t;
-#elif defined(_WIN32)
+#elif defined(PLATFORM_WIN32)
     i64 t;
     i64 f;
 #endif

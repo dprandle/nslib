@@ -188,7 +188,7 @@ void *create_platform_window(const platform_window_init_info *pf_config);
 
 ivec2 get_window_size(void *window_hndl);
 ivec2 get_framebuffer_size(void *window_hndl);
-u32 get_thread_id();
+u64 get_thread_id();
 
 vec2 get_cursor_pos(void *window_hndl);
 vec2 get_normalized_cursor_pos(void *window_hndl);

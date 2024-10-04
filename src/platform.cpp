@@ -388,10 +388,11 @@ ivec2 get_framebuffer_size(void *win)
     return pf->fwind.fb_size;
 }
 
-u32 get_thread_id()
+u64 get_thread_id()
 {
 #if defined(_POSIX_VERSION)
-    return pthread_self();
+    auto val = pthread_self();
+    return (u64)val;
 #else
     return 0;
 #endif
