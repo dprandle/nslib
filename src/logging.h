@@ -6,7 +6,8 @@
 struct tm;
 namespace nslib {
 struct logging_ctxt;
-extern logging_ctxt *GLOBAL_LOGGER;
+
+dllapi extern logging_ctxt *GLOBAL_LOGGER;
 
 struct log_event
 {

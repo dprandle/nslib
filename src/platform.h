@@ -200,6 +200,8 @@ bool platform_framebuffer_resized(void *win_hndl);
 bool platform_window_resized(void *win_hndl);
 bool platform_window_should_close(void *window_hndl);
 
+const char *path_basename(const char *path);
+
 sizet file_size(const char *fname, platform_file_err_desc *err);
 
 sizet read_file(const char *fname,

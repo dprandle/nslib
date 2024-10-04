@@ -4,8 +4,6 @@
 #include "platform.h"
 #include "logging.h"
 #include "string.h"
-#include "libgen.h"
-
 
 #define MAX_CALLBACKS 32
 #define LOG_USE_COLOR
@@ -21,7 +19,8 @@ struct logging_ctxt
 };
 
 intern logging_ctxt g_logger{"global", {}, LOG_DEBUG, false, {}};
-logging_ctxt *GLOBAL_LOGGER = &g_logger;
+
+dllapi logging_ctxt *GLOBAL_LOGGER = &g_logger;
 
 intern const char *level_strings[] = {"TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"};
 
@@ -129,10 +128,10 @@ intern void init_event(log_event *ev, void *udata)
 
 void lprint(logging_ctxt *logger, int level, const char *file, const char *func, int line, const char *fmt, ...)
 {
-    char tmp_buf[200];
-    strncpy(tmp_buf, file, 200);
+    // char tmp_buf[200];
+    // strncpy(tmp_buf, file, 200);
 
-    log_event ev = {.fmt = fmt, .file = basename(tmp_buf), .func = func, .line = line, .level = level, .thread_id = get_thread_id()};
+    log_event ev = {.fmt = fmt, .file = path_basename(file), .func = func, .line = line, .level = level, .thread_id = get_thread_id()};
 
     lock(logger);
     if (!logger->quiet && level >= logger->level) {

@@ -1,23 +1,10 @@
 #pragma once
-
 #include <cstdint>
 #include <cstddef>
 #include <cassert>
+
+#include "osdef.h"
 #include "limits.h"
-
-#if defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
-#define IS_POSIX_SYSTEM
-#endif
-
-#ifdef _WIN32
-#ifdef DLL_EXPORTS
-#define dllapi __declspec(dllexport)
-#else
-#define dllapi __declspec(dllimport)
-#endif
-#else
-#define dllapi
-#endif
 
 // Check if all of the flags in provided flags
 #define test_all_flags(bitmask, flags) (((bitmask) & (flags)) == (flags))
