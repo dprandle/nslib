@@ -8,7 +8,14 @@
 #define MAX_CALLBACKS 32
 #define LOG_USE_COLOR
 
-namespace nslib {
+#ifdef PLATFORM_APPLE
+#    define PRINT_U64 "ll"
+#else
+#    define PRINT_U64 "l"
+#endif
+
+namespace nslib
+{
 struct logging_ctxt
 {
     const char *name;
@@ -35,7 +42,7 @@ intern void stdout_callback(log_event *ev)
     auto fp = (FILE *)ev->udata;
 #ifdef LOG_USE_COLOR
     fprintf(fp,
-            "%s %s%-5s \x1b[0m\x1b[90m%02llx:%s(%s):%d: \x1b[0m",
+            "%s %s%-5s \x1b[0m\x1b[90m%02" PRINT_U64 "x:%s(%s):%d: \x1b[0m",
             buf,
             level_colors[ev->level],
             level_strings[ev->level],
@@ -44,7 +51,7 @@ intern void stdout_callback(log_event *ev)
             ev->func,
             ev->line);
 #else
-    fprintf(fp, "%s %-5s %02x:%s(%s):%d: ", buf, level_strings[ev->level], ev->thread_id, ev->file, ev->func, ev->line);
+    fprintf(fp, "%s %-5s %02" PRINT_U64 "x:%s(%s):%d: ", buf, level_strings[ev->level], ev->thread_id, ev->file, ev->func, ev->line);
 #endif
     vfprintf(fp, ev->fmt, ev->ap);
     fprintf(fp, "\n");
@@ -56,7 +63,7 @@ intern void file_callback(log_event *ev)
     char buf[64];
     buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", ev->time)] = '\0';
     auto fp = (FILE *)ev->udata;
-    fprintf(fp, "%s %-5s %02llx:%s(%s):%d: ", buf, level_strings[ev->level], ev->thread_id, ev->file, ev->func, ev->line);
+    fprintf(fp, "%s %-5s %02" PRINT_U64 "x:%s(%s):%d: ", buf, level_strings[ev->level], ev->thread_id, ev->file, ev->func, ev->line);
     vfprintf(fp, ev->fmt, ev->ap);
     fprintf(fp, "\n");
     fflush(fp);
@@ -149,4 +156,4 @@ void lprint(logging_ctxt *logger, int level, const char *file, const char *func,
     }
     unlock(logger);
 }
-}
+} // namespace nslib
