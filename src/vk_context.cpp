@@ -297,8 +297,8 @@ intern VkBool32 VKAPI_PTR debug_message_callback(VkDebugUtilsMessageSeverityFlag
                                                  const VkDebugUtilsMessengerCallbackDataEXT *data,
                                                  void *user)
 {
-    int cur = log_get_level();
-    log_set_level(*((int *)user));
+    int cur = logging_level(GLOBAL_LOGGER);
+    set_logging_level(GLOBAL_LOGGER, *((int *)user));
     if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
         elog("Vk: %s", data->pMessage);
     }
@@ -311,7 +311,7 @@ intern VkBool32 VKAPI_PTR debug_message_callback(VkDebugUtilsMessageSeverityFlag
     else if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
         tlog("Vk: %s", data->pMessage);
     }
-    log_set_level(cur);
+    set_logging_level(GLOBAL_LOGGER, cur);
     return VK_FALSE;
 }
 

@@ -1,47 +1,68 @@
 #pragma once
-#ifdef __cplusplus
-extern "C" {
-#endif
 
-#include <stdio.h>
-#include <stdarg.h>
-#include <stdbool.h>
-#include <time.h>
+#include <cstdio>
+#include "basic_types.h"
 
-#define LOG_VERSION "0.1.0"
+struct tm;
+namespace nslib {
+struct logging_ctxt;
+extern logging_ctxt *GLOBAL_LOGGER;
 
-typedef struct {
-  va_list ap;
-  const char *fmt;
-  const char *file;
-  struct tm *time;
-  void *udata;
-  int line;
-  int level;
-} log_Event;
+struct log_event
+{
+    va_list ap;
+    const char *fmt;
+    const char *file;
+    const char *func;
+    tm *time;
+    void *udata;
+    int line;
+    int level;
+    u32 thread_id;
+};
 
-typedef void (*log_LogFn)(log_Event *ev);
-typedef void (*log_LockFn)(bool lock, void *udata);
+using logging_cbfn = void(log_event *ev);
+using logging_lock_cbfn = void(bool lock, void *udata);
 
-enum { LOG_TRACE, LOG_DEBUG, LOG_INFO, LOG_WARN, LOG_ERROR, LOG_FATAL };
+struct logging_cb_data
+{
+    logging_cbfn *fn;
+    void *udata;
+    int level;
+};
 
-#define tlog(...) log_log(LOG_TRACE, __FILE__, __LINE__, __VA_ARGS__)
-#define dlog(...) log_log(LOG_DEBUG, __FILE__, __LINE__, __VA_ARGS__)
-#define ilog(...)  log_log(LOG_INFO,  __FILE__, __LINE__, __VA_ARGS__)
-#define wlog(...)  log_log(LOG_WARN,  __FILE__, __LINE__, __VA_ARGS__)
-#define elog(...) log_log(LOG_ERROR, __FILE__, __LINE__, __VA_ARGS__)
-#define flog(...) log_log(LOG_FATAL, __FILE__, __LINE__, __VA_ARGS__)
+struct lock_cb_data
+{
+    logging_lock_cbfn *fn;
+    void *udata;
+};
 
-const char* log_level_string(int level);
-void log_set_lock(log_LockFn fn, void *udata);
-void log_set_level(int level);
-int log_get_level();
-void log_set_quiet(bool enable);
-int log_add_callback(log_LogFn fn, void *udata, int level);
-int log_add_fp(FILE *fp, int level);
+enum
+{
+    LOG_TRACE,
+    LOG_DEBUG,
+    LOG_INFO,
+    LOG_WARN,
+    LOG_ERROR,
+    LOG_FATAL
+};
 
-void log_log(int level, const char *file, int line, const char *fmt, ...);
+#define tlog(...) lprint(GLOBAL_LOGGER, LOG_TRACE, __FILE__, __func__, __LINE__, __VA_ARGS__)
+#define dlog(...) lprint(GLOBAL_LOGGER, LOG_DEBUG, __FILE__, __func__, __LINE__, __VA_ARGS__)
+#define ilog(...) lprint(GLOBAL_LOGGER, LOG_INFO, __FILE__, __func__, __LINE__, __VA_ARGS__)
+#define wlog(...) lprint(GLOBAL_LOGGER, LOG_WARN, __FILE__, __func__, __LINE__, __VA_ARGS__)
+#define elog(...) lprint(GLOBAL_LOGGER, LOG_ERROR, __FILE__, __func__, __LINE__, __VA_ARGS__)
+#define flog(...) lprint(GLOBAL_LOGGER, LOG_FATAL, __FILE__, __func__, __LINE__, __VA_ARGS__)
 
-#ifdef __cplusplus
-}
-#endif
+logging_ctxt *create_logger(const char *name, int level, bool quiet);
+void destroy_logger(logging_ctxt *logger);
+const char *logging_level_string(logging_ctxt *logger, int level);
+void set_logging_lock(logging_ctxt *logger, const lock_cb_data &cb_data);
+void set_logging_level(logging_ctxt *logger, int level);
+int logging_level(logging_ctxt *logger);
+void set_quiet_logging(logging_ctxt *logger, bool enable);
+int add_logging_fp(logging_ctxt *logger, FILE *fp, int level);
+int add_logging_callback(logging_ctxt *logger, const logging_cb_data &cb_data);
+void lprint(logging_ctxt *logger, int level, const char *file, const char *func, int line, const char *fmt, ...);
+
+} // namespace nslib

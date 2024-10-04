@@ -37,8 +37,6 @@
 #pragma warning(disable : 4001)
 #endif
 
-#include "../logging.h"
-
 #include <string.h>
 #include <stdio.h>
 #include <math.h>

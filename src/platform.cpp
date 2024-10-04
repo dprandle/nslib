@@ -1,6 +1,12 @@
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
+#include <unistd.h>
+
+#if defined(_POSIX_VERSION)
+#include <pthread.h>
+#else
+#endif
 
 #include "GLFW/glfw3.h"
 #include "input_kmcodes.h"
@@ -17,12 +23,11 @@ intern void glfw_error_callback(i32 error, const char *description)
     elog("Error %d: %s", error, description);
 }
 
-
-platform_window_event * get_latest_window_event(platform_window_event_type type, platform_frame_window_events *fwind)
+platform_window_event *get_latest_window_event(platform_window_event_type type, platform_frame_window_events *fwind)
 {
     for (sizet i = fwind->events.size; i > 0; --i) {
-        if (fwind->events[i-1].type == type) {
-            return &fwind->events[i-1];
+        if (fwind->events[i - 1].type == type) {
+            return &fwind->events[i - 1];
         }
     }
     return nullptr;
@@ -96,9 +101,8 @@ intern void glfw_scroll_callback(GLFWwindow *window, double x_offset, double y_o
     if (pf->finp.events.size == pf->finp.events.capacity) {
         pf->finp.events.size = 0;
     }
-    arr_push_back(
-        &pf->finp.events,
-        {platform_input_event_type::SCROLL, SCROLL_CHANGE, {}, {}, get_cursor_scroll_mod_mask(window), foffset, {}, window});
+    arr_push_back(&pf->finp.events,
+                  {platform_input_event_type::SCROLL, SCROLL_CHANGE, {}, {}, get_cursor_scroll_mod_mask(window), foffset, {}, window});
 }
 
 intern void glfw_cursor_pos_callback(GLFWwindow *window, double x_pos, double y_pos)
@@ -108,9 +112,8 @@ intern void glfw_cursor_pos_callback(GLFWwindow *window, double x_pos, double y_
     if (pf->finp.events.size == pf->finp.events.capacity) {
         pf->finp.events.size = 0;
     }
-    arr_push_back(
-        &pf->finp.events,
-        {platform_input_event_type::CURSOR_POS, CURSOR_POS_CHANGE, {}, {}, get_cursor_scroll_mod_mask(window), {}, fpos, window});
+    arr_push_back(&pf->finp.events,
+                  {platform_input_event_type::CURSOR_POS, CURSOR_POS_CHANGE, {}, {}, get_cursor_scroll_mod_mask(window), {}, fpos, window});
 }
 
 intern void glfw_focus_change_callback(GLFWwindow *window, i32 focused)
@@ -141,7 +144,7 @@ intern void glfw_iconify_window_callback(GLFWwindow *window, i32 iconified)
     we.window = window;
     we.iconified = iconified;
     arr_push_back(&pf->fwind.events, we);
-    tlog("Window %s", (iconified)?"iconified":"restored");
+    tlog("Window %s", (iconified) ? "iconified" : "restored");
 }
 
 intern void glfw_maximize_window_callback(GLFWwindow *window, i32 maximized)
@@ -154,7 +157,7 @@ intern void glfw_maximize_window_callback(GLFWwindow *window, i32 maximized)
     we.window = window;
     we.iconified = maximized;
     arr_push_back(&pf->fwind.events, we);
-    tlog("Window %s", (maximized)?"maximized":"restored");
+    tlog("Window %s", (maximized) ? "maximized" : "restored");
 }
 
 intern void glfw_window_position_callback(GLFWwindow *window, i32 x_pos, i32 y_pos)
@@ -287,9 +290,9 @@ int init_platform(const platform_init_info *settings, platform_ctxt *ctxt)
         return err_code::PLATFORM_INIT_FAIL;
     }
 
-    glfwGetFramebufferSize((GLFWwindow*)ctxt->win_hndl, &ctxt->fwind.fb_size.x, &ctxt->fwind.fb_size.y);
-    glfwGetWindowSize((GLFWwindow*)ctxt->win_hndl, &ctxt->fwind.win_size.x, &ctxt->fwind.win_size.y);
-    glfwGetWindowPos((GLFWwindow*)ctxt->win_hndl, &ctxt->fwind.pos.x, &ctxt->fwind.pos.y);
+    glfwGetFramebufferSize((GLFWwindow *)ctxt->win_hndl, &ctxt->fwind.fb_size.x, &ctxt->fwind.fb_size.y);
+    glfwGetWindowSize((GLFWwindow *)ctxt->win_hndl, &ctxt->fwind.win_size.x, &ctxt->fwind.win_size.y);
+    glfwGetWindowPos((GLFWwindow *)ctxt->win_hndl, &ctxt->fwind.pos.x, &ctxt->fwind.pos.y);
 
     set_glfw_callbacks(ctxt);
 
@@ -301,7 +304,7 @@ int init_platform(const platform_init_info *settings, platform_ctxt *ctxt)
     glfwGetMonitorContentScale(mon, &scale.x, &scale.y);
     ilog("Monitor scale is {%f %f}", scale.x, scale.y);
 
-    log_set_level(settings->default_log_level);
+    set_logging_level(GLOBAL_LOGGER, settings->default_log_level);
     init_mem_arenas(&settings->mem, &ctxt->arenas);
     return err_code::PLATFORM_NO_ERROR;
 }
@@ -362,14 +365,23 @@ bool platform_window_should_close(void *window_hndl)
 
 ivec2 get_window_size(void *win)
 {
-    platform_ctxt *pf = platform_ptr((GLFWwindow*)win);
+    platform_ctxt *pf = platform_ptr((GLFWwindow *)win);
     return pf->fwind.win_size;
 }
 
 ivec2 get_framebuffer_size(void *win)
 {
-    platform_ctxt *pf = platform_ptr((GLFWwindow*)win);
+    platform_ctxt *pf = platform_ptr((GLFWwindow *)win);
     return pf->fwind.fb_size;
+}
+
+u32 get_thread_id()
+{
+#if defined(_POSIX_VERSION)
+    return pthread_self();
+#else
+    return 0;
+#endif
 }
 
 vec2 get_cursor_pos(void *window_hndl)
@@ -387,13 +399,13 @@ vec2 get_normalized_cursor_pos(void *window_hndl)
 
 bool platform_framebuffer_resized(void *win_hndl)
 {
-    platform_ctxt *pf = platform_ptr((GLFWwindow*)win_hndl);
+    platform_ctxt *pf = platform_ptr((GLFWwindow *)win_hndl);
     return frame_has_event_type(platform_window_event_type::FB_RESIZE, &pf->fwind);
 }
 
 bool platform_window_resized(void *win_hndl)
 {
-    platform_ctxt *pf = platform_ptr((GLFWwindow*)win_hndl);
+    platform_ctxt *pf = platform_ptr((GLFWwindow *)win_hndl);
     return frame_has_event_type(platform_window_event_type::WIN_RESIZE, &pf->fwind);
 }
 
@@ -474,13 +486,7 @@ intern sizet platform_read_file(FILE *f, void *data, sizet element_size, sizet n
     return nelems;
 }
 
-sizet read_file(const char *fname,
-                         const char *mode,
-                         void *data,
-                         sizet element_size,
-                         sizet nelements,
-                         sizet byte_offset,
-                         platform_file_err_desc *err)
+sizet read_file(const char *fname, const char *mode, void *data, sizet element_size, sizet nelements, sizet byte_offset, platform_file_err_desc *err)
 {
     sizet elems{0};
     FILE *f = fopen(fname, mode);
@@ -550,12 +556,12 @@ intern sizet platform_write_file(FILE *f, const void *data, sizet element_size, 
 }
 
 sizet write_file(const char *fname,
-                          const char *mode,
-                          const void *data,
-                          sizet element_size,
-                          sizet nelements,
-                          sizet byte_offset,
-                          platform_file_err_desc *err)
+                 const char *mode,
+                 const void *data,
+                 sizet element_size,
+                 sizet nelements,
+                 sizet byte_offset,
+                 platform_file_err_desc *err)
 {
     sizet ret{0};
     FILE *f = fopen(fname, mode);
