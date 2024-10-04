@@ -43,10 +43,8 @@
 
 #ifdef PLATFORM_WIN32
 #    ifdef DLL_EXPORTS
-#        pragma message("Exporting")
 #        define dllapi __declspec(dllexport)
 #    else
-#        pragma message("Importing")
 #        define dllapi __declspec(dllimport)
 #    endif
 #else

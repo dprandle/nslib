@@ -8,10 +8,10 @@
 #define MAX_CALLBACKS 32
 #define LOG_USE_COLOR
 
-#ifdef PLATFORM_APPLE
-#    define PRINT_U64 "ll"
+#if defined(PLATFORM_APPLE) || defined(PLATFORM_WIN32)
+    #define PRINT_U64 "ll"
 #else
-#    define PRINT_U64 "l"
+    #define PRINT_U64 "l"
 #endif
 
 namespace nslib

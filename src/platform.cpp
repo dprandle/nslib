@@ -1,22 +1,20 @@
-#include <stdio.h>
-#include <errno.h>
-#include <string.h>
+#include "basic_types.h"
+#ifdef PLATFORM_UNIX
+    #include <unistd.h>
+    #include <pthread.h>
+    #define PATH_SEP '/'
+#elif defined(PLATFORM_WIN32)
+    #include <windows.h>
+    #define PATH_SEP '\\'
+#endif
 #include <ctime>
-#include <cstdlib>
 
-#include "GLFW/glfw3.h"
 #include "input_kmcodes.h"
 #include "platform.h"
 #include "logging.h"
 #include "containers/cjson.h"
 
-#ifdef PLATFORM_UNIX
-#include <unistd.h>
-#include <pthread.h>
-#define PATH_SEP '/'
-#elif defined(PLATFORM_WIN32)
-#define PATH_SEP '\\'
-#endif
+#include "GLFW/glfw3.h"
 
 namespace nslib
 {
@@ -39,7 +37,7 @@ platform_window_event *get_latest_window_event(platform_window_event_type type, 
 
 const char *path_basename(const char *path)
 {
-    const char* ret = strrchr(path, PATH_SEP);
+    const char *ret = strrchr(path, PATH_SEP);
     if (!ret) {
         ret = path;
     }
@@ -390,11 +388,10 @@ ivec2 get_framebuffer_size(void *win)
 
 u64 get_thread_id()
 {
-#if defined(_POSIX_VERSION)
-    auto val = pthread_self();
-    return (u64)val;
-#else
-    return 0;
+#if defined(PLATFORM_UNIX)
+    return (u64)pthread_self();
+#elif defined(PLATFORM_WIN32)
+    return (u64)GetCurrentThreadId();
 #endif
 }
 

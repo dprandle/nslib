@@ -1,9 +1,11 @@
+#include "profile_timer.h"
+
 #if defined (PLATFORM_WIN32)
 #define NOMINMAX
 #include <windows.h>
 #endif
 
-#include "profile_timer.h"
+
 
 namespace nslib
 {
