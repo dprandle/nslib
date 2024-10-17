@@ -8,7 +8,7 @@
     #define PATH_SEP '\\'
 #endif
 #include <ctime>
-
+#include <cerrno>
 #include "input_kmcodes.h"
 #include "platform.h"
 #include "logging.h"

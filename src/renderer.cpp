@@ -662,7 +662,7 @@ intern int record_command_buffer(renderer *rndr, sim_region *rgn, vkr_framebuffe
     vkr_cmd_begin_rpass(cmd_buf, fb, att_clear_vals, 2);
 
     vkCmdBindPipeline(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->hndl);
-
+    
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
@@ -684,6 +684,9 @@ intern int record_command_buffer(renderer *rndr, sim_region *rgn, vkr_framebuffe
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(cmd_buf->hndl, 0, 1, vert_bufs, offsets);
     vkCmdBindIndexBuffer(cmd_buf->hndl, ind_buf->hndl, 0, VK_INDEX_TYPE_UINT16);
+
+    // We want to bind a single vert buffer like this, sure..
+    // But 
 
     push_constants pc;
     auto tf_tbl = get_comp_tbl<transform>(&rgn->cdb);
@@ -826,9 +829,15 @@ intern i32 present_image(renderer *rndr, vkr_frame *cur_frame, u32 image_ind)
     return err_code::RENDER_NO_ERROR;
 }
 
-void rpush_sm(static_model *sm, transform *tf)
+void rpush_sm(const static_model *sm, const transform *tf, const robj_cache_group *cg)
 {
+    auto msh_cache = get_cache<mesh>(cg);
+    auto mat_cache = get_cache<material>(cg);
     
+    auto msh = get_robj(sm->mesh_id, msh_cache);
+    for (int i = 0; i < msh->submeshes.size; ++i) {
+        auto mat = get_robj(sm->mat_ids[i], mat_cache);
+    }
 }
 
 

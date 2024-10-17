@@ -100,23 +100,24 @@ struct render_draw_call
 
 struct material_draw_group
 {
-    array<render_draw_call> draws;
+    hashmap<rid, render_draw_call> draws;
 };
 
 struct pipeline_draw_group
 {
     sizet pline_ind;
-    array<material_draw_group> mats;
+    hashmap<rid, material_draw_group> mats;
 };
 
 struct render_pass_draw_group
 {
     sizet rpass_ind;
-    array<pipeline_draw_group> draw_groups;
+    hashmap<rid, pipeline_draw_group> draw_groups;
 }; 
 
 struct frame_draw_info
 {
+    hashmap<rid, render_pass_draw_group> rpasses;
 };
 // What we really want to do is have a big SSAO with all transforms for entire scene right?
 
@@ -139,6 +140,9 @@ struct renderer
     // A mapping between framebuffers and render passes
     hashmap<sizet, array<rid> *> fb_rpasses;
 
+    // All frame draw call info
+    frame_draw_info dcs;
+
     // Contains all info about meshes and where they are in the vert/ind buffers
     rmesh_info rmi;
 
@@ -150,7 +154,7 @@ struct renderer
     sizet swapchain_fb_depth_stencil_im_ind{INVALID_IND};
 };
 
-void rpush_sm(static_model *sm, transform *tf);
+void rpush_sm(const static_model *sm, const transform *tf, const robj_cache_group *cg);
 
 // NOTE: All of these mesh operations kind of need to wait on all rendering operations to complete as they modify the
 // vertex and index buffers - not sure yet if this is better done within the functions or in the caller. Also these should be done at the
