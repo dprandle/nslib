@@ -276,7 +276,9 @@ struct vkr_descriptor_pool
 struct vkr_frame
 {
     vkr_cmd_buf_ind cmd_buf_ind;
-    sizet uniform_buffer_ind;
+    sizet frame_ubo_ind;
+    sizet mat_ubo_ind;
+    sizet obj_ubo_ind;
     vkr_descriptor_pool desc_pool;
     VkSemaphore image_avail;
     VkSemaphore render_finished;
@@ -557,6 +559,7 @@ void vkr_enumerate_validation_layers(const char *const *enabled_layers, u32 enab
 
 // Descriptors
 int vkr_init_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk, u32 max_sets);
+void vkr_reset_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk);
 void vkr_terminate_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk);
 vkr_add_result vkr_add_descriptor_sets(vkr_descriptor_pool *pool, const vkr_context *vk, const VkDescriptorSetLayout *layouts, sizet count = 1);
 void vkr_remove_descriptor_sets(vkr_descriptor_pool *pool, const vkr_context *vk, u32 ind, u32 count = 1);

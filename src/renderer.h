@@ -7,7 +7,7 @@
 
 namespace nslib
 {
-#define INVALID_IND ((sizet)-1)
+#define INVALID_IND ((sizet) - 1)
 
 struct vkr_context;
 struct sim_region;
@@ -18,7 +18,7 @@ struct transform;
 // 20 million triangles... thats a lot - works on desktop
 const sizet MAX_TRIANGLE_COUNT = 20000000;
 // Default ind buffer size (holding all of our inds) in ind count (not byte size)
-const sizet DEFAULT_IND_BUFFER_SIZE = MAX_TRIANGLE_COUNT*3;
+const sizet DEFAULT_IND_BUFFER_SIZE = MAX_TRIANGLE_COUNT * 3;
 // Default vert buffer size (holding all of our verts) in vert count (not byte size)
 // Consider there is on average 6 shared triangles per vert - i think dividing the above by 3 is plenty
 const sizet DEFAULT_VERT_BUFFER_SIZE = MAX_TRIANGLE_COUNT;
@@ -28,6 +28,10 @@ const sizet MAX_FREE_SBUFFER_NODE_COUNT = 1024;
 const sizet MIN_VERT_FREE_BLOCK_SIZE = 4;
 // Minimum allowed sbuffer_entry block size in the free list for indices
 const sizet MIN_IND_FREE_BLOCK_SIZE = 6;
+// Maximum number of materials the renderer supports
+const sizet MAX_MATERIAL_COUNT = 4096;
+// Maximum number of objects
+const sizet MAX_OBJECT_COUNT = 131072;
 
 namespace err_code
 {
@@ -49,9 +53,19 @@ struct push_constants
     mat4 model;
 };
 
-struct uniform_buffer_object
+struct frame_ubo_data
 {
     mat4 proj_view;
+};
+
+struct material_ubo_data
+{
+    vec4 color;
+};
+
+struct obj_ubo_data
+{
+    mat4 transform;
 };
 
 struct sbuffer_entry
@@ -113,7 +127,7 @@ struct render_pass_draw_group
 {
     sizet rpass_ind;
     hashmap<rid, pipeline_draw_group> draw_groups;
-}; 
+};
 
 struct frame_draw_info
 {

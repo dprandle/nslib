@@ -1,8 +1,6 @@
 #include "sim_region.h"
-#include "string_archive.h"
 #include "containers/string.h"
 #include "containers/linked_list.h"
-#include "math/quaternion.h"
 #include "stb_image.h"
 #include "platform.h"
 #include "vk_context.h"
@@ -104,7 +102,7 @@ intern int setup_pipeline(renderer *rndr)
     // Descripitor Set Layouts - Just one layout for the moment with a binding at 0 for uniforms and a binding at 1 for
     // image sampler
     ++info.set_layouts.size;
-    info.set_layouts[0].bindings.size = 2;
+    info.set_layouts[0].bindings.size = 1;
 
     // Uniform buffer
     info.set_layouts[0].bindings[0].binding = 0;
@@ -113,10 +111,10 @@ intern int setup_pipeline(renderer *rndr)
     info.set_layouts[0].bindings[0].descriptorCount = 1;
 
     // Image sampler
-    info.set_layouts[0].bindings[1].binding = 1;
-    info.set_layouts[0].bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    info.set_layouts[0].bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    info.set_layouts[0].bindings[1].descriptorCount = 1;
+    // info.set_layouts[0].bindings[1].binding = 1;
+    // info.set_layouts[0].bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    // info.set_layouts[0].bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    // info.set_layouts[0].bindings[1].descriptorCount = 1;
 
     // Setup our push constant
     ++info.push_constant_ranges.size;
@@ -342,7 +340,7 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
     auto dev = &rndr->vk->inst.device;
     // Find the first available sbuffer entry in the free list
     rmesh_entry new_mentry{};
-    //arr_init(&new_mentry.submesh_entrees, rndr->upstream_fl_arena);
+    // arr_init(&new_mentry.submesh_entrees, rndr->upstream_fl_arena);
     for (int subi = 0; subi < msh->submeshes.size; ++subi) {
         sizet req_vert_size = arr_len(msh->submeshes[subi].verts);
         sizet req_vert_byte_size = arr_sizeof(msh->submeshes[subi].verts);
@@ -391,7 +389,12 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
     dlog("Should be adding mesh id %s %d submeshes", str_cstr(msh->id.str), new_mentry.submesh_entrees.size);
     for (int si = 0; si < new_mentry.submesh_entrees.size; ++si) {
         auto sub = &new_mentry.submesh_entrees[si];
-        dlog("submesh %d:  vertsp(offset:%d  size:%d)  inds(offset:%d size:%d)", si, sub->verts.offset, sub->verts.size, sub->inds.offset, sub->inds.size);
+        dlog("submesh %d:  vertsp(offset:%d  size:%d)  inds(offset:%d size:%d)",
+             si,
+             sub->verts.offset,
+             sub->verts.size,
+             sub->inds.offset,
+             sub->inds.size);
     }
     // Add the smesh entry we just built to the renderer mesh entry map (stored by id)
     hashmap_set(&rndr->rmi.meshes, msh->id, new_mentry);
@@ -582,59 +585,41 @@ intern int setup_rendering(renderer *rndr)
         return err_code::RENDER_INIT_FAIL;
     }
     for (int i = 0; i < dev->rframes.size; ++i) {
-        // Create a uniform buffer for each frame
+        // Create a uniform buffers for each frame
+
+        // Frame uniform buffer - per frame data
         vkr_buffer_cfg buf_cfg{};
         buf_cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
         buf_cfg.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
         buf_cfg.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-        buf_cfg.buffer_size = sizeof(uniform_buffer_object);
+        buf_cfg.buffer_size = sizeof(frame_ubo_data);
         buf_cfg.alloc_flags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
         buf_cfg.vma_alloc = &dev->vma_alloc;
 
-        vkr_buffer uniform_buf{};
-        int err = vkr_init_buffer(&uniform_buf, &buf_cfg);
+        vkr_buffer frame_uniform_buf{};
+        int err = vkr_init_buffer(&frame_uniform_buf, &buf_cfg);
         if (err != err_code::VKR_NO_ERROR) {
             return err;
         }
-        dev->rframes[i].uniform_buffer_ind = vkr_add_buffer(dev, uniform_buf);
+        dev->rframes[i].frame_ubo_ind = vkr_add_buffer(dev, frame_uniform_buf);
 
-        // Add descriptor sets for this frame - we are running a single set with two bindings at the moment
-        auto desc_ind = vkr_add_descriptor_sets(&dev->rframes[i].desc_pool, vk, &dev->pipelines[pline->value].descriptor_layouts[0], 1);
-        if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
-            return desc_ind.err_code;
+        // Material uniform buffer - per material data
+        buf_cfg.buffer_size = MAX_MATERIAL_COUNT * sizeof(material_ubo_data);
+        vkr_buffer mat_uniform_buf{};
+        err = vkr_init_buffer(&mat_uniform_buf, &buf_cfg);
+        if (err != err_code::VKR_NO_ERROR) {
+            return err;
         }
+        dev->rframes[i].mat_ubo_ind = vkr_add_buffer(dev, mat_uniform_buf);
 
-        // Write to the descriptor set - give it our frame global uniform buffer handle
-        VkDescriptorBufferInfo buffer_info{};
-        buffer_info.offset = 0;
-        buffer_info.range = buf_cfg.buffer_size;
-        buffer_info.buffer = uniform_buf.hndl;
-
-        VkWriteDescriptorSet desc_write[2]{};
-        desc_write[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        desc_write[0].dstSet = dev->rframes[i].desc_pool.desc_sets[desc_ind.begin].hndl;
-        desc_write[0].dstBinding = 0;
-        desc_write[0].dstArrayElement = 0;
-        desc_write[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        desc_write[0].descriptorCount = 1;
-        desc_write[0].pBufferInfo = &buffer_info;
-
-        // Write our image view handle and sampler handle to the descriptor set
-        VkDescriptorImageInfo image_info{};
-        image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        image_info.imageView = dev->image_views[rndr->default_image_view_ind].hndl;
-        image_info.sampler = dev->samplers[rndr->default_sampler_ind].hndl;
-
-        desc_write[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        desc_write[1].dstSet = dev->rframes[i].desc_pool.desc_sets[desc_ind.begin].hndl;
-        desc_write[1].dstBinding = 1;
-        desc_write[1].dstArrayElement = 0;
-        desc_write[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        desc_write[1].descriptorCount = 1;
-        desc_write[1].pImageInfo = &image_info;
-
-        // Update our descriptor set - both of the writes above update the same descriptor set
-        vkUpdateDescriptorSets(dev->hndl, 2, desc_write, 0, nullptr);
+        // Object uniform buffer - per material data
+        buf_cfg.buffer_size = MAX_OBJECT_COUNT * sizeof(obj_ubo_data);
+        vkr_buffer obj_uniform_buf{};
+        err = vkr_init_buffer(&obj_uniform_buf, &buf_cfg);
+        if (err != err_code::VKR_NO_ERROR) {
+            return err;
+        }
+        dev->rframes[i].obj_ubo_ind = vkr_add_buffer(dev, obj_uniform_buf);
     }
     return err_code::VKR_NO_ERROR;
 }
@@ -644,25 +629,73 @@ intern int create_frame_descriptor_set()
     return 0;
 }
 
+intern int setup_and_bind_frame_descriptor_set(renderer *rndr, vkr_frame *cur_frame, vkr_pipeline *pipeline, vkr_command_buffer *cmd_buf)
+{
+    auto dev = &rndr->vk->inst.device;
+    auto frame_desc_layout = &pipeline->descriptor_layouts[0];
+
+    // Add descriptor set for this frame
+    vkr_add_result desc_ind = vkr_add_descriptor_sets(&cur_frame->desc_pool, rndr->vk, frame_desc_layout, 1);
+    if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
+        return desc_ind.err_code;
+    }
+    vkr_descriptor_set *desc_set = &cur_frame->desc_pool.desc_sets[desc_ind.begin];
+
+    // Write to the descriptor set - give it our frame global uniform buffer handle
+    VkBuffer frame_buf_hndl = dev->buffers[cur_frame->frame_ubo_ind].hndl;
+    VkDescriptorBufferInfo buffer_info{};
+    buffer_info.offset = 0;
+    buffer_info.range = sizeof(frame_ubo_data);
+    buffer_info.buffer = frame_buf_hndl;
+
+    VkWriteDescriptorSet desc_write{};
+    desc_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    desc_write.dstSet = desc_set->hndl;
+    desc_write.dstBinding = 0;
+    desc_write.dstArrayElement = 0;
+    desc_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    desc_write.descriptorCount = 1;
+    desc_write.pBufferInfo = &buffer_info;
+
+    // Update our descriptor set - both of the writes above update the same descriptor set
+    vkUpdateDescriptorSets(dev->hndl, 1, &desc_write, 0, nullptr);
+
+    // Our global descriptor set which has the uniform buffer
+    vkCmdBindDescriptorSets(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, 0, 1, &desc_set->hndl, 0, nullptr);
+    return err_code::VKR_NO_ERROR;
+}
+
 intern int record_command_buffer(renderer *rndr, sim_region *rgn, vkr_framebuffer *fb, vkr_frame *cur_frame, vkr_command_buffer *cmd_buf)
 {
     auto dev = &rndr->vk->inst.device;
-
-    auto desc_set = &cur_frame->desc_pool.desc_sets[0];
     auto pipeline = &dev->pipelines[0];
     auto vert_buf = &dev->buffers[rndr->rmi.verts.buf_ind];
     auto ind_buf = &dev->buffers[rndr->rmi.inds.buf_ind];
+
+    // Clear all prev desc sets
+    vkr_reset_descriptor_pool(&cur_frame->desc_pool, rndr->vk);
 
     int err = vkr_begin_cmd_buf(cmd_buf);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
 
+    err = setup_and_bind_frame_descriptor_set(rndr, cur_frame, pipeline, cmd_buf);
+    if (err != err_code::VKR_NO_ERROR) {
+        return err;
+    }
+
+    // Bind the global vertex/index buffer/s
+    VkBuffer vert_bufs[] = {vert_buf->hndl};
+    VkDeviceSize offsets[] = {0};
+    vkCmdBindVertexBuffers(cmd_buf->hndl, 0, 1, vert_bufs, offsets);
+    vkCmdBindIndexBuffer(cmd_buf->hndl, ind_buf->hndl, 0, VK_INDEX_TYPE_UINT16);
+
     VkClearValue att_clear_vals[] = {{.color{{1.0f, 0.0f, 1.0f, 1.0f}}}, {.depthStencil{1.0f, 0}}};
     vkr_cmd_begin_rpass(cmd_buf, fb, att_clear_vals, 2);
 
     vkCmdBindPipeline(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->hndl);
-    
+
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
@@ -677,17 +710,7 @@ intern int record_command_buffer(renderer *rndr, sim_region *rgn, vkr_framebuffe
     scissor.extent = {fb->size.w, fb->size.h};
     vkCmdSetScissor(cmd_buf->hndl, 0, 1, &scissor);
 
-    // Our global descriptor set which has the uniform buffer
-    vkCmdBindDescriptorSets(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, 0, 1, &desc_set->hndl, 0, nullptr);
-
-    VkBuffer vert_bufs[] = {vert_buf->hndl};
-    VkDeviceSize offsets[] = {0};
-    vkCmdBindVertexBuffers(cmd_buf->hndl, 0, 1, vert_bufs, offsets);
-    vkCmdBindIndexBuffer(cmd_buf->hndl, ind_buf->hndl, 0, VK_INDEX_TYPE_UINT16);
-
     // We want to bind a single vert buffer like this, sure..
-    // But 
-
     push_constants pc;
     auto tf_tbl = get_comp_tbl<transform>(&rgn->cdb);
     auto sm_tbl = get_comp_tbl<static_model>(&rgn->cdb);
@@ -833,13 +856,12 @@ void rpush_sm(const static_model *sm, const transform *tf, const robj_cache_grou
 {
     auto msh_cache = get_cache<mesh>(cg);
     auto mat_cache = get_cache<material>(cg);
-    
+
     auto msh = get_robj(sm->mesh_id, msh_cache);
     for (int i = 0; i < msh->submeshes.size; ++i) {
         auto mat = get_robj(sm->mat_ids[i], mat_cache);
     }
 }
-
 
 int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_frame_count)
 {
@@ -885,10 +907,10 @@ int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_fram
 
     // Update uniform buffer with some matrices
     if (cam) {
-        uniform_buffer_object ubo{};
+        frame_ubo_data ubo{};
         ubo.proj_view = cam->proj * cam->view;
-        sizet ubo_ind = cur_frame->uniform_buffer_ind;
-        memcpy(dev->buffers[ubo_ind].mem_info.pMappedData, &ubo, sizeof(uniform_buffer_object));
+        sizet ubo_ind = cur_frame->frame_ubo_ind;
+        memcpy(dev->buffers[ubo_ind].mem_info.pMappedData, &ubo, sizeof(frame_ubo_data));
     }
 
     // The command buf index struct has an ind struct into the pool the cmd buf comes from, and then an ind into the buffer

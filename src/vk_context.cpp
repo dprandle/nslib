@@ -943,7 +943,7 @@ void vkr_remove_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, sizet in
 
 vkr_add_result vkr_add_descriptor_sets(vkr_descriptor_pool *pool, const vkr_context *vk, const VkDescriptorSetLayout *layouts, sizet count)
 {
-    ilog("Adding %lu descritor set/s", count);
+    tlog("Adding %lu descritor set/s", count);
     vkr_add_result result{};
     array<VkDescriptorSet> hndls{};
     arr_init(&hndls, vk->cfg.arenas.command_arena);
@@ -968,9 +968,9 @@ vkr_add_result vkr_add_descriptor_sets(vkr_descriptor_pool *pool, const vkr_cont
 
     for (sizet i = 0; i < count; ++i) {
         pool->desc_sets[result.begin + i].hndl = hndls[i];
-        ilog("Setting descriptor set at index %lu in pool %p to hndl %lu", result.begin + i, pool, hndls[i]);
+        tlog("Setting descriptor set at index %lu in pool %p to hndl %lu", result.begin + i, pool, hndls[i]);
     }
-    ilog("Successfully added descriptor set/s");
+    tlog("Successfully added descriptor set/s");
     arr_terminate(&hndls);
     return result;
 }
@@ -1435,6 +1435,12 @@ int vkr_init_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *
         return err_code::VKR_CREATE_DESCRIPTOR_POOL_FAIL;
     }
     return err_code::VKR_NO_ERROR;
+}
+
+void vkr_reset_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk)
+{
+    vkResetDescriptorPool(vk->inst.device.hndl, desc_pool->hndl, {});
+    arr_clear(&desc_pool->desc_sets);
 }
 
 void vkr_terminate_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk)
