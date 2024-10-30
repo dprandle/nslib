@@ -115,7 +115,7 @@ T *hashset_insert(hashset<T> *hs, const T &value)
     if (hashset_find(hs, value)) {
         return nullptr;
     }
-    return (T *)ihashmap_set(hs->hm, &value);
+    return (T *)ihashmap_set(hs->hm, &value, &value);
 }
 
 template<class T>
@@ -136,7 +136,7 @@ template<class T>
 T *hashset_set(hashset<T> *hs, const T &value)
 {
     assert(hs->hm);
-    return (T *)ihashmap_set(hs->hm, &value);
+    return (T *)ihashmap_set(hs->hm, &value, &value);
 }
 
 template<class T>

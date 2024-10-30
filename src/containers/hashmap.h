@@ -143,7 +143,7 @@ typename hashmap<K, T>::iterator hashmap_set(hashmap<K, T> *hm, const K &key, co
 {
     assert(hm->hm);
     typename hashmap<K, T>::value_type item{key, value};
-    return (typename hashmap<K, T>::iterator)ihashmap_set(hm->hm, &item);
+    return hashmap_set(hm, item);
 }
 
 // hashmap_set inserts or replaces an item in the hash map. If an item is
@@ -154,7 +154,7 @@ template<class K, class T>
 typename hashmap<K, T>::iterator hashmap_set(hashmap<K, T> *hm, const typename hashmap<K, T>::value_type &item)
 {
     assert(hm->hm);
-    return (typename hashmap<K, T>::iterator)ihashmap_set(hm->hm, &item);
+    return (typename hashmap<K, T>::iterator)ihashmap_set(hm->hm, &item.key, &item);
 }
 
 // hashmap_find returns the item based on the provided key. If the item is not
@@ -163,8 +163,7 @@ template<class K, class T>
 typename hashmap<K, T>::const_iterator hashmap_find(const hashmap<K, T> *hm, const K &key)
 {
     assert(hm->hm);
-    typename hashmap<K, T>::value_type find_item{key, {}};
-    return (typename hashmap<K, T>::const_iterator)ihashmap_get(hm->hm, &find_item);
+    return (typename hashmap<K, T>::const_iterator)ihashmap_get(hm->hm, &key);
 }
 
 // hashmap_find returns the item based on the provided key. If the item is not
@@ -173,8 +172,7 @@ template<class K, class T>
 typename hashmap<K, T>::iterator hashmap_find(hashmap<K, T> *hm, const K &key)
 {
     assert(hm->hm);
-    typename hashmap<K, T>::value_type find_item{key, {}};
-    return (typename hashmap<K, T>::iterator)ihashmap_get(hm->hm, &find_item);
+    return (typename hashmap<K, T>::iterator)ihashmap_get(hm->hm, &key);
 }
 
 // hashmap_remove removes an item from the hash map and returns it. If the
@@ -183,8 +181,7 @@ template<class K, class T>
 typename hashmap<K, T>::iterator hashmap_remove(hashmap<K, T> *hm, const K &key)
 {
     assert(hm->hm);
-    typename hashmap<K, T>::value_type find_item{key, {}};
-    return (typename hashmap<K, T>::iterator)ihashmap_delete(hm->hm, &find_item);
+    return (typename hashmap<K, T>::iterator)ihashmap_delete(hm->hm, &key);
 }
 
 template<class K, class T>
@@ -211,17 +208,17 @@ void hashmap_init(hashmap<Key, Value> *hm, mem_arena *arena, sizet mem_alignment
     int seed1 = generate_rand_seed();
 
     // Hash func attempts to call the hash_type function
-    auto hash_func = [](const void *item, u64 seed0, u64 seed1) -> u64 {
-        auto cast = (typename hashmap<Key, Value>::const_iterator)item;
-        return hash_type(cast->key, seed0, seed1);
+    auto hash_func = [](const void *key, u64 seed0, u64 seed1) -> u64 {
+        auto cast = (Key*)key;
+        return hash_type(*cast, seed0, seed1);
     };
 
     // We only care about == so just return 1 in all other cases - If the hashed value of the keys are equal then we
     // check to see if the key itself is equal
     auto compare_func = [](const void *a, const void *b, void *) -> i32 {
-        auto cast_a = (typename hashmap<Key, Value>::const_iterator)a;
-        auto cast_b = (typename hashmap<Key, Value>::const_iterator)b;
-        return (cast_a->key == cast_b->key) ? 0 : 1;
+        auto cast_a = (Key*)a;
+        auto cast_b = (Key*)b;
+        return (*cast_a == *cast_b) ? 0 : 1;
     };
 
     hm->hm = ihashmap_new(mem_alloc,

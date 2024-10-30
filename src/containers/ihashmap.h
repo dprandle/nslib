@@ -113,17 +113,17 @@ bool ihashmap_oom(struct ihashmap *map);
 
 // hashmap_get returns the item based on the provided key. If the item is not
 // found then NULL is returned.
-const void *ihashmap_get(struct ihashmap *map, const void *item);
+const void *ihashmap_get(struct ihashmap *map, const void *key);
 
 // hashmap_set inserts or replaces an item in the hash map. If an item is
 // replaced then it is returned otherwise NULL is returned. This operation
 // may allocate memory. If the system is unable to allocate additional
 // memory then NULL is returned and hashmap_oom() returns true.
-const void *ihashmap_set(struct ihashmap *map, const void *item);
+const void *ihashmap_set(struct ihashmap *map, const void *key, const void *item);
 
 // hashmap_delete removes an item from the hash map and returns it. If the
 // item is not found then NULL is returned.
-const void *ihashmap_delete(struct ihashmap *map, const void *item);
+const void *ihashmap_delete(struct ihashmap *map, const void *key);
 
 // hashmap_probe returns the item in the bucket at position or NULL if an item
 // is not set for that bucket. The position is 'moduloed' by the number of

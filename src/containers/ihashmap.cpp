@@ -264,9 +264,9 @@ const void *ihashmap_set_with_hash(struct ihashmap *map, const void *item, u64 h
     }
 }
 
-const void *ihashmap_set(struct ihashmap *map, const void *item)
+const void *ihashmap_set(struct ihashmap *map, const void *item, const void *key)
 {
-    return ihashmap_set_with_hash(map, item, get_hash(map, item));
+    return ihashmap_set_with_hash(map, item, get_hash(map, key));
 }
 
 const void *ihashmap_get_with_hash(struct ihashmap *map, const void *key, u64 hash)
