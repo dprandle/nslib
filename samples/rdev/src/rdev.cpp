@@ -246,6 +246,12 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
             rpush_sm(&app->rndr, sm, curtf, &app->cg);
         }
     }
+    static double counter = 2.0;
+    double elapsed = nanos_to_sec(ptimer_elapsed_dt(&ctxt->time_pts));
+    if (elapsed > counter) {
+        ilog("Average FPS: %f", ctxt->finished_frames / elapsed);
+        counter += 2.0;
+    }
     
     return render_frame_end(&app->rndr, cam);
 }
