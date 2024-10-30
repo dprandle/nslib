@@ -173,7 +173,7 @@ int init(platform_ctxt *ctxt, void *user_data)
     init_sim_region(&app->rgn, mem_global_arena());
 
     // Create a grid of entities with odd ones being cubes and even being rectangles
-    int len = 500, width = 100;
+    int len = 100, width = 100;
     add_entities(len * width, &app->rgn);
 
     for (int yind = 0; yind < len; ++yind) {

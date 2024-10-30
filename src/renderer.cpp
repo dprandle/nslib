@@ -821,8 +821,8 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
 {
     assert(fl_arena->alloc_type == mem_alloc_type::FREE_LIST);
     rndr->upstream_fl_arena = fl_arena;
-    mem_init_fl_arena(&rndr->vk_free_list, 200 * MB_SIZE, fl_arena);
-    mem_init_lin_arena(&rndr->vk_frame_linear, 100 * MB_SIZE, mem_global_stack_arena());
+    mem_init_fl_arena(&rndr->vk_free_list, 100 * MB_SIZE, fl_arena);
+    mem_init_lin_arena(&rndr->vk_frame_linear, 10 * MB_SIZE, mem_global_stack_arena());
     mem_init_fl_arena(&rndr->frame_fl, 100 * MB_SIZE, fl_arena);
     
     rndr->vk = mem_alloc<vkr_context>(&rndr->vk_free_list, 8);

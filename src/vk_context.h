@@ -497,7 +497,7 @@ struct vkr_instance
 
 struct vkr_max_descriptor_count
 {
-    u32 count[VKR_DESCRIPTOR_TYPE_COUNT] = {0, 0, 0, 0, 0, 0, 1000000, 0, 0, 0, 0};
+    u32 count[VKR_DESCRIPTOR_TYPE_COUNT] = {0, 0, 0, 0, 0, 0, 100000, 0, 0, 0, 0};
 };
 
 struct vkr_cfg
@@ -510,7 +510,7 @@ struct vkr_cfg
     VkInstanceCreateFlags inst_create_flags;
 
     vkr_max_descriptor_count max_desc_per_type_per_pool{};
-    u32 max_desc_sets_per_pool{1000000};
+    u32 max_desc_sets_per_pool{10000};
 
     // Array of additional instance extension names - besides defaults determined by window
     const char *const *extra_instance_extension_names;
