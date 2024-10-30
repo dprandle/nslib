@@ -150,7 +150,7 @@ struct platform_window_init_info
 
 struct platform_memory_init_info
 {
-    sizet free_list_size{1000 * MB_SIZE};
+    sizet free_list_size{4000 * MB_SIZE};
     sizet stack_size{100 * MB_SIZE};
     sizet frame_linear_size{100 * MB_SIZE};
 };

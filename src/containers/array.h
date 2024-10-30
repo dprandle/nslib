@@ -42,8 +42,9 @@ struct array
     sizet size{};
     sizet capacity{};
     sizet mem_alignment{};
-    
-    array(){
+
+    array()
+    {
         arr_init(this);
     }
 
@@ -84,7 +85,7 @@ void swap(array<T> *lhs, array<T> *rhs)
 }
 
 template<class T>
-void arr_init(array<T> *arr, mem_arena *arena = nullptr, sizet initial_capacity = 0, sizet mem_alignment=DEFAULT_MIN_ALIGNMENT)
+void arr_init(array<T> *arr, mem_arena *arena = nullptr, sizet initial_capacity = 0, sizet mem_alignment = DEFAULT_MIN_ALIGNMENT)
 {
     if (arena) {
         arr->arena = arena;
@@ -208,22 +209,24 @@ void arr_set_capacity(array<T> *arr, sizet new_cap)
     if (new_cap == arr->capacity) {
         return;
     }
-    
+
     if (new_cap > 0) {
         // New cap can't be any smaller than mem_nod since we are using free list allocator
-        while (new_cap * sizeof(T) < sizeof(mem_node))
+        while (new_cap * sizeof(T) < sizeof(mem_node)) {
             ++new_cap;
+        }
         arr->data = (T *)mem_realloc(arr->data, new_cap * sizeof(T), arr->arena, arr->mem_alignment);
     }
-    else if (arr->data){
+    else if (arr->data) {
         mem_free(arr->data, arr->arena);
         arr->data = nullptr;
     }
     arr->capacity = new_cap;
 
     // Shrink the old size if its greater than the new capacity (so we only copy those items)
-    if (arr->size > arr->capacity)
+    if (arr->size > arr->capacity) {
         arr->size = arr->capacity;
+    }
 }
 
 template<class T>
@@ -247,7 +250,7 @@ template<class T>
 T *arr_push_back(array<T> *arr, const T &item)
 {
     sizet sz = arr->size;
-    arr_resize(arr, sz+1);
+    arr_resize(arr, sz + 1);
     (*arr)[sz] = item;
     return &(*arr)[sz];
 }
@@ -266,7 +269,7 @@ template<class T, class... Args>
 T *arr_emplace_back(array<T> *arr, Args &&...args)
 {
     sizet sz = arr->size;
-    arr_resize(arr, sz+1);
+    arr_resize(arr, sz + 1);
     T *ret = &arr->data[sz];
     new (ret) T(std::forward<Args>(args)...);
     return ret;
@@ -334,7 +337,7 @@ typename T::iterator arr_find(T *bufobj, const typename T::value_type &item)
 }
 
 template<class T, class... Args>
-array<T>* arr_resize(array<T> *arr, sizet new_size, Args &&...args)
+array<T> *arr_resize(array<T> *arr, sizet new_size, Args &&...args)
 {
     if (arr->size == new_size)
         return arr;
@@ -366,7 +369,7 @@ static_array<T, N> *arr_resize(static_array<T, N> *arr, sizet new_size, Args &&.
     for (sizet i = arr->size; i < new_size; ++i) {
         new (&arr->data[i]) T(std::forward<Args>(args)...);
     }
-    arr->size = new_size;    
+    arr->size = new_size;
     return arr;
 }
 
@@ -393,14 +396,14 @@ typename T::iterator arr_erase(T *bufobj, typename T::iterator first, typename T
     if (reduce_size > bufobj->size || reduce_size == 0) {
         return last;
     }
-    
+
     // Shift all items after the range over to the first item in the range, until we reach to end of the data
     while (last != arr_end(bufobj)) {
         *first = *last;
         ++first;
         ++last;
     }
-    
+
     arr_resize(bufobj, bufobj->size - reduce_size);
     return first;
 }
@@ -426,8 +429,8 @@ bool arr_remove(T *bufobj, sizet index)
         return false;
 
     // Copy the items back one spot
-    for (sizet i = index+1; i < bufobj->size; ++i) {
-        bufobj->data[i-1] = bufobj->data[i];
+    for (sizet i = index + 1; i < bufobj->size; ++i) {
+        bufobj->data[i - 1] = bufobj->data[i];
     }
 
     // Pop the last item
@@ -452,7 +455,7 @@ sizet arr_index_of(T *bufobj, typename T::value_type *item)
     if (offset < bufobj->size) {
         return offset;
     }
-    return NPOS;
+    return INVALID_IND;
 }
 
 using byte_array = array<u8>;

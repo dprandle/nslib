@@ -1,6 +1,7 @@
 #pragma once
 #include "vk_mem_alloc.h"
 #include "containers/array.h"
+#include "rid.h"
 #include "util.h"
 #include "math/vector4.h"
 #include "basic_types.h"
@@ -277,6 +278,7 @@ struct vkr_frame
 {
     vkr_cmd_buf_ind cmd_buf_ind;
     sizet frame_ubo_ind;
+    sizet pl_ubo_ind;
     sizet mat_ubo_ind;
     sizet obj_ubo_ind;
     vkr_descriptor_pool desc_pool;
@@ -304,6 +306,7 @@ struct vkr_rpass_cfg_subpass
     static_array<u32, 16> preserve_attachments;
     const VkAttachmentReference *depth_stencil_attachment{};
 };
+
 
 struct vkr_rpass_cfg
 {
@@ -469,8 +472,8 @@ struct vkr_device
     VkDevice hndl;
     vkr_device_queue_fam_info qfams[VKR_QUEUE_FAM_TYPE_COUNT];
     array<vkr_rpass> render_passes;
-    array<vkr_framebuffer> framebuffers;
     array<vkr_pipeline> pipelines;
+    array<vkr_framebuffer> framebuffers;
     array<vkr_buffer> buffers;
     array<vkr_image> images;
     array<vkr_image_view> image_views;
@@ -494,7 +497,7 @@ struct vkr_instance
 
 struct vkr_max_descriptor_count
 {
-    u32 count[VKR_DESCRIPTOR_TYPE_COUNT] = {0, MAX_FRAMES_IN_FLIGHT, 0, 0, 0, 0, MAX_FRAMES_IN_FLIGHT, 0, 0, 0, 0};
+    u32 count[VKR_DESCRIPTOR_TYPE_COUNT] = {0, 0, 0, 0, 0, 0, 1000000, 0, 0, 0, 0};
 };
 
 struct vkr_cfg
@@ -507,7 +510,7 @@ struct vkr_cfg
     VkInstanceCreateFlags inst_create_flags;
 
     vkr_max_descriptor_count max_desc_per_type_per_pool{};
-    u32 max_desc_sets_per_pool{4};
+    u32 max_desc_sets_per_pool{1000000};
 
     // Array of additional instance extension names - besides defaults determined by window
     const char *const *extra_instance_extension_names;

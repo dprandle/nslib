@@ -34,12 +34,52 @@ intern const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN
 
 const intern rid FWD_RPASS("forward");
 const intern rid PLINE_FWD_RPASS_S0_OPAQUE("forward-s0-opaque");
+intern VkDescriptorSetLayout G_FRAME_LAYOUT{};
+intern VkPipelineLayout G_FRAME_PL_LAYOUT{};
+
+enum descriptor_set_layout
+{
+    DESCRIPTOR_SET_LAYOUT_FRAME,
+    DESCRIPTOR_SET_LAYOUT_PIPELINE,
+    DESCRIPTOR_SET_LAYOUT_MATERIAL,
+    DESCRIPTOR_SET_LAYOUT_OBJECT
+};
+
+struct draw_call
+{
+    sizet set_ind;
+    u32 index_count;
+    u32 instance_count;
+    u32 first_index;
+    u32 vertex_offset;
+    u32 first_instance;
+    const mat4 *tf;
+};
+
+struct material_draw_group
+{
+    const material *mat;
+    sizet set_ind;
+    array<draw_call> dcs;
+};
+
+struct pipeline_draw_group
+{
+    sizet set_ind;
+    const pipeline_info *plinfo;
+    hashmap<rid, material_draw_group *> mats;
+};
+
+struct render_pass_draw_group
+{
+    const rpass_info *rpinfo;
+    array<VkWriteDescriptorSet> desc_updates;
+    hashmap<rid, pipeline_draw_group *> plines;
+};
 
 intern int setup_render_pass(renderer *rndr)
 {
     auto vk = rndr->vk;
-    sizet rpass = vkr_add_render_pass(&vk->inst.device, {});
-
     vkr_rpass_cfg rp_cfg{};
 
     VkAttachmentDescription att{};
@@ -84,9 +124,13 @@ intern int setup_render_pass(renderer *rndr)
     sp_dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     arr_push_back(&rp_cfg.subpass_dependencies, sp_dep);
 
-    int ret = vkr_init_render_pass(vk, &rp_cfg, &vk->inst.device.render_passes[rpass]);
+    rpass_info rpi{};
+    rpi.id = FWD_RPASS;
+    rpi.rpind = vkr_add_render_pass(&vk->inst.device, {});
+
+    int ret = vkr_init_render_pass(vk, &rp_cfg, &vk->inst.device.render_passes[rpi.rpind]);
     if (ret == err_code::VKR_NO_ERROR) {
-        hashmap_set(&rndr->rpasses, FWD_RPASS, rpass);
+        hashmap_set(&rndr->rpasses, rpi.id, rpi);
     }
     return ret;
 }
@@ -101,14 +145,32 @@ intern int setup_pipeline(renderer *rndr)
 
     // Descripitor Set Layouts - Just one layout for the moment with a binding at 0 for uniforms and a binding at 1 for
     // image sampler
-    ++info.set_layouts.size;
-    info.set_layouts[0].bindings.size = 1;
+    info.set_layouts.size = 4;
 
     // Uniform buffer
     info.set_layouts[0].bindings[0].binding = 0;
     info.set_layouts[0].bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     info.set_layouts[0].bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     info.set_layouts[0].bindings[0].descriptorCount = 1;
+    info.set_layouts[0].bindings.size = 1;
+
+    info.set_layouts[1].bindings[0].binding = 0;
+    info.set_layouts[1].bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    info.set_layouts[1].bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    info.set_layouts[1].bindings[0].descriptorCount = 1;
+    info.set_layouts[1].bindings.size = 1;
+
+    info.set_layouts[2].bindings[0].binding = 0;
+    info.set_layouts[2].bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    info.set_layouts[2].bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    info.set_layouts[2].bindings[0].descriptorCount = 1;
+    info.set_layouts[2].bindings.size = 1;
+
+    info.set_layouts[3].bindings[0].binding = 0;
+    info.set_layouts[3].bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    info.set_layouts[3].bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    info.set_layouts[3].bindings[0].descriptorCount = 1;
+    info.set_layouts[3].bindings.size = 1;
 
     // Image sampler
     // info.set_layouts[0].bindings[1].binding = 1;
@@ -226,11 +288,18 @@ intern int setup_pipeline(renderer *rndr)
 
     auto rpass_fiter = hashmap_find(&rndr->rpasses, FWD_RPASS);
     if (rpass_fiter) {
-        info.rpass = &vk->inst.device.render_passes[rpass_fiter->value];
-        sizet plind = vkr_add_pipeline(&vk->inst.device, {});
-        int code = vkr_init_pipeline(vk, &info, &vk->inst.device.pipelines[plind]);
+        info.rpass = &vk->inst.device.render_passes[rpass_fiter->value.rpind];
+        pipeline_info plinfo{};
+        plinfo.id = PLINE_FWD_RPASS_S0_OPAQUE;
+        plinfo.plind = vkr_add_pipeline(&vk->inst.device, {});
+        plinfo.rpass_id = rpass_fiter->value.id;
+        int code = vkr_init_pipeline(vk, &info, &vk->inst.device.pipelines[plinfo.plind]);
         if (code == err_code::VKR_NO_ERROR) {
-            hashmap_set(&rndr->pipelines, PLINE_FWD_RPASS_S0_OPAQUE, plind);
+            hashmap_set(&rndr->pipelines, plinfo.id, plinfo);
+
+            // Set our global frame layout
+            G_FRAME_LAYOUT = vk->inst.device.pipelines[plinfo.plind].descriptor_layouts[DESCRIPTOR_SET_LAYOUT_FRAME];
+            G_FRAME_PL_LAYOUT = vk->inst.device.pipelines[plinfo.plind].layout_hndl;
         }
         return code;
     }
@@ -279,11 +348,13 @@ intern int setup_rmesh_info(renderer *rndr)
 
     // Create the head nodes of our vert and index buffer free list - indice 0 and full buffer size
     auto vert_head = mem_alloc<sbuffer_entry_slnode>(&rndr->rmi.verts.node_pool);
+    vert_head->next = nullptr;
     vert_head->data.size = DEFAULT_VERT_BUFFER_SIZE;
     vert_head->data.offset = 0;
     ll_push_back(&rndr->rmi.verts.fl, vert_head);
 
     auto ind_head = mem_alloc<sbuffer_entry_slnode>(&rndr->rmi.inds.node_pool);
+    ind_head->next = nullptr;
     ind_head->data.size = DEFAULT_IND_BUFFER_SIZE;
     ind_head->data.offset = 0;
     ll_push_back(&rndr->rmi.inds.fl, ind_head);
@@ -322,6 +393,7 @@ intern sbuffer_entry find_sbuffer_block(sbuffer_info *sbuf, sizet req_size)
 
         auto new_node = mem_alloc<sbuffer_entry_slnode>(&sbuf->node_pool);
         ret_entry.size -= remain;
+        new_node->next = nullptr;
         new_node->data.size = remain;
         new_node->data.offset = ret_entry.offset + ret_entry.size;
         ll_insert(&sbuf->fl, prev_fnode, new_node);
@@ -412,6 +484,7 @@ intern void insert_node_to_free_list(sbuffer_info *sbuf, const sbuffer_entry *en
         it = it->next;
     }
     auto new_node = mem_alloc<sbuffer_entry_slnode>(&sbuf->node_pool);
+    new_node->next = nullptr;
     new_node->data = *entry;
     ll_insert(&sbuf->fl, it_prev, new_node);
 }
@@ -539,7 +612,7 @@ intern int init_swapchain_framebuffers(renderer *rndr)
     if (rp_fiter) {
         vkr_init_swapchain_framebuffers(dev,
                                         vk,
-                                        &dev->render_passes[rp_fiter->value],
+                                        &dev->render_passes[rp_fiter->value.rpind],
                                         vkr_framebuffer_attachment{dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind]});
     }
     return err;
@@ -603,6 +676,15 @@ intern int setup_rendering(renderer *rndr)
         }
         dev->rframes[i].frame_ubo_ind = vkr_add_buffer(dev, frame_uniform_buf);
 
+        // Pipeline uniform buffer - per pipeline data
+        buf_cfg.buffer_size = MAX_PIPELINE_COUNT * sizeof(pipeline_ubo_data);
+        vkr_buffer pl_uniform_buf{};
+        err = vkr_init_buffer(&pl_uniform_buf, &buf_cfg);
+        if (err != err_code::VKR_NO_ERROR) {
+            return err;
+        }
+        dev->rframes[i].pl_ubo_ind = vkr_add_buffer(dev, pl_uniform_buf);
+
         // Material uniform buffer - per material data
         buf_cfg.buffer_size = MAX_MATERIAL_COUNT * sizeof(material_ubo_data);
         vkr_buffer mat_uniform_buf{};
@@ -624,66 +706,45 @@ intern int setup_rendering(renderer *rndr)
     return err_code::VKR_NO_ERROR;
 }
 
-intern int create_frame_descriptor_set()
+intern void add_desc_write_update(renderer *rndr,
+                                  vkr_frame *cur_frame,
+                                  sizet offset,
+                                  sizet range,
+                                  sizet buf_ind,
+                                  sizet set_ind,
+                                  render_pass_draw_group *rpdg)
 {
-    return 0;
-}
-
-intern int setup_and_bind_frame_descriptor_set(renderer *rndr, vkr_frame *cur_frame, vkr_pipeline *pipeline, vkr_command_buffer *cmd_buf)
-{
-    auto dev = &rndr->vk->inst.device;
-    auto frame_desc_layout = &pipeline->descriptor_layouts[0];
-
-    // Add descriptor set for this frame
-    vkr_add_result desc_ind = vkr_add_descriptor_sets(&cur_frame->desc_pool, rndr->vk, frame_desc_layout, 1);
-    if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
-        return desc_ind.err_code;
-    }
-    vkr_descriptor_set *desc_set = &cur_frame->desc_pool.desc_sets[desc_ind.begin];
-
-    // Write to the descriptor set - give it our frame global uniform buffer handle
-    VkBuffer frame_buf_hndl = dev->buffers[cur_frame->frame_ubo_ind].hndl;
-    VkDescriptorBufferInfo buffer_info{};
-    buffer_info.offset = 0;
-    buffer_info.range = sizeof(frame_ubo_data);
-    buffer_info.buffer = frame_buf_hndl;
+    // Add a write descriptor set to update our obj descriptor to point at this portion of our unifrom buffer
+    auto buffer_info = mem_alloc<VkDescriptorBufferInfo>(&rndr->frame_fl);
+    memset(buffer_info, 0, sizeof(VkDescriptorBufferInfo));
+    buffer_info->offset = offset;
+    buffer_info->range = range;
+    buffer_info->buffer = rndr->vk->inst.device.buffers[buf_ind].hndl;
 
     VkWriteDescriptorSet desc_write{};
     desc_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    desc_write.dstSet = desc_set->hndl;
+    desc_write.dstSet = cur_frame->desc_pool.desc_sets[set_ind].hndl;
     desc_write.dstBinding = 0;
     desc_write.dstArrayElement = 0;
     desc_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     desc_write.descriptorCount = 1;
-    desc_write.pBufferInfo = &buffer_info;
-
-    // Update our descriptor set - both of the writes above update the same descriptor set
-    vkUpdateDescriptorSets(dev->hndl, 1, &desc_write, 0, nullptr);
-
-    // Our global descriptor set which has the uniform buffer
-    vkCmdBindDescriptorSets(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, 0, 1, &desc_set->hndl, 0, nullptr);
-    return err_code::VKR_NO_ERROR;
+    desc_write.pBufferInfo = buffer_info;
+    arr_push_back(&rpdg->desc_updates, desc_write);
 }
 
-intern int record_command_buffer(renderer *rndr, sim_region *rgn, vkr_framebuffer *fb, vkr_frame *cur_frame, vkr_command_buffer *cmd_buf)
+intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame *cur_frame, vkr_command_buffer *cmd_buf)
 {
     auto dev = &rndr->vk->inst.device;
-    auto pipeline = &dev->pipelines[0];
     auto vert_buf = &dev->buffers[rndr->rmi.verts.buf_ind];
     auto ind_buf = &dev->buffers[rndr->rmi.inds.buf_ind];
-
-    // Clear all prev desc sets
-    vkr_reset_descriptor_pool(&cur_frame->desc_pool, rndr->vk);
 
     int err = vkr_begin_cmd_buf(cmd_buf);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
 
-    err = setup_and_bind_frame_descriptor_set(rndr, cur_frame, pipeline, cmd_buf);
-    if (err != err_code::VKR_NO_ERROR) {
-        return err;
-    }
+    VkClearValue att_clear_vals[] = {{.color{{1.0f, 0.0f, 1.0f, 1.0f}}}, {.depthStencil{1.0f, 0}}};
+    vkr_cmd_begin_rpass(cmd_buf, fb, att_clear_vals, 2);
 
     // Bind the global vertex/index buffer/s
     VkBuffer vert_bufs[] = {vert_buf->hndl};
@@ -691,75 +752,96 @@ intern int record_command_buffer(renderer *rndr, sim_region *rgn, vkr_framebuffe
     vkCmdBindVertexBuffers(cmd_buf->hndl, 0, 1, vert_bufs, offsets);
     vkCmdBindIndexBuffer(cmd_buf->hndl, ind_buf->hndl, 0, VK_INDEX_TYPE_UINT16);
 
-    VkClearValue att_clear_vals[] = {{.color{{1.0f, 0.0f, 1.0f, 1.0f}}}, {.depthStencil{1.0f, 0}}};
-    vkr_cmd_begin_rpass(cmd_buf, fb, att_clear_vals, 2);
+    // Bind frame global descriptor set
+    auto ds = cur_frame->desc_pool.desc_sets[DESCRIPTOR_SET_LAYOUT_FRAME].hndl;
+    vkCmdBindDescriptorSets(
+        cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, G_FRAME_PL_LAYOUT, DESCRIPTOR_SET_LAYOUT_FRAME, 1, &ds, 0, nullptr);
 
-    vkCmdBindPipeline(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->hndl);
+    sizet rpass_i{};
+    while (auto rpass_iter = hashmap_iter(&rndr->dcs.rpasses, &rpass_i)) {
 
-    VkViewport viewport{};
-    viewport.x = 0.0f;
-    viewport.y = 0.0f;
-    viewport.width = (float)fb->size.w;
-    viewport.height = (float)fb->size.h;
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-    vkCmdSetViewport(cmd_buf->hndl, 0, 1, &viewport);
+        // We could make our render pass have the vert/index buffer info.. ie
+        sizet pl_i{};
+        while (auto pl_iter = hashmap_iter(&rpass_iter->value->plines, &pl_i)) {
+            // Grab the pipeline and set it, and set the viewport/scissor
+            auto pipeline = &dev->pipelines[pl_iter->value->plinfo->plind];
+            vkCmdBindPipeline(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->hndl);
 
-    VkRect2D scissor{};
-    scissor.offset = {0, 0};
-    scissor.extent = {fb->size.w, fb->size.h};
-    vkCmdSetScissor(cmd_buf->hndl, 0, 1, &scissor);
+            auto ds = cur_frame->desc_pool.desc_sets[pl_iter->value->set_ind].hndl;
+            vkCmdBindDescriptorSets(
+                cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, DESCRIPTOR_SET_LAYOUT_PIPELINE, 1, &ds, 0, nullptr);
 
-    // We want to bind a single vert buffer like this, sure..
-    push_constants pc;
-    auto tf_tbl = get_comp_tbl<transform>(&rgn->cdb);
-    auto sm_tbl = get_comp_tbl<static_model>(&rgn->cdb);
+            VkViewport viewport{};
+            viewport.x = 0.0f;
+            viewport.y = 0.0f;
+            viewport.width = (float)fb->size.w;
+            viewport.height = (float)fb->size.h;
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            vkCmdSetViewport(cmd_buf->hndl, 0, 1, &viewport);
 
-    if (tf_tbl && sm_tbl) {
-        for (int i = 0; i < tf_tbl->entries.size; ++i) {
-            auto curtf = &tf_tbl->entries[i];
-            auto rc = get_comp(curtf->ent_id, sm_tbl);
-            auto ent = get_entity(curtf->ent_id, rgn);
-            if (rc) {
-                auto rmesh = hashmap_find(&rndr->rmi.meshes, rc->mesh_id);
-                if (rmesh) {
-                    for (int i = 0; i < rmesh->value.submesh_entrees.size; ++i) {
-                        auto sm = &rmesh->value.submesh_entrees[i];
-                        pc.model = curtf->cached;
-                        vkCmdPushConstants(cmd_buf->hndl, pipeline->layout_hndl, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push_constants), &pc);
-                        vkCmdDrawIndexed(cmd_buf->hndl, (u32)sm->inds.size, 1, (u32)sm->inds.offset, (u32)sm->verts.offset, 0);
-                    }
+            VkRect2D scissor{};
+            scissor.offset = {0, 0};
+            scissor.extent = {fb->size.w, fb->size.h};
+            vkCmdSetScissor(cmd_buf->hndl, 0, 1, &scissor);
+
+            sizet mat_i{};
+            while (auto mat_iter = hashmap_iter(&pl_iter->value->mats, &mat_i)) {
+                // Bind the material set
+                auto ds = cur_frame->desc_pool.desc_sets[mat_iter->value->set_ind].hndl;
+                vkCmdBindDescriptorSets(
+                    cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, DESCRIPTOR_SET_LAYOUT_MATERIAL, 1, &ds, 0, nullptr);
+
+                sizet obj_set_ind{INVALID_IND};
+                for (int dci = 0; dci < mat_iter->value->dcs.size; ++dci) {
+                    const draw_call *cur_dc = &mat_iter->value->dcs[dci];
+
+                    auto ds = cur_frame->desc_pool.desc_sets[cur_dc->set_ind].hndl;
+                    vkCmdBindDescriptorSets(
+                        cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, DESCRIPTOR_SET_LAYOUT_OBJECT, 1, &ds, 0, nullptr);
+
+                    push_constants pc{3};
+                    vkCmdPushConstants(cmd_buf->hndl, pipeline->layout_hndl, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push_constants), &pc);
+                    vkCmdDrawIndexed(cmd_buf->hndl,
+                                     cur_dc->index_count,
+                                     cur_dc->instance_count,
+                                     cur_dc->first_index,
+                                     cur_dc->vertex_offset,
+                                     cur_dc->first_instance);
                 }
             }
         }
     }
 
     vkr_cmd_end_rpass(cmd_buf);
-
     return vkr_end_cmd_buf(cmd_buf);
 }
 
-int init_renderer(renderer *rndr, void *win_hndl, mem_arena *fl_arena)
+int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_arena *fl_arena)
 {
     assert(fl_arena->alloc_type == mem_alloc_type::FREE_LIST);
     rndr->upstream_fl_arena = fl_arena;
-
-    rndr->vk_frame_linear.upstream_allocator = fl_arena;
-    mem_init_fl_arena(&rndr->vk_free_list, 100 * MB_SIZE, fl_arena);
-    mem_init_lin_arena(&rndr->vk_frame_linear, 10 * MB_SIZE, mem_global_stack_arena());
-    rndr->vk = (vkr_context *)mem_alloc(sizeof(vkr_context), &rndr->vk_free_list, 8);
+    mem_init_fl_arena(&rndr->vk_free_list, 200 * MB_SIZE, fl_arena);
+    mem_init_lin_arena(&rndr->vk_frame_linear, 100 * MB_SIZE, mem_global_stack_arena());
+    mem_init_fl_arena(&rndr->frame_fl, 100 * MB_SIZE, fl_arena);
+    
+    rndr->vk = mem_alloc<vkr_context>(&rndr->vk_free_list, 8);
+    memset(rndr->vk, 0, sizeof(vkr_context));
 
     hashmap_init(&rndr->rpasses, fl_arena);
     hashmap_init(&rndr->pipelines, fl_arena);
 
+    // Set up our draw call list render pass hashmap with frame linear memory
+    //hashmap_init(&rndr->dcs.rpasses, &rndr->frame_fl);
+
     vkr_cfg vkii{"rdev",
                  {1, 0, 0},
                  {.persistent_arena = &rndr->vk_free_list, .command_arena = &rndr->vk_frame_linear},
-                 LOG_TRACE,
+                 LOG_DEBUG,
                  win_hndl,
                  INST_CREATE_FLAGS,
                  {},
-                 4,
+                 MAX_OBJECT_COUNT + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT,
                  ADDITIONAL_INST_EXTENSIONS,
                  ADDITIONAL_INST_EXTENSION_COUNT,
                  DEVICE_EXTENSIONS,
@@ -776,6 +858,13 @@ int init_renderer(renderer *rndr, void *win_hndl, mem_arena *fl_arena)
         elog("Failed to initialize renderer with code %d", err);
         return err;
     }
+
+    // Create a default material for submeshes without materials
+    auto mat_cache = get_cache<material>(cg);
+    auto def_mat = add_robj(DEFAULT_MAT_ID, mat_cache);
+    init_material(def_mat, rndr->upstream_fl_arena);
+    def_mat->col = vec4{0.5f, 0.2f, 0.8f, 1.0f};
+    hashset_set(&def_mat->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
 
     // Setup our indice and vert buffer sbuffer
     return err_code::RENDER_NO_ERROR;
@@ -852,35 +941,139 @@ intern i32 present_image(renderer *rndr, vkr_frame *cur_frame, u32 image_ind)
     return err_code::RENDER_NO_ERROR;
 }
 
-void rpush_sm(const static_model *sm, const transform *tf, const robj_cache_group *cg)
+intern vkr_frame *get_current_frame(renderer *rndr)
+{
+    // Grab the current in flight frame and its command buffer
+    int current_frame_ind = rndr->finished_frames % MAX_FRAMES_IN_FLIGHT;
+    return &rndr->vk->inst.device.rframes[current_frame_ind];
+}
+
+int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const robj_cache_group *cg)
 {
     auto msh_cache = get_cache<mesh>(cg);
     auto mat_cache = get_cache<material>(cg);
+    auto dev = &rndr->vk->inst.device;
+    auto cur_frame = get_current_frame(rndr);
 
+    auto rmesh = hashmap_find(&rndr->rmi.meshes, sm->mesh_id);
+    assert(rmesh);
+
+    // First iterate through all submeshes and associated materials
+    // TODO: Create a default material to fall back on in the case that a submesh does not have a material
     auto msh = get_robj(sm->mesh_id, msh_cache);
+    assert(msh);
+    assert(rmesh->value.submesh_entrees.size == msh->submeshes.size);
     for (int i = 0; i < msh->submeshes.size; ++i) {
         auto mat = get_robj(sm->mat_ids[i], mat_cache);
-    }
-}
+        if (!mat) {
+            mat = get_robj(DEFAULT_MAT_ID, mat_cache);
+        }
 
-int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_frame_count)
-{
-    mem_reset_arena(&rndr->vk_frame_linear);
-    auto dev = &rndr->vk->inst.device;
+        sizet pli{};
+        // Go through all pipelines this material references
+        while (auto pl_iter = hashset_iter(&mat->pipelines, &pli)) {
+            auto pl_fiter = hashmap_find(&rndr->pipelines, *pl_iter);
+            assert(pl_fiter);
+            auto pline = &dev->pipelines[pl_fiter->value.plind];
 
-    // Grab the current in flight frame and its command buffer
-    int current_frame_ind = finished_frame_count % MAX_FRAMES_IN_FLIGHT;
-    auto cur_frame = &dev->rframes[current_frame_ind];
+            // Get the pipelines render pass
+            auto rp_fiter = hashmap_find(&rndr->rpasses, pl_fiter->value.rpass_id);
+            assert(rp_fiter);
 
-    // Recreating the swapchain here before even acquiring images gives us the smoothest resizing, but we still need to
-    // handle recreation for other things that might happen so keep the acquire image and present image recreations
-    // based on return value
-    if (platform_framebuffer_resized(rndr->vk->cfg.window)) {
-        ivec2 sz = get_framebuffer_size(rndr->vk->cfg.window);
-        if (cam) {
-            cam->proj = (math::perspective(60.0f, (f32)sz.w / (f32)sz.h, 0.1f, 1000.0f));
+            // If the render pass has not yet been added to our renderer's push list, add it now
+            auto push_rp_fiter = hashmap_find(&rndr->dcs.rpasses, rp_fiter->key);
+            if (!push_rp_fiter) {
+                auto rpdg = mem_alloc<render_pass_draw_group>(&rndr->frame_fl);
+                memset(rpdg, 0, sizeof(render_pass_draw_group));
+                rpdg->rpinfo = &rp_fiter->value;
+                arr_init(&rpdg->desc_updates, &rndr->frame_fl);
+                hashmap_init(&rpdg->plines, &rndr->frame_fl);
+                hashmap_set(&rndr->dcs.rpasses, rp_fiter->key, rpdg);
+                push_rp_fiter = hashmap_find(&rndr->dcs.rpasses, rp_fiter->key);
+            }
+            assert(push_rp_fiter);
+
+            // If the pipeline has not yey been added to our render pass' push list, add it now
+            auto push_pl_fiter = hashmap_find(&push_rp_fiter->value->plines, pl_fiter->key);
+            if (!push_pl_fiter) {
+                auto pldg = mem_alloc<pipeline_draw_group>(&rndr->frame_fl);
+                memset(pldg, 0, sizeof(pipeline_draw_group));
+                
+                pldg->plinfo = &pl_fiter->value;
+                hashmap_init(&pldg->mats, &rndr->frame_fl);
+
+                // Add the pipeline discriptor set
+                vkr_add_result desc_ind =
+                    vkr_add_descriptor_sets(&cur_frame->desc_pool, rndr->vk, &pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_PIPELINE], 1);
+                if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
+                    return desc_ind.err_code;
+                }
+                pldg->set_ind = desc_ind.begin;
+
+                hashmap_set(&push_rp_fiter->value->plines, pl_fiter->key, pldg);
+                push_pl_fiter = hashmap_find(&push_rp_fiter->value->plines, pl_fiter->key);
+            }
+            assert(push_pl_fiter);
+
+            // Now create the material set, if it doesn't exist
+            auto push_mat_fiter = hashmap_find(&push_pl_fiter->value->mats, mat->id);
+            if (!push_mat_fiter) {
+                auto matdg = mem_alloc<material_draw_group>(&rndr->frame_fl);
+                memset(matdg, 0, sizeof(material_draw_group));
+
+                matdg->mat = mat;
+                arr_init(&matdg->dcs, &rndr->frame_fl);
+
+                // Add the material discriptor set
+                vkr_add_result desc_ind =
+                    vkr_add_descriptor_sets(&cur_frame->desc_pool, rndr->vk, &pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_MATERIAL], 1);
+                if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
+                    return desc_ind.err_code;
+                }
+                matdg->set_ind = desc_ind.begin;
+
+                hashmap_set(&push_pl_fiter->value->mats, mat->id, matdg);
+                push_mat_fiter = hashmap_find(&push_pl_fiter->value->mats, mat->id);
+            }
+            assert(push_mat_fiter);
+
+            // Now we create the actual draw call, and add the tform to the tform uniform buffer and increase the cur index
+            draw_call dc{.index_count = (u32)rmesh->value.submesh_entrees[i].inds.size,
+                         .instance_count = 1,
+                         .first_index = (u32)rmesh->value.submesh_entrees[i].inds.offset,
+                         .vertex_offset = (u32)rmesh->value.submesh_entrees[i].verts.offset,
+                         .first_instance = 0,
+                         .tf = &tf->cached};
+
+            // Add the object discriptor set
+            vkr_add_result desc_ind =
+                vkr_add_descriptor_sets(&cur_frame->desc_pool, rndr->vk, &pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_OBJECT], 1);
+            if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
+                return desc_ind.err_code;
+            }
+            dc.set_ind = desc_ind.begin;
+            arr_push_back(&push_mat_fiter->value->dcs, dc);
         }
     }
+    return err_code::VKR_NO_ERROR;
+}
+
+int render_frame_begin(renderer *rndr, int finished_frame_count)
+{
+    auto dev = &rndr->vk->inst.device;
+    
+    // Clear our frame rendering entries
+    hashmap_terminate(&rndr->dcs.rpasses);
+    
+    mem_reset_arena(&rndr->vk_frame_linear);
+    mem_reset_arena(&rndr->frame_fl);
+
+    hashmap_init(&rndr->dcs.rpasses, &rndr->frame_fl);
+    
+
+    // Update finished frames which is used to get the current frame
+    rndr->finished_frames = finished_frame_count;
+    auto cur_frame = get_current_frame(rndr);
 
     // We wait until this FIF's fence has been triggered before rendering the frame. FIF fences are created in a
     // triggered state so there will be no waiting on the first time. We then reset the fence (aka set it to
@@ -892,6 +1085,84 @@ int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_fram
         return err_code::RENDER_WAIT_FENCE_FAIL;
     }
 
+    // Clear all prev desc sets
+    vkr_reset_descriptor_pool(&cur_frame->desc_pool, rndr->vk);
+
+    // Add the frame global discriptor set
+    vkr_add_result desc_ind = vkr_add_descriptor_sets(&cur_frame->desc_pool, rndr->vk, &G_FRAME_LAYOUT, 1);
+    if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
+        return desc_ind.err_code;
+    }
+
+    // Now update our pipeline ubo with this pipeline data
+    frame_ubo_data frame_ubo{};
+    frame_ubo.frame_count = finished_frame_count;
+    char *addr = (char *)rndr->vk->inst.device.buffers[cur_frame->frame_ubo_ind].mem_info.pMappedData;
+    memcpy(addr, &frame_ubo, sizeof(frame_ubo_data));
+    return err_code::VKR_NO_ERROR;
+}
+
+intern void update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
+{
+    auto dev = &rndr->vk->inst.device;
+    // Update all descriptor sets
+    sizet rpi{};
+    sizet total_dci{};
+    while (auto rp_iter = hashmap_iter(&rndr->dcs.rpasses, &rpi)) {
+        // Add the frame global desc write update (this will have duplicate work if we ever have more than one render pass)
+        add_desc_write_update(rndr, cur_frame, 0, sizeof(frame_ubo_data), cur_frame->frame_ubo_ind, 0, rp_iter->value);
+
+        // Update material and pipeline UBOs and create the descriptor writes for them
+        sizet pli{};
+        while (auto pl_iter = hashmap_iter(&rp_iter->value->plines, &pli)) {
+            // Now update our pipeline ubo with this pipeline data
+            pipeline_ubo_data pl_ubo{};
+            pl_ubo.proj_view = pl_iter->value->plinfo->proj_view;
+            sizet byte_offset = (pli - 1) * sizeof(pipeline_ubo_data);
+            char *adjusted_addr = (char *)dev->buffers[cur_frame->pl_ubo_ind].mem_info.pMappedData + byte_offset;
+            memcpy(adjusted_addr, &pl_ubo, sizeof(pipeline_ubo_data));
+
+            add_desc_write_update(
+                rndr, cur_frame, byte_offset, sizeof(pipeline_ubo_data), cur_frame->pl_ubo_ind, pl_iter->value->set_ind, rp_iter->value);
+
+            sizet mati{};
+            while (auto mat_iter = hashmap_iter(&pl_iter->value->mats, &mati)) {
+                // Now update our material ubo with this mat data
+                material_ubo_data mat_ubo{};
+                mat_ubo.color = mat_iter->value->mat->col;
+                sizet byte_offset = (mati - 1) * sizeof(material_ubo_data);
+                char *adjusted_addr = (char *)dev->buffers[cur_frame->mat_ubo_ind].mem_info.pMappedData + byte_offset;
+                memcpy(adjusted_addr, &mat_ubo, sizeof(material_ubo_data));
+
+                add_desc_write_update(
+                    rndr, cur_frame, byte_offset, sizeof(material_ubo_data), cur_frame->mat_ubo_ind, mat_iter->value->set_ind, rp_iter->value);
+
+                for (int dci = 0; dci < mat_iter->value->dcs.size; ++dci) {
+                    auto cur_dc = &mat_iter->value->dcs[dci];
+
+                    // Now update our object ubo with this dc data and update the total count
+                    obj_ubo_data oubo{};
+                    oubo.transform = *cur_dc->tf;
+                    sizet byte_offset = total_dci * sizeof(obj_ubo_data);
+                    char *adjusted_addr = (char *)dev->buffers[cur_frame->obj_ubo_ind].mem_info.pMappedData + byte_offset;
+                    memcpy(adjusted_addr, &oubo, sizeof(obj_ubo_data));
+                    ++total_dci;
+
+                    add_desc_write_update(
+                        rndr, cur_frame, byte_offset, sizeof(obj_ubo_data), cur_frame->obj_ubo_ind, cur_dc->set_ind, rp_iter->value);
+                }
+            }
+        }
+
+        vkUpdateDescriptorSets(dev->hndl, rp_iter->value->desc_updates.size, rp_iter->value->desc_updates.data, 0, nullptr);
+    }
+}
+
+int render_frame_end(renderer *rndr, camera *cam)
+{
+    auto dev = &rndr->vk->inst.device;
+    auto cur_frame = get_current_frame(rndr);
+
     // Get the next available swapchain image index
     u32 im_ind{};
     i32 err = acquire_swapchain_image(rndr, cur_frame, &im_ind);
@@ -899,19 +1170,31 @@ int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_fram
         return err;
     }
 
-    vk_err = vkResetFences(dev->hndl, 1, &cur_frame->in_flight);
+    // Recreating the swapchain here before even acquiring images gives us the smoothest resizing, but we still need to
+    // handle recreation for other things that might happen so keep the acquire image and present image recreations
+    // based on return value
+    if (platform_framebuffer_resized(rndr->vk->cfg.window)) {
+        ivec2 sz = get_framebuffer_size(rndr->vk->cfg.window);
+        if (cam) {
+            cam->proj = (math::perspective(60.0f, (f32)sz.w / (f32)sz.h, 0.1f, 1000.0f));
+        }
+    }
+
+    int vk_err = vkResetFences(dev->hndl, 1, &cur_frame->in_flight);
     if (vk_err != VK_SUCCESS) {
         elog("Failed to reset fence");
         return err_code::RENDER_RESET_FENCE_FAIL;
     }
 
-    // Update uniform buffer with some matrices
+    // Update our main pipeline view_proj with the cam transform update
     if (cam) {
-        frame_ubo_data ubo{};
-        ubo.proj_view = cam->proj * cam->view;
-        sizet ubo_ind = cur_frame->frame_ubo_ind;
-        memcpy(dev->buffers[ubo_ind].mem_info.pMappedData, &ubo, sizeof(frame_ubo_data));
+        auto pline_to_update = hashmap_find(&rndr->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
+        assert(pline_to_update);
+        pline_to_update->value.proj_view = cam->proj * cam->view;
     }
+
+    // Update all uniform buffers and write the descriptor set updates for them
+    update_uniform_descriptors(rndr, cur_frame);
 
     // The command buf index struct has an ind struct into the pool the cmd buf comes from, and then an ind into the buffer
     // The ind into the pool has an ind into the queue family (as that contains our array of command pools) and then and
@@ -922,7 +1205,7 @@ int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_fram
 
     // We have the acquired image index, though we don't know when it will be ready to have ops submitted, we can record
     // the ops in the command buffer and submit once it is readyy
-    err = record_command_buffer(rndr, rgn, fb, cur_frame, cmd_buf);
+    err = record_command_buffer(rndr, fb, cur_frame, cmd_buf);
     if (err != err_code::RENDER_NO_ERROR) {
         return err;
     }
@@ -938,16 +1221,21 @@ int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_fram
 
 void terminate_renderer(renderer *rndr)
 {
+    hashmap_terminate(&rndr->dcs.rpasses);
+    mem_reset_arena(&rndr->vk_frame_linear);
+    mem_reset_arena(&rndr->frame_fl);
+    
     // These are stack arenas so must go in this order
     hashmap_terminate(&rndr->rmi.meshes);
     mem_terminate_arena(&rndr->rmi.inds.node_pool);
     mem_terminate_arena(&rndr->rmi.verts.node_pool);
 
-    auto dev = &rndr->vk->inst.device;
     vkr_terminate(rndr->vk);
     mem_free(rndr->vk, &rndr->vk_free_list);
+    
     mem_terminate_arena(&rndr->vk_free_list);
     mem_terminate_arena(&rndr->vk_frame_linear);
+    mem_terminate_arena(&rndr->frame_fl);
 
     hashmap_terminate(&rndr->rpasses);
     hashmap_terminate(&rndr->pipelines);

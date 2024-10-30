@@ -12,11 +12,10 @@ enum robj_type : u32
     ROBJ_TYPE_MESH,
     ROBJ_TYPE_TEXTURE,
     ROBJ_TYPE_MATERIAL,
-    ROBJ_TYPE_PIPELINE,
-    ROBJ_TYPE_USER
+    ROBJ_TYPE_USER,
 };
 
-const sizet ROBJ_TYPE_DEFAULT_BUDGET[ROBJ_TYPE_USER] = {256};
+const sizet ROBJ_TYPE_DEFAULT_BUDGET[ROBJ_TYPE_USER] = {256,256,256};
 
 
 #define ROBJ(type)                                                                                                                         \
@@ -89,7 +88,8 @@ robj_cache<T> *add_cache(sizet item_budget, sizet mem_alignment, robj_cache_grou
         arr_resize(&cg->caches, T::type_id + 1);
     }
     if (!cg->caches[T::type_id]) {
-        auto cache = (robj_cache<T> *)mem_alloc(sizeof(robj_cache<T>), cg->caches.arena);
+        auto cache = mem_alloc<robj_cache<T>>(cg->caches.arena);
+        memset(cache, 0, sizeof(robj_cache<T>));
         init_cache(cache, item_budget, mem_alignment, cg->caches.arena);
         cg->caches[T::type_id] = cache;
     }

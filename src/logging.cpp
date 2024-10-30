@@ -20,7 +20,7 @@ struct logging_ctxt
 {
     const char *name;
     lock_cb_data lock;
-    int level;
+    int level{LOG_TRACE};
     bool quiet;
     logging_cb_data callbacks[MAX_CALLBACKS];
 };
@@ -135,10 +135,10 @@ intern void init_event(log_event *ev, void *udata)
 
 void lprint(logging_ctxt *logger, int level, const char *file, const char *func, int line, const char *fmt, ...)
 {
-    log_event ev = {.fmt = fmt, .file = path_basename(file), .func = func, .line = line, .level = level, .thread_id = get_thread_id()};
-
+    log_event ev{};
     lock(logger);
     if (!logger->quiet && level >= logger->level) {
+        ev = {.fmt = fmt, .file = path_basename(file), .func = func, .line = line, .level = level, .thread_id = get_thread_id()};
         init_event(&ev, stdout);
         va_start(ev.ap, fmt);
         stdout_callback(&ev);

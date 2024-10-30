@@ -1,6 +1,5 @@
 #pragma once
 
-#include "logging.h"
 #include "model.h"
 #include "math/matrix4.h"
 #include "containers/array.h"
@@ -29,9 +28,13 @@ const sizet MIN_VERT_FREE_BLOCK_SIZE = 4;
 // Minimum allowed sbuffer_entry block size in the free list for indices
 const sizet MIN_IND_FREE_BLOCK_SIZE = 6;
 // Maximum number of materials the renderer supports
+const sizet MAX_PIPELINE_COUNT = 1024;
+// Maximum number of materials the renderer supports
 const sizet MAX_MATERIAL_COUNT = 4096;
 // Maximum number of objects
 const sizet MAX_OBJECT_COUNT = 131072;
+// Default material
+const rid DEFAULT_MAT_ID = rid("default");
 
 namespace err_code
 {
@@ -50,10 +53,15 @@ enum render
 
 struct push_constants
 {
-    mat4 model;
+    uvec4 test;
 };
 
 struct frame_ubo_data
+{
+    ivec4 frame_count;
+};
+
+struct pipeline_ubo_data
 {
     mat4 proj_view;
 };
@@ -108,32 +116,24 @@ struct rmesh_info
     sbuffer_info verts;
     sbuffer_info inds;
 };
-
-struct render_draw_call
-{};
-
-struct material_draw_group
-{
-    hashmap<rid, render_draw_call> draws;
-};
-
-struct pipeline_draw_group
-{
-    sizet pline_ind;
-    hashmap<rid, material_draw_group> mats;
-};
-
-struct render_pass_draw_group
-{
-    sizet rpass_ind;
-    hashmap<rid, pipeline_draw_group> draw_groups;
-};
-
+struct render_pass_draw_group;
 struct frame_draw_info
 {
-    hashmap<rid, render_pass_draw_group> rpasses;
+    hashmap<rid, render_pass_draw_group*> rpasses;
 };
 // What we really want to do is have a big SSAO with all transforms for entire scene right?
+
+struct pipeline_info {
+    sizet plind;
+    rid id;
+    rid rpass_id;
+    mat4 proj_view;
+};
+
+struct rpass_info {
+    sizet rpind;
+    rid id;
+};
 
 struct renderer
 {
@@ -144,12 +144,13 @@ struct renderer
     vkr_context *vk;
     mem_arena vk_free_list;
     mem_arena vk_frame_linear;
+    mem_arena frame_fl;
 
     // Pipeline indices referenced by ids
-    hashmap<rid, sizet> pipelines;
+    hashmap<rid, pipeline_info> pipelines;
 
     // Render pass indices referenced by ids
-    hashmap<rid, sizet> rpasses;
+    hashmap<rid, rpass_info> rpasses;
 
     // A mapping between framebuffers and render passes
     hashmap<sizet, array<rid> *> fb_rpasses;
@@ -160,6 +161,9 @@ struct renderer
     // Contains all info about meshes and where they are in the vert/ind buffers
     rmesh_info rmi;
 
+    // Stored on reset render frame - used in subsequent frame calls to get the current frame
+    int finished_frames;
+
     sizet default_image_ind;
     sizet default_image_view_ind;
     sizet default_sampler_ind;
@@ -168,7 +172,7 @@ struct renderer
     sizet swapchain_fb_depth_stencil_im_ind{INVALID_IND};
 };
 
-void rpush_sm(const static_model *sm, const transform *tf, const robj_cache_group *cg);
+int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const robj_cache_group *cg);
 
 // NOTE: All of these mesh operations kind of need to wait on all rendering operations to complete as they modify the
 // vertex and index buffers - not sure yet if this is better done within the functions or in the caller. Also these should be done at the
@@ -183,9 +187,11 @@ bool upload_to_gpu(mesh *msh, renderer *rdnr);
 // removes the mesh from our mesh entry list. It does not do any actual gpu uploading
 bool remove_from_gpu(mesh *msh, renderer *rndr);
 
-int init_renderer(renderer *rndr, void *win_hndl, mem_arena *fl_arena);
+int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_arena *fl_arena);
 
-int render_frame(renderer *rndr, sim_region *rgn, camera *cam, int finished_frame_count);
+int render_frame_begin(renderer *rndr, int finished_frames);
+
+int render_frame_end(renderer *rndr, camera *cam);
 
 void terminate_renderer(renderer *rndr);
 

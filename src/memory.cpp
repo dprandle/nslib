@@ -1,17 +1,13 @@
 #include <stdlib.h>
 #include <cstring>
-#include <numeric>
 
 #include "logging.h"
 #include "platform.h"
 #include "memory.h"
-#include "math/algorithm.h"
-
-#include <iostream>
 
 #define DO_DEBUG_FL_ALLOC false
 #define DO_DEBUG_LINEAR_ALLOC false
-#define DO_DEBUG_STACK_ALLOC true
+#define DO_DEBUG_STACK_ALLOC false
 
 namespace nslib
 {
@@ -552,10 +548,12 @@ void mem_init_arena(mem_arena *arena, sizet total_size, mem_alloc_type mtype, me
     assert(arena->alloc_type != mem_alloc_type::POOL ||
            (((arena->total_size % arena->mpool.chunk_size) == 0) && (arena->mpool.chunk_size >= DEFAULT_MIN_ALIGNMENT)));
 
-    if (!arena->upstream_allocator)
+    if (!arena->upstream_allocator) {
         arena->start = platform_alloc(arena->total_size);
-    else
+    }
+    else {
         arena->start = mem_alloc(arena->total_size, arena->upstream_allocator);
+    }
 
     mem_reset_arena(arena);
 }

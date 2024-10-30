@@ -11,26 +11,6 @@ const sizet JOINTS_PER_VERTEX = 4;
 const sizet MAX_SUBMESH_COUNT = 32;
 using ind_t = u16;
 
-enum pipeline_shader_stage
-{
-    PIPELINE_SHADER_STAGE_VERT,
-    PIPELINE_SHADER_STAGE_FRAG,
-    PIPELINE_SHADER_STAGE_COUNT
-};
-
-struct pipeline
-{
-    ROBJ(PIPELINE);
-    rid rpass;
-    string stages[PIPELINE_SHADER_STAGE_COUNT];
-};
-
-pup_func(pipeline)
-{
-    pup_member(rpass);
-    pup_member(stages);
-}    
-
 struct texture
 {
     ROBJ(TEXTURE);
@@ -43,7 +23,15 @@ struct material
     ROBJ(MATERIAL);
     hashset<rid> pipelines;
     hashset<rid> textures;
+    vec4 col;
 };
+
+pup_func(material)
+{
+    pup_member(pipelines);
+    pup_member(textures);
+    pup_member(col);
+}
 
 struct vertex
 {

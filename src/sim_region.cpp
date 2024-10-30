@@ -72,7 +72,7 @@ bool remove_entity(entity *ent, sim_region *reg)
     }
 
     sizet ind = arr_index_of(&reg->ents, ent);
-    if (ind != NPOS) {
+    if (ind != INVALID_IND) {
         if (arr_swap_remove(&reg->ents, ind)) {
             if (ind < reg->ents.size) {
                 hashmap_set(&reg->entmap, reg->ents[ind].id, ind);

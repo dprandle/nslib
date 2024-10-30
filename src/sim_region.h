@@ -96,7 +96,8 @@ comp_table<T> *add_comp_tbl(comp_db *cdb, sizet initial_capacity = 64, sizet mem
         arr_resize(&cdb->comp_tables, T::type_id + 1);
     }
     if (!cdb->comp_tables[T::type_id]) {
-        auto ctbl = (comp_table<T> *)mem_alloc(sizeof(comp_table<T>), cdb->comp_tables.arena);
+        auto ctbl = mem_alloc<comp_table<T>>(cdb->comp_tables.arena);
+        memset(ctbl, 0, sizeof(comp_table<T>));
         init_comp_tbl(ctbl, cdb->comp_tables.arena, initial_capacity, mem_alignment);
         cdb->comp_tables[T::type_id] = ctbl;
     }

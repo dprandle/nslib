@@ -3,15 +3,13 @@
 #include <GLFW/glfw3native.h>
 #include <cstring>
 
-#include "math/algorithm.h"
 #include "vk_context.h"
 #include "logging.h"
 #include "memory.h"
 
-#include "platform.h"
-
 #define PRINT_MEM_DEBUG false
-#define PRINT_MEM_INSTANCE_ONLY true
+#define PRINT_MEM_INSTANCE_ONLY false
+#define PRINT_MEM_OBJECT_ONLY true
 
 #define PRINT_MEM_GPU_ALLOC true
 
@@ -86,6 +84,7 @@ intern void *vk_alloc(void *user, sizet size, sizet alignment, VkSystemAllocatio
     sizet header_size = sizeof(internal_alloc_header);
 
     auto header = (internal_alloc_header *)mem_alloc(size + header_size, arena, alignment);
+    memset(header, 0, size + header_size);
     header->scope = scope;
     header->req_size = size;
 
@@ -94,9 +93,11 @@ intern void *vk_alloc(void *user, sizet size, sizet alignment, VkSystemAllocatio
 
     arenas->stats[scope].actual_alloc += used_actual;
 #if PRINT_MEM_DEBUG
-#if PRINT_MEM_INSTANCE_ONLY
+    #if PRINT_MEM_INSTANCE_ONLY
     if (scope == VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE) {
-#endif
+    #elif PRINT_MEM_OBJECT_ONLY
+    if (scope == VK_SYSTEM_ALLOCATION_SCOPE_OBJECT) {
+    #endif
         dlog("hs:%lu, header_addr:%p ptr:%p requested_size:%lu alignment:%lu scope:%s used_before:%lu alloc:%lu used_after:%lu",
              header_size,
              (void *)header,
@@ -107,9 +108,9 @@ intern void *vk_alloc(void *user, sizet size, sizet alignment, VkSystemAllocatio
              used_before,
              used_actual,
              arena->used);
-#if PRINT_MEM_INSTANCE_ONLY
+    #if PRINT_MEM_INSTANCE_ONLY || PRINT_MEM_OBJECT_ONLY
     }
-#endif
+    #endif
 #endif
     return ret;
 }
@@ -141,9 +142,11 @@ intern void vk_free(void *user, void *ptr)
     arenas->stats[scope].actual_free += actual_freed;
 
 #if PRINT_MEM_DEBUG
-#if PRINT_MEM_INSTANCE_ONLY
+    #if PRINT_MEM_INSTANCE_ONLY
     if (scope == VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE) {
-#endif
+    #elif PRINT_MEM_OBJECT_ONLY
+        if (scope == VK_SYSTEM_ALLOCATION_SCOPE_OBJECT) {
+    #endif
         dlog("hs:%lu, header_addr:%p ptr:%p requested_size:%lu scope:%s used_before:%lu dealloc:%lu used_after:%lu",
              header_size,
              header,
@@ -153,9 +156,9 @@ intern void vk_free(void *user, void *ptr)
              used_before,
              actual_freed,
              arena->used);
-#if PRINT_MEM_INSTANCE_ONLY
+    #if PRINT_MEM_INSTANCE_ONLY || PRINT_MEM_OBJECT_ONLY
     }
-#endif
+    #endif
 #endif
 }
 
@@ -193,9 +196,11 @@ intern void *vk_realloc(void *user, void *ptr, sizet size, sizet alignment, VkSy
     arenas->stats[scope].actual_alloc += new_block_size;
     sizet diff = arena->used - used_before;
 #if PRINT_MEM_DEBUG
-#if PRINT_MEM_INSTANCE_ONLY
+    #if PRINT_MEM_INSTANCE_ONLY
     if (scope == VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE) {
-#endif
+    #elif PRINT_MEM_OBJECT_ONLY
+            if (scope == VK_SYSTEM_ALLOCATION_SCOPE_OBJECT) {
+    #endif
         dlog("orig_header_addr:%p new_header_addr:%p orig_ptr:%p new_ptr:%p orig_req_size:%d new_req_size:%d scope:%s used_before:%d "
              "dealloc:%d alloc:%d used_after:%d diff:%d",
              old_header,
@@ -210,14 +215,14 @@ intern void *vk_realloc(void *user, void *ptr, sizet size, sizet alignment, VkSy
              new_block_size,
              arena->used,
              diff);
-#if PRINT_MEM_INSTANCE_ONLY
+    #if PRINT_MEM_INSTANCE_ONLY || PRINT_MEM_OBJECT_ONLY
     }
-#endif
+    #endif
 #endif
     if (diff != (new_block_size - old_block_size)) {
         wlog("Diff problems!");
     }
-//    assert(diff == (new_block_size - old_block_size));
+    //    assert(diff == (new_block_size - old_block_size));
     return ret;
 }
 
@@ -232,6 +237,7 @@ void vkr_enumerate_device_extensions(const vkr_phys_device *pdevice,
     assert(res == VK_SUCCESS);
     VkExtensionProperties *ext_array =
         (VkExtensionProperties *)mem_alloc(extension_count * sizeof(VkExtensionProperties), arenas->command_arena);
+    memset(ext_array, 0, extension_count * sizeof(VkExtensionProperties));
     res = vkEnumerateDeviceExtensionProperties(pdevice->hndl, nullptr, &extension_count, ext_array);
     assert(res == VK_SUCCESS);
     for (u32 i = 0; i < extension_count; ++i) {
@@ -253,6 +259,7 @@ void vkr_enumerate_instance_extensions(const char *const *enabled_extensions, u3
     assert(res == VK_SUCCESS);
     VkExtensionProperties *ext_array =
         (VkExtensionProperties *)mem_alloc(extension_count * sizeof(VkExtensionProperties), arenas->command_arena);
+    memset(ext_array, 0, extension_count * sizeof(VkExtensionProperties));
     res = vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, ext_array);
     assert(res == VK_SUCCESS);
     for (u32 i = 0; i < extension_count; ++i) {
@@ -273,6 +280,8 @@ void vkr_enumerate_validation_layers(const char *const *enabled_layers, u32 enab
     int res = vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
     assert(res == VK_SUCCESS);
     VkLayerProperties *layer_array = (VkLayerProperties *)mem_alloc(layer_count * sizeof(VkLayerProperties), arenas->command_arena);
+    memset(layer_array, 0, layer_count * sizeof(VkLayerProperties));
+
     res = vkEnumerateInstanceLayerProperties(&layer_count, layer_array);
     assert(res == VK_SUCCESS);
 
@@ -595,7 +604,7 @@ int vkr_init_device(vkr_device *dev,
         }
 
         vkr_command_pool qpool{};
-        
+
         if (vkr_init_cmd_pool(vk, dev->qfams[i].fam_ind, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, &qpool) == err_code::VKR_NO_ERROR) {
             sizet dpool = vkr_add_cmd_pool(&dev->qfams[i], qpool);
             dev->qfams[i].default_pool = dpool;
@@ -943,7 +952,6 @@ void vkr_remove_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, sizet in
 
 vkr_add_result vkr_add_descriptor_sets(vkr_descriptor_pool *pool, const vkr_context *vk, const VkDescriptorSetLayout *layouts, sizet count)
 {
-    tlog("Adding %lu descritor set/s", count);
     vkr_add_result result{};
     array<VkDescriptorSet> hndls{};
     arr_init(&hndls, vk->cfg.arenas.command_arena);
@@ -968,9 +976,7 @@ vkr_add_result vkr_add_descriptor_sets(vkr_descriptor_pool *pool, const vkr_cont
 
     for (sizet i = 0; i < count; ++i) {
         pool->desc_sets[result.begin + i].hndl = hndls[i];
-        tlog("Setting descriptor set at index %lu in pool %p to hndl %lu", result.begin + i, pool, hndls[i]);
     }
-    tlog("Successfully added descriptor set/s");
     arr_terminate(&hndls);
     return result;
 }
@@ -1103,6 +1109,7 @@ sizet vkr_add_render_pass(vkr_device *device, const vkr_rpass &copy)
     ilog("Adding render_pass to device");
     sizet ind = device->render_passes.size;
     arr_push_back(&device->render_passes, copy);
+
     return ind;
 }
 
@@ -1428,6 +1435,7 @@ int vkr_init_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *
     pool_info.poolSizeCount = desc_size_count;
     pool_info.pPoolSizes = psize;
     pool_info.maxSets = vk->cfg.max_desc_sets_per_pool;
+    dlog("Setting max sets to %lu", pool_info.maxSets);
 
     int err = vkCreateDescriptorPool(vk->inst.device.hndl, &pool_info, &vk->alloc_cbs, &desc_pool->hndl);
     if (err != VK_SUCCESS) {
@@ -1464,7 +1472,7 @@ void vkr_unmap_buffer(vkr_buffer *buf, const vkr_gpu_allocator *vma)
 int vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
                                      const void *src_data,
                                      sizet src_data_size,
-                                     const VkBufferCopy * region,
+                                     const VkBufferCopy *region,
                                      vkr_device_queue_fam_info *cmd_q,
                                      const vkr_context *vk)
 {

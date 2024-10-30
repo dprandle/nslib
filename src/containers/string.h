@@ -95,7 +95,9 @@ string *str_copy(string *dest, const string &src);
 
 string *str_copy(string *dest, const char *src);
 
-string *str_resize(string *str, sizet new_size, char c = char());
+string *str_resize(string *str, sizet new_size, char c);
+
+string *str_resize(string *str, sizet new_size);
 
 string *str_clear(string *str);
 

@@ -44,11 +44,21 @@ using f64 = double;
 using f128 = long double;
 using b32 = bool;
 
-const int KB_SIZE = 1024;
-const int MB_SIZE = 1024 * KB_SIZE;
+const sizet KB_SIZE = 1024;
+const sizet MB_SIZE = 1024 * KB_SIZE;
 
 using small_str = char[SMALL_STR_LEN];
 
-inline constexpr const sizet NPOS = LONG_MAX;
+inline constexpr const sizet INVALID_IND = ULONG_LONG_MAX;
+inline constexpr const u32 INVALID_ID = UINT_MAX;
+
+inline bool is_valid(sizet v)
+{
+    return (v != INVALID_IND);
+}
+inline bool is_valid(u32 v)
+{
+    return (v != INVALID_ID);
+}
 
 } // namespace nslib

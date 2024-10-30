@@ -52,8 +52,9 @@ struct hashmap
 
     inline mapped_type &operator[](key_type key)
     {
-        auto iter = hashmap_set(this, key, mapped_type{});
+        auto iter = hashmap_find(this, key);
         if (!iter) {
+            hashmap_set(this, key, mapped_type{});
             iter = hashmap_find(this, key);
         }
         return iter->value;

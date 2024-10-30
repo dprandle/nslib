@@ -12,7 +12,7 @@ void str_set_capacity(string *str, sizet new_cap)
     if (new_cap < string::SMALL_STR_SIZE) {
         new_cap = string::SMALL_STR_SIZE;
     }
-    
+
     sizet dyn_cap = 0;
     sizet prev_sz = str->buf.size;
     sizet prev_cap = str->buf.capacity;
@@ -77,6 +77,7 @@ string &string::operator+=(const string &rhs)
 
 const char &string::operator[](sizet ind) const
 {
+    
     return str_cstr(this)[ind];
 }
 
@@ -146,7 +147,7 @@ string::iterator str_erase(string *str, string::iterator first, string::iterator
     if (reduce_size > str_len(str) || reduce_size == 0) {
         return last;
     }
-    
+
     // Shift all items after the range over to the first item in the range, until we reach to last of the data
     while (last != str_end(str)) {
         *first = *last;
@@ -157,20 +158,19 @@ string::iterator str_erase(string *str, string::iterator first, string::iterator
     return first;
 }
 
-
 bool str_remove(string *str, sizet ind)
 {
     if (!str) {
         return false;
     }
-    
+
     if (ind >= str_len(str)) {
         return false;
     }
 
     // Copy the items back one spot
-    for (sizet i = ind+1; i < str_len(str); ++i) {
-        str[i-1] = str[i];
+    for (sizet i = ind + 1; i < str_len(str); ++i) {
+        str[i - 1] = str[i];
     }
 
     // Pop the last item
@@ -226,8 +226,19 @@ string *str_copy(string *dest, const char *src)
 
 string *str_resize(string *str, sizet new_size, char c)
 {
-    if (str_len(*str) == new_size)
+    sizet prev_size = str_len(str);
+    str_resize(str, new_size);
+    if (new_size > prev_size) {
+        memset((str_data(str) + prev_size), c, new_size);
+    }
+    return str;
+}
+
+string *str_resize(string *str, sizet new_size)
+{
+    if (str_len(*str) == new_size) {
         return str;
+    }
 
     // Make sure our current size doesn't exceed the capacity - it shouldnt that would definitely be a bug if it did.
     assert(str_len(*str) < str_capacity(*str));
@@ -237,15 +248,12 @@ string *str_resize(string *str, sizet new_size, char c)
         if (cap < 1) {
             cap = 1;
         }
-        while (cap < (new_size + 1))
+        while (cap < (new_size + 1)) {
             cap *= 2;
+        }
         str_set_capacity(str, cap);
     }
-
-    for (sizet i = str_len(*str); i < new_size; ++i) {
-        (*str)[i] = c;
-    }
-    (*str)[new_size] = 0; // null terminator
+    str_data(str)[new_size] = 0;
     str->buf.size = new_size;
     return str;
 }

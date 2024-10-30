@@ -5,7 +5,6 @@
 #include "sim_region.h"
 #include "vk_context.h"
 #include "basic_types.h"
-#include "containers/hashset.h"
 using namespace nslib;
 
 struct app_data
@@ -174,7 +173,7 @@ int init(platform_ctxt *ctxt, void *user_data)
     init_sim_region(&app->rgn, mem_global_arena());
 
     // Create a grid of entities with odd ones being cubes and even being rectangles
-    int len = 10, width = 10;
+    int len = 500, width = 100;
     add_entities(len * width, &app->rgn);
 
     for (int yind = 0; yind < len; ++yind) {
@@ -203,7 +202,7 @@ int init(platform_ctxt *ctxt, void *user_data)
 
     push_keymap(&app->global_km, &app->stack);
 
-    int ret = init_renderer(&app->rndr, ctxt->win_hndl, &ctxt->arenas.free_list);
+    int ret = init_renderer(&app->rndr, &app->cg, ctxt->win_hndl, &ctxt->arenas.free_list);
     if (ret == err_code::RENDER_NO_ERROR) {
         upload_to_gpu(cube_msh, &app->rndr);
         upload_to_gpu(rect_msh, &app->rndr);
@@ -216,6 +215,11 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
     auto app = (app_data *)user_data;
 
     map_input_frame(&ctxt->finp, &app->stack);
+
+    int res = render_frame_begin(&app->rndr, ctxt->finished_frames);
+    if (res != err_code::VKR_NO_ERROR) {
+        return res;
+    }
     
     // Move the cam if needed
     auto cam = get_comp<camera>(app->cam_id, &app->rgn.cdb);
@@ -232,13 +236,18 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
     auto tform_tbl = get_comp_tbl<transform>(&app->rgn.cdb);
     for (sizet i = 0; i < tform_tbl->entries.size; ++i) {
         auto curtf = &tform_tbl->entries[i];
-        if (i % 2 != 0 && curtf->ent_id != app->cam_id) {
+        if (curtf->ent_id != app->cam_id) {
             curtf->orientation *= math::orientation(vec4{1.0, 0.0, 0.0, (f32)ctxt->time_pts.dt});
             curtf->flags = COMP_FLAG_DIRTY;
             curtf->cached = math::model_tform(curtf->world_pos, curtf->orientation, curtf->scale);
         }
+        auto sm = get_comp<static_model>(tform_tbl->entries[i].ent_id, &app->rgn.cdb);
+        if (sm) {
+            rpush_sm(&app->rndr, sm, curtf, &app->cg);
+        }
     }
-    return render_frame(&app->rndr, &app->rgn, cam, ctxt->finished_frames);
+    
+    return render_frame_end(&app->rndr, cam);
 }
 
 int terminate(platform_ctxt *ctxt, void *user_data)
@@ -259,6 +268,7 @@ int configure_platform(platform_init_info *settings, app_data *app)
     settings->user_cb.init = init;
     settings->user_cb.run_frame = run_frame;
     settings->user_cb.terminate = terminate;
+    settings->mem.stack_size = 4 * 1024 * MB_SIZE;
     return err_code::PLATFORM_NO_ERROR;
 }
 
