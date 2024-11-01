@@ -17,32 +17,27 @@
 namespace nslib
 {
 
-void ihashmap_set_grow_by_power(struct ihashmap *map, sizet power)
+void ihashmap_set_grow_by_power(ihashmap *map, sizet power)
 {
     map->growpower = (u8)(power < 1 ? 1 : power > 16 ? 16 : power);
 }
 
-static struct ihashmap_bucket *bucket_at0(void *buckets, sizet bucketsz, sizet i)
+intern inline ihashmap_bucket *bucket_at(const ihashmap *map, sizet i)
 {
-    return (struct ihashmap_bucket *)(((char *)buckets) + (bucketsz * i));
+    return (ihashmap_bucket *)(((char *)map->buckets) + (map->bucketsz * i));
 }
 
-static struct ihashmap_bucket *bucket_at(const struct ihashmap *map, sizet index)
+intern inline void *bucket_item(ihashmap_bucket *entry)
 {
-    return bucket_at0(map->buckets, map->bucketsz, index);
+    return ((char *)entry) + sizeof(ihashmap_bucket);
 }
 
-static void *bucket_item(struct ihashmap_bucket *entry)
-{
-    return ((char *)entry) + sizeof(struct ihashmap_bucket);
-}
-
-static u64 clip_hash(u64 hash)
+intern inline u64 clip_hash(u64 hash)
 {
     return hash & 0xFFFFFFFFFFFF;
 }
 
-static u64 get_hash(struct ihashmap *map, const void *key)
+intern u64 inline get_hash(ihashmap *map, const void *key)
 {
     return clip_hash(map->hash(key, map->seed0, map->seed1));
 }
@@ -89,17 +84,17 @@ ihashmap *ihashmap_new(malloc_func_type *_malloc,
         cap = ncap;
     }
     // printf("%d\n", (int)cap);
-    sizet bucketsz = sizeof(struct ihashmap_bucket) + elsize;
+    sizet bucketsz = sizeof(ihashmap_bucket) + elsize;
     while (bucketsz & (sizeof(uintptr_t) - 1)) {
         bucketsz++;
     }
     // hashmap + spare + edata
-    sizet size = sizeof(struct ihashmap) + bucketsz * 2;
+    sizet size = sizeof(ihashmap) + bucketsz * 2;
     ihashmap *map = (ihashmap *)_malloc(size, arena, mem_alignment);
     if (!map) {
         return NULL;
     }
-    memset(map, 0, sizeof(struct ihashmap));
+    memset(map, 0, sizeof(ihashmap));
     map->elsize = elsize;
     map->bucketsz = bucketsz;
     map->seed0 = seed0;
@@ -108,7 +103,7 @@ ihashmap *ihashmap_new(malloc_func_type *_malloc,
     map->compare = compare;
     map->elfree = elfree;
     map->udata = udata;
-    map->spare = ((char *)map) + sizeof(struct ihashmap);
+    map->spare = ((char *)map) + sizeof(ihashmap);
     map->edata = (char *)map->spare + bucketsz;
     map->cap = cap;
     map->nbuckets = cap;
@@ -135,18 +130,18 @@ int generate_rand_seed()
     return rand();
 }
 
-static void free_elements(struct ihashmap *map)
+intern void free_elements(ihashmap *map)
 {
     if (map->elfree) {
         for (sizet i = 0; i < map->nbuckets; i++) {
-            struct ihashmap_bucket *bucket = bucket_at(map, i);
+            ihashmap_bucket *bucket = bucket_at(map, i);
             if (bucket->dib)
                 map->elfree(bucket_item(bucket));
         }
     }
 }
 
-void ihashmap_clear(struct ihashmap *map, bool update_cap)
+void ihashmap_clear(ihashmap *map, bool update_cap)
 {
     map->count = 0;
     free_elements(map);
@@ -167,9 +162,9 @@ void ihashmap_clear(struct ihashmap *map, bool update_cap)
     map->shrinkat = (sizet)(map->nbuckets * 0.10);
 }
 
-static bool resize0(struct ihashmap *map, sizet new_cap)
+intern bool resize0(ihashmap *map, sizet new_cap)
 {
-    struct ihashmap *map2 = ihashmap_new(map->malloc,
+    ihashmap *map2 = ihashmap_new(map->malloc,
                                          map->realloc,
                                          map->free,
                                          map->arena,
@@ -185,14 +180,14 @@ static bool resize0(struct ihashmap *map, sizet new_cap)
     if (!map2)
         return false;
     for (sizet i = 0; i < map->nbuckets; i++) {
-        struct ihashmap_bucket *entry = bucket_at(map, i);
+        ihashmap_bucket *entry = bucket_at(map, i);
         if (!entry->dib) {
             continue;
         }
         entry->dib = 1;
         sizet j = entry->hash & map2->mask;
         while (1) {
-            struct ihashmap_bucket *bucket = bucket_at(map2, j);
+            ihashmap_bucket *bucket = bucket_at(map2, j);
             if (bucket->dib == 0) {
                 memcpy(bucket, entry, map->bucketsz);
                 break;
@@ -216,12 +211,12 @@ static bool resize0(struct ihashmap *map, sizet new_cap)
     return true;
 }
 
-static bool resize(struct ihashmap *map, sizet new_cap)
+intern bool resize(ihashmap *map, sizet new_cap)
 {
     return resize0(map, new_cap);
 }
 
-const void *ihashmap_set_with_hash(struct ihashmap *map, const void *item, u64 hash)
+const void *ihashmap_set_with_hash(ihashmap *map, const void *item, u64 hash)
 {
     hash = clip_hash(hash);
     map->oom = false;
@@ -241,7 +236,7 @@ const void *ihashmap_set_with_hash(struct ihashmap *map, const void *item, u64 h
     void *bitem;
     sizet i = entry->hash & map->mask;
     while (1) {
-        struct ihashmap_bucket *bucket = bucket_at(map, i);
+        ihashmap_bucket *bucket = bucket_at(map, i);
         if (bucket->dib == 0) {
             memcpy(bucket, entry, map->bucketsz);
             map->count++;
@@ -264,19 +259,17 @@ const void *ihashmap_set_with_hash(struct ihashmap *map, const void *item, u64 h
     }
 }
 
-const void *ihashmap_set(struct ihashmap *map, const void *item, const void *key)
+const void *ihashmap_set(ihashmap *map, const void *item, const void *key)
 {
     return ihashmap_set_with_hash(map, item, get_hash(map, key));
 }
 
-const void *ihashmap_get_with_hash(struct ihashmap *map, const void *key, u64 hash)
+const void *ihashmap_get_with_hash(ihashmap *map, const void *key, u64 hash)
 {
     hash = clip_hash(hash);
     sizet i = hash & map->mask;
-    while (1) {
-        struct ihashmap_bucket *bucket = bucket_at(map, i);
-        if (!bucket->dib)
-            return NULL;
+    ihashmap_bucket *bucket = bucket_at(map, i);
+    while (bucket->dib) {
         if (bucket->hash == hash) {
             void *bitem = bucket_item(bucket);
             if (!map->compare || map->compare(key, bitem, map->udata) == 0) {
@@ -284,31 +277,33 @@ const void *ihashmap_get_with_hash(struct ihashmap *map, const void *key, u64 ha
             }
         }
         i = (i + 1) & map->mask;
+        bucket = bucket_at(map, i);        
     }
+    return nullptr;
 }
 
-const void *ihashmap_get(struct ihashmap *map, const void *key)
+const void *ihashmap_get(ihashmap *map, const void *key)
 {
     return ihashmap_get_with_hash(map, key, get_hash(map, key));
 }
 
-const void *ihashmap_probe(struct ihashmap *map, u64 position)
+const void *ihashmap_probe(ihashmap *map, u64 position)
 {
     sizet i = position & map->mask;
-    struct ihashmap_bucket *bucket = bucket_at(map, i);
+    ihashmap_bucket *bucket = bucket_at(map, i);
     if (!bucket->dib) {
         return NULL;
     }
     return bucket_item(bucket);
 }
 
-const void *ihashmap_delete_with_hash(struct ihashmap *map, const void *key, u64 hash)
+const void *ihashmap_delete_with_hash(ihashmap *map, const void *key, u64 hash)
 {
     hash = clip_hash(hash);
     map->oom = false;
     sizet i = hash & map->mask;
     while (1) {
-        struct ihashmap_bucket *bucket = bucket_at(map, i);
+        ihashmap_bucket *bucket = bucket_at(map, i);
         if (!bucket->dib) {
             return NULL;
         }
@@ -317,7 +312,7 @@ const void *ihashmap_delete_with_hash(struct ihashmap *map, const void *key, u64
             memcpy(map->spare, bitem, map->elsize);
             bucket->dib = 0;
             while (1) {
-                struct ihashmap_bucket *prev = bucket;
+                ihashmap_bucket *prev = bucket;
                 i = (i + 1) & map->mask;
                 bucket = bucket_at(map, i);
                 if (bucket->dib <= 1) {
@@ -340,17 +335,17 @@ const void *ihashmap_delete_with_hash(struct ihashmap *map, const void *key, u64
     }
 }
 
-const void *ihashmap_delete(struct ihashmap *map, const void *key)
+const void *ihashmap_delete(ihashmap *map, const void *key)
 {
     return ihashmap_delete_with_hash(map, key, get_hash(map, key));
 }
 
-sizet ihashmap_count(struct ihashmap *map)
+sizet ihashmap_count(ihashmap *map)
 {
     return map->count;
 }
 
-void ihashmap_free(struct ihashmap *map)
+void ihashmap_free(ihashmap *map)
 {
     if (!map)
         return;
@@ -359,15 +354,15 @@ void ihashmap_free(struct ihashmap *map)
     map->free(map, map->arena);
 }
 
-bool ihashmap_oom(struct ihashmap *map)
+bool ihashmap_oom(ihashmap *map)
 {
     return map->oom;
 }
 
-bool ihashmap_scan(struct ihashmap *map, bool (*iter)(const void *item, void *udata), void *udata)
+bool ihashmap_scan(ihashmap *map, bool (*iter)(const void *item, void *udata), void *udata)
 {
     for (sizet i = 0; i < map->nbuckets; i++) {
-        struct ihashmap_bucket *bucket = bucket_at(map, i);
+        ihashmap_bucket *bucket = bucket_at(map, i);
         if (bucket->dib && !iter(bucket_item(bucket), udata)) {
             return false;
         }
@@ -375,9 +370,9 @@ bool ihashmap_scan(struct ihashmap *map, bool (*iter)(const void *item, void *ud
     return true;
 }
 
-bool ihashmap_iter(const struct ihashmap *map, sizet *i, void **item)
+bool ihashmap_iter(const ihashmap *map, sizet *i, void **item)
 {
-    struct ihashmap_bucket *bucket;
+    ihashmap_bucket *bucket;
     do {
         if (*i >= map->nbuckets)
             return false;

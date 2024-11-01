@@ -89,12 +89,12 @@ ihashmap *ihashmap_new(malloc_func_type *malloc,
                        free_item_func *elfree,
                        void *udata);
 
-ihashmap *ihashmap_new(const struct ihashmap *copy_from);
+ihashmap *ihashmap_new(const ihashmap *copy_from);
 
 // hashmap_free frees the hash map
 // Every item is called with the element-freeing function given in hashmap_new,
 // if present, to free any data referenced in the elements of the hashmap.
-void ihashmap_free(struct ihashmap *map);
+void ihashmap_free(ihashmap *map);
 
 // hashmap_clear quickly clears the map.
 // Every item is called with the element-freeing function given in hashmap_new,
@@ -102,38 +102,38 @@ void ihashmap_free(struct ihashmap *map);
 // When the update_cap is provided, the map's capacity will be updated to match
 // the currently number of allocated buckets. This is an optimization to ensure
 // that this operation does not perform any allocations.
-void ihashmap_clear(struct ihashmap *map, bool update_cap);
+void ihashmap_clear(ihashmap *map, bool update_cap);
 
 // hashmap_count returns the number of items in the hash map.
-sizet ihashmap_count(struct ihashmap *map);
+sizet ihashmap_count(ihashmap *map);
 
 // hashmap_oom returns true if the last hashmap_set() call failed due to the
 // system being out of memory.
-bool ihashmap_oom(struct ihashmap *map);
-
-// hashmap_get returns the item based on the provided key. If the item is not
-// found then NULL is returned.
-const void *ihashmap_get(struct ihashmap *map, const void *key);
+bool ihashmap_oom(ihashmap *map);
 
 // hashmap_set inserts or replaces an item in the hash map. If an item is
 // replaced then it is returned otherwise NULL is returned. This operation
 // may allocate memory. If the system is unable to allocate additional
 // memory then NULL is returned and hashmap_oom() returns true.
-const void *ihashmap_set(struct ihashmap *map, const void *key, const void *item);
+const void *ihashmap_set(ihashmap *map, const void *key, const void *item);
+
+// hashmap_get returns the item based on the provided key. If the item is not
+// found then NULL is returned.
+const void *ihashmap_get(ihashmap *map, const void *key);
 
 // hashmap_delete removes an item from the hash map and returns it. If the
 // item is not found then NULL is returned.
-const void *ihashmap_delete(struct ihashmap *map, const void *key);
+const void *ihashmap_delete(ihashmap *map, const void *key);
 
 // hashmap_probe returns the item in the bucket at position or NULL if an item
 // is not set for that bucket. The position is 'moduloed' by the number of
 // buckets in the hashmap.
-const void *ihashmap_probe(struct ihashmap *map, u64 position);
+const void *ihashmap_probe(ihashmap *map, u64 position);
 
 // hashmap_scan iterates over all items in the hash map
 // Param `iter` can return false to stop iteration early.
 // Returns false if the iteration has been stopped early.
-bool ihashmap_scan(struct ihashmap *map, bool (*iter)(const void *item, void *udata), void *udata);
+bool ihashmap_scan(ihashmap *map, bool (*iter)(const void *item, void *udata), void *udata);
 
 // hashmap_iter iterates one key at a time yielding a reference to an
 // entry at each iteration. Useful to write simple loops and avoid writing
@@ -153,24 +153,24 @@ bool ihashmap_scan(struct ihashmap *map, bool (*iter)(const void *item, void *ud
 //
 // The function returns true if an item was retrieved; false if the end of the
 // iteration has been reached.
-bool ihashmap_iter(const struct ihashmap *map, sizet *i, void **item);
+bool ihashmap_iter(const ihashmap *map, sizet *i, void **item);
 
 // hashmap_get_with_hash works like hashmap_get but you provide your
 // own hash. The 'hash' callback provided to the hashmap_new function
 // will not be called
-const void *ihashmap_get_with_hash(struct ihashmap *map, const void *key, u64 hash);
+const void *ihashmap_get_with_hash(ihashmap *map, const void *key, u64 hash);
 
 // hashmap_delete_with_hash works like hashmap_delete but you provide your
 // own hash. The 'hash' callback provided to the hashmap_new function
 // will not be called
-const void *ihashmap_delete_with_hash(struct ihashmap *map, const void *key, u64 hash);
+const void *ihashmap_delete_with_hash(ihashmap *map, const void *key, u64 hash);
 
 // hashmap_set_with_hash works like hashmap_set but you provide your
 // own hash. The 'hash' callback provided to the hashmap_new function
 // will not be called
-const void *ihashmap_set_with_hash(struct ihashmap *map, const void *item, u64 hash);
+const void *ihashmap_set_with_hash(ihashmap *map, const void *item, u64 hash);
 
-void ihashmap_set_grow_by_power(struct ihashmap *map, sizet power);
+void ihashmap_set_grow_by_power(ihashmap *map, sizet power);
 
 int generate_rand_seed();
 

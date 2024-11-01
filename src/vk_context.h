@@ -495,9 +495,11 @@ struct vkr_instance
     vkr_device device;
 };
 
+inline const int MAX_DESC_SETS_PER_POOL = MAX_FRAMES_IN_FLIGHT * 10100;
+
 struct vkr_max_descriptor_count
 {
-    u32 count[VKR_DESCRIPTOR_TYPE_COUNT] = {0, 0, 0, 0, 0, 0, 100000, 0, 0, 0, 0};
+    u32 count[VKR_DESCRIPTOR_TYPE_COUNT] = {0, 0, 0, 0, 0, 0, MAX_DESC_SETS_PER_POOL, 0, 0, 0, 0};
 };
 
 struct vkr_cfg
@@ -510,7 +512,7 @@ struct vkr_cfg
     VkInstanceCreateFlags inst_create_flags;
 
     vkr_max_descriptor_count max_desc_per_type_per_pool{};
-    u32 max_desc_sets_per_pool{10000};
+    u32 max_desc_sets_per_pool{MAX_DESC_SETS_PER_POOL};
 
     // Array of additional instance extension names - besides defaults determined by window
     const char *const *extra_instance_extension_names;
