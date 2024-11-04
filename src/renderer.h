@@ -27,6 +27,8 @@ const sizet MAX_FREE_SBUFFER_NODE_COUNT = 1024;
 const sizet MIN_VERT_FREE_BLOCK_SIZE = 4;
 // Minimum allowed sbuffer_entry block size in the free list for indices
 const sizet MIN_IND_FREE_BLOCK_SIZE = 6;
+// Maximum number of render passes supported
+const sizet MAX_RENDERPASS_COUNT = 16;
 // Maximum number of materials the renderer supports
 const sizet MAX_PIPELINE_COUNT = 1024;
 // Maximum number of materials the renderer supports

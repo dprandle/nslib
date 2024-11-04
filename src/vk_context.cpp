@@ -976,6 +976,7 @@ vkr_add_result vkr_add_descriptor_sets(vkr_descriptor_pool *pool, const vkr_cont
 
     for (sizet i = 0; i < count; ++i) {
         pool->desc_sets[result.begin + i].hndl = hndls[i];
+        pool->desc_sets[result.begin + i].layout = layouts[i];
     }
     arr_terminate(&hndls);
     return result;
@@ -1411,7 +1412,7 @@ u32 vkr_find_mem_type(u32 type_flags, VkMemoryPropertyFlags property_flags, cons
     return -1;
 }
 
-int vkr_init_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk, u32 max_sets)
+int vkr_init_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk, const vkr_descriptor_cfg *cfg)
 {
     arr_init(&desc_pool->desc_sets, vk->cfg.arenas.persistent_arena);
 
@@ -1419,8 +1420,8 @@ int vkr_init_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *
     VkDescriptorPoolSize psize[VKR_DESCRIPTOR_TYPE_COUNT] = {};
     u32 desc_size_count{};
     for (int desc_t = 0; desc_t < VKR_DESCRIPTOR_TYPE_COUNT; ++desc_t) {
-        if (vk->cfg.max_desc_per_type_per_pool.count[desc_t] > 0) {
-            psize[desc_size_count].descriptorCount = vk->cfg.max_desc_per_type_per_pool.count[desc_t];
+        if (cfg->max_desc_per_type[desc_t] > 0) {
+            psize[desc_size_count].descriptorCount = cfg->max_desc_per_type[desc_t];
             psize[desc_size_count].type = (VkDescriptorType)desc_t;
             ilog("Adding desc type %d to frame descriptor pool with %d desc available",
                  psize[desc_size_count].type,
@@ -1434,7 +1435,7 @@ int vkr_init_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *
     pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     pool_info.poolSizeCount = desc_size_count;
     pool_info.pPoolSizes = psize;
-    pool_info.maxSets = vk->cfg.max_desc_sets_per_pool;
+    pool_info.maxSets = cfg->max_sets;
     dlog("Setting max sets to %lu", pool_info.maxSets);
 
     int err = vkCreateDescriptorPool(vk->inst.device.hndl, &pool_info, &vk->alloc_cbs, &desc_pool->hndl);
@@ -1904,7 +1905,7 @@ int vkr_init_render_frames(vkr_device *dev, const vkr_context *vk)
         dev->rframes[framei].cmd_buf_ind = {VKR_QUEUE_FAM_TYPE_GFX, gfx_fam->default_pool, buf_res.begin + framei};
 
         // Get a count of the number of descriptors we are making avaialable for each desc type
-        err = vkr_init_descriptor_pool(&dev->rframes[framei].desc_pool, vk, vk->cfg.max_desc_sets_per_pool);
+        err = vkr_init_descriptor_pool(&dev->rframes[framei].desc_pool, vk, &vk->cfg.desc_cfg);
         if (err != VK_SUCCESS) {
             elog("Failed to create descriptor pool for frame %d - aborting init", framei);
             vkr_terminate_device(dev, vk);

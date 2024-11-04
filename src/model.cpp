@@ -46,15 +46,13 @@ void terminate_texture(texture *tex)
 void init_material(material *mat, mem_arena *arena)
 {
     assert(!mat->pipelines.hm);
-    assert(!mat->textures.hm);
+    assert(mat->textures.size == 0);
     hashset_init(&mat->pipelines, arena);
-    hashset_init(&mat->textures, arena);
 }
 
 void terminate_material(material *mat)
 {
     hashset_terminate(&mat->pipelines);
-    hashset_terminate(&mat->textures);
 }
 
 // TODO: Need to try this

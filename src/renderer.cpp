@@ -34,7 +34,6 @@ intern const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN
 
 const intern rid FWD_RPASS("forward");
 const intern rid PLINE_FWD_RPASS_S0_OPAQUE("forward-s0-opaque");
-intern VkDescriptorSetLayout G_FRAME_LAYOUT{};
 intern VkPipelineLayout G_FRAME_PL_LAYOUT{};
 
 enum descriptor_set_layout
@@ -47,7 +46,6 @@ enum descriptor_set_layout
 
 struct draw_call
 {
-    sizet set_ind;
     u32 index_count;
     u32 instance_count;
     u32 first_index;
@@ -73,6 +71,8 @@ struct pipeline_draw_group
 struct render_pass_draw_group
 {
     const rpass_info *rpinfo;
+    sizet fset{INVALID_IND};
+    sizet oset{INVALID_IND};
     array<VkWriteDescriptorSet> desc_updates;
     hashmap<rid, pipeline_draw_group *> plines;
 };
@@ -168,7 +168,7 @@ intern int setup_pipeline(renderer *rndr)
 
     info.set_layouts[3].bindings[0].binding = 0;
     info.set_layouts[3].bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    info.set_layouts[3].bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    info.set_layouts[3].bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
     info.set_layouts[3].bindings[0].descriptorCount = 1;
     info.set_layouts[3].bindings.size = 1;
 
@@ -298,7 +298,6 @@ intern int setup_pipeline(renderer *rndr)
             hashmap_set(&rndr->pipelines, plinfo.id, plinfo);
 
             // Set our global frame layout
-            G_FRAME_LAYOUT = vk->inst.device.pipelines[plinfo.plind].descriptor_layouts[DESCRIPTOR_SET_LAYOUT_FRAME];
             G_FRAME_PL_LAYOUT = vk->inst.device.pipelines[plinfo.plind].layout_hndl;
         }
         return code;
@@ -712,7 +711,8 @@ intern void add_desc_write_update(renderer *rndr,
                                   sizet range,
                                   sizet buf_ind,
                                   sizet set_ind,
-                                  render_pass_draw_group *rpdg)
+                                  array<VkWriteDescriptorSet> *updates,
+                                  VkDescriptorType type)
 {
     // Add a write descriptor set to update our obj descriptor to point at this portion of our unifrom buffer
     auto buffer_info = mem_alloc<VkDescriptorBufferInfo>(&rndr->frame_fl);
@@ -726,10 +726,10 @@ intern void add_desc_write_update(renderer *rndr,
     desc_write.dstSet = cur_frame->desc_pool.desc_sets[set_ind].hndl;
     desc_write.dstBinding = 0;
     desc_write.dstArrayElement = 0;
-    desc_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    desc_write.descriptorType = type;
     desc_write.descriptorCount = 1;
     desc_write.pBufferInfo = buffer_info;
-    arr_push_back(&rpdg->desc_updates, desc_write);
+    arr_push_back(updates, desc_write);
 }
 
 intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame *cur_frame, vkr_command_buffer *cmd_buf)
@@ -752,13 +752,12 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
     vkCmdBindVertexBuffers(cmd_buf->hndl, 0, 1, vert_bufs, offsets);
     vkCmdBindIndexBuffer(cmd_buf->hndl, ind_buf->hndl, 0, VK_INDEX_TYPE_UINT16);
 
-    // Bind frame global descriptor set
-    auto ds = cur_frame->desc_pool.desc_sets[DESCRIPTOR_SET_LAYOUT_FRAME].hndl;
-    vkCmdBindDescriptorSets(
-        cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, G_FRAME_PL_LAYOUT, DESCRIPTOR_SET_LAYOUT_FRAME, 1, &ds, 0, nullptr);
-
     sizet rpass_i{};
     while (auto rpass_iter = hashmap_iter(&rndr->dcs.rpasses, &rpass_i)) {
+        // Bind frame rpass descriptor set
+        auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->value->fset].hndl;
+        vkCmdBindDescriptorSets(
+            cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, G_FRAME_PL_LAYOUT, DESCRIPTOR_SET_LAYOUT_FRAME, 1, &ds, 0, nullptr);
 
         // We could make our render pass have the vert/index buffer info.. ie
         sizet pl_i{};
@@ -793,12 +792,19 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
                     cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, DESCRIPTOR_SET_LAYOUT_MATERIAL, 1, &ds, 0, nullptr);
 
                 sizet obj_set_ind{INVALID_IND};
-                for (int dci = 0; dci < mat_iter->value->dcs.size; ++dci) {
+                for (u32 dci = 0; dci < mat_iter->value->dcs.size; ++dci) {
                     const draw_call *cur_dc = &mat_iter->value->dcs[dci];
 
-                    auto ds = cur_frame->desc_pool.desc_sets[cur_dc->set_ind].hndl;
-                    vkCmdBindDescriptorSets(
-                        cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, DESCRIPTOR_SET_LAYOUT_OBJECT, 1, &ds, 0, nullptr);
+                    auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->value->oset].hndl;
+                    u32 dyn_offset = dci * sizeof(obj_ubo_data);
+                    vkCmdBindDescriptorSets(cmd_buf->hndl,
+                                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                            pipeline->layout_hndl,
+                                            DESCRIPTOR_SET_LAYOUT_OBJECT,
+                                            1,
+                                            &ds,
+                                            1,
+                                            &dyn_offset);
 
                     push_constants pc{3};
                     vkCmdPushConstants(cmd_buf->hndl, pipeline->layout_hndl, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push_constants), &pc);
@@ -824,7 +830,7 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
     mem_init_fl_arena(&rndr->vk_free_list, 100 * MB_SIZE, fl_arena);
     mem_init_lin_arena(&rndr->vk_frame_linear, 10 * MB_SIZE, mem_global_stack_arena());
     mem_init_fl_arena(&rndr->frame_fl, 100 * MB_SIZE, fl_arena);
-    
+
     rndr->vk = mem_alloc<vkr_context>(&rndr->vk_free_list, 8);
     memset(rndr->vk, 0, sizeof(vkr_context));
 
@@ -832,16 +838,20 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
     hashmap_init(&rndr->pipelines, fl_arena);
 
     // Set up our draw call list render pass hashmap with frame linear memory
-    //hashmap_init(&rndr->dcs.rpasses, &rndr->frame_fl);
-
+    // hashmap_init(&rndr->dcs.rpasses, &rndr->frame_fl);
+    vkr_descriptor_cfg desc_cfg{};
+    // Frame + pl + mat + obj uob
+    desc_cfg.max_sets = MAX_FRAMES_IN_FLIGHT * (MAX_RENDERPASS_COUNT*2 + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT);
+    desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER] = MAX_FRAMES_IN_FLIGHT * (MAX_RENDERPASS_COUNT + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT);
+    desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC] = MAX_FRAMES_IN_FLIGHT * MAX_RENDERPASS_COUNT;
+    desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = MAX_FRAMES_IN_FLIGHT * MAX_MATERIAL_COUNT * TEXTURE_SLOT_COUNT;
     vkr_cfg vkii{"rdev",
                  {1, 0, 0},
                  {.persistent_arena = &rndr->vk_free_list, .command_arena = &rndr->vk_frame_linear},
                  LOG_DEBUG,
                  win_hndl,
                  INST_CREATE_FLAGS,
-                 {},
-                 MAX_OBJECT_COUNT + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT,
+                 desc_cfg,
                  ADDITIONAL_INST_EXTENSIONS,
                  ADDITIONAL_INST_EXTENSION_COUNT,
                  DEVICE_EXTENSIONS,
@@ -988,6 +998,23 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
                 rpdg->rpinfo = &rp_fiter->value;
                 arr_init(&rpdg->desc_updates, &rndr->frame_fl);
                 hashmap_init(&rpdg->plines, &rndr->frame_fl);
+
+                // Add the frame rpass descriptor set
+                vkr_add_result desc_ind =
+                    vkr_add_descriptor_sets(&cur_frame->desc_pool, rndr->vk, &pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_FRAME], 1);
+                if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
+                    return desc_ind.err_code;
+                }
+                rpdg->fset = desc_ind.begin;
+
+                // Add the obj rpass descriptor set
+                desc_ind =
+                    vkr_add_descriptor_sets(&cur_frame->desc_pool, rndr->vk, &pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_OBJECT], 1);
+                if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
+                    return desc_ind.err_code;
+                }
+                rpdg->oset = desc_ind.begin;
+
                 hashmap_set(&rndr->dcs.rpasses, rp_fiter->key, rpdg);
                 push_rp_fiter = hashmap_find(&rndr->dcs.rpasses, rp_fiter->key);
             }
@@ -998,7 +1025,7 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
             if (!push_pl_fiter) {
                 auto pldg = mem_alloc<pipeline_draw_group>(&rndr->frame_fl);
                 memset(pldg, 0, sizeof(pipeline_draw_group));
-                
+
                 pldg->plinfo = &pl_fiter->value;
                 hashmap_init(&pldg->mats, &rndr->frame_fl);
 
@@ -1045,13 +1072,6 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
                          .first_instance = 0,
                          .tf = &tf->cached};
 
-            // Add the object discriptor set
-            vkr_add_result desc_ind =
-                vkr_add_descriptor_sets(&cur_frame->desc_pool, rndr->vk, &pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_OBJECT], 1);
-            if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
-                return desc_ind.err_code;
-            }
-            dc.set_ind = desc_ind.begin;
             arr_push_back(&push_mat_fiter->value->dcs, dc);
         }
     }
@@ -1061,15 +1081,14 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
 int render_frame_begin(renderer *rndr, int finished_frame_count)
 {
     auto dev = &rndr->vk->inst.device;
-    
+
     // Clear our frame rendering entries
     hashmap_terminate(&rndr->dcs.rpasses);
-    
+
     mem_reset_arena(&rndr->vk_frame_linear);
     mem_reset_arena(&rndr->frame_fl);
 
     hashmap_init(&rndr->dcs.rpasses, &rndr->frame_fl);
-    
 
     // Update finished frames which is used to get the current frame
     rndr->finished_frames = finished_frame_count;
@@ -1088,17 +1107,6 @@ int render_frame_begin(renderer *rndr, int finished_frame_count)
     // Clear all prev desc sets
     vkr_reset_descriptor_pool(&cur_frame->desc_pool, rndr->vk);
 
-    // Add the frame global discriptor set
-    vkr_add_result desc_ind = vkr_add_descriptor_sets(&cur_frame->desc_pool, rndr->vk, &G_FRAME_LAYOUT, 1);
-    if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
-        return desc_ind.err_code;
-    }
-
-    // Now update our pipeline ubo with this pipeline data
-    frame_ubo_data frame_ubo{};
-    frame_ubo.frame_count = finished_frame_count;
-    char *addr = (char *)rndr->vk->inst.device.buffers[cur_frame->frame_ubo_ind].mem_info.pMappedData;
-    memcpy(addr, &frame_ubo, sizeof(frame_ubo_data));
     return err_code::VKR_NO_ERROR;
 }
 
@@ -1109,8 +1117,26 @@ intern void update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
     sizet rpi{};
     sizet total_dci{};
     while (auto rp_iter = hashmap_iter(&rndr->dcs.rpasses, &rpi)) {
-        // Add the frame global desc write update (this will have duplicate work if we ever have more than one render pass)
-        add_desc_write_update(rndr, cur_frame, 0, sizeof(frame_ubo_data), cur_frame->frame_ubo_ind, 0, rp_iter->value);
+        auto updates = &rp_iter->value->desc_updates;
+        // Now update our pipeline ubo with this pipeline data
+        frame_ubo_data frame_ubo{};
+        frame_ubo.frame_count = rndr->finished_frames;
+        char *addr = (char *)rndr->vk->inst.device.buffers[cur_frame->frame_ubo_ind].mem_info.pMappedData;
+        memcpy(addr, &frame_ubo, sizeof(frame_ubo_data));
+
+        // Add the frame rpass desc write update
+        add_desc_write_update(
+            rndr, cur_frame, 0, sizeof(frame_ubo_data), cur_frame->frame_ubo_ind, rp_iter->value->fset, updates, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+
+        // Add the dynamic per obj desc write update
+        add_desc_write_update(rndr,
+                              cur_frame,
+                              0,
+                              sizeof(obj_ubo_data),
+                              cur_frame->obj_ubo_ind,
+                              rp_iter->value->oset,
+                              updates,
+                              VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
 
         // Update material and pipeline UBOs and create the descriptor writes for them
         sizet pli{};
@@ -1122,8 +1148,14 @@ intern void update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
             char *adjusted_addr = (char *)dev->buffers[cur_frame->pl_ubo_ind].mem_info.pMappedData + byte_offset;
             memcpy(adjusted_addr, &pl_ubo, sizeof(pipeline_ubo_data));
 
-            add_desc_write_update(
-                rndr, cur_frame, byte_offset, sizeof(pipeline_ubo_data), cur_frame->pl_ubo_ind, pl_iter->value->set_ind, rp_iter->value);
+            add_desc_write_update(rndr,
+                                  cur_frame,
+                                  byte_offset,
+                                  sizeof(pipeline_ubo_data),
+                                  cur_frame->pl_ubo_ind,
+                                  pl_iter->value->set_ind,
+                                  updates,
+                                  VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 
             sizet mati{};
             while (auto mat_iter = hashmap_iter(&pl_iter->value->mats, &mati)) {
@@ -1134,22 +1166,24 @@ intern void update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
                 char *adjusted_addr = (char *)dev->buffers[cur_frame->mat_ubo_ind].mem_info.pMappedData + byte_offset;
                 memcpy(adjusted_addr, &mat_ubo, sizeof(material_ubo_data));
 
-                add_desc_write_update(
-                    rndr, cur_frame, byte_offset, sizeof(material_ubo_data), cur_frame->mat_ubo_ind, mat_iter->value->set_ind, rp_iter->value);
+                add_desc_write_update(rndr,
+                                      cur_frame,
+                                      byte_offset,
+                                      sizeof(material_ubo_data),
+                                      cur_frame->mat_ubo_ind,
+                                      mat_iter->value->set_ind,
+                                      updates,
+                                      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 
                 for (int dci = 0; dci < mat_iter->value->dcs.size; ++dci) {
-                    auto cur_dc = &mat_iter->value->dcs[dci];
-
                     // Now update our object ubo with this dc data and update the total count
+                    auto cur_dc = &mat_iter->value->dcs[dci];
                     obj_ubo_data oubo{};
                     oubo.transform = *cur_dc->tf;
                     sizet byte_offset = total_dci * sizeof(obj_ubo_data);
                     char *adjusted_addr = (char *)dev->buffers[cur_frame->obj_ubo_ind].mem_info.pMappedData + byte_offset;
                     memcpy(adjusted_addr, &oubo, sizeof(obj_ubo_data));
                     ++total_dci;
-
-                    add_desc_write_update(
-                        rndr, cur_frame, byte_offset, sizeof(obj_ubo_data), cur_frame->obj_ubo_ind, cur_dc->set_ind, rp_iter->value);
                 }
             }
         }
@@ -1224,7 +1258,7 @@ void terminate_renderer(renderer *rndr)
     hashmap_terminate(&rndr->dcs.rpasses);
     mem_reset_arena(&rndr->vk_frame_linear);
     mem_reset_arena(&rndr->frame_fl);
-    
+
     // These are stack arenas so must go in this order
     hashmap_terminate(&rndr->rmi.meshes);
     mem_terminate_arena(&rndr->rmi.inds.node_pool);
@@ -1232,7 +1266,7 @@ void terminate_renderer(renderer *rndr)
 
     vkr_terminate(rndr->vk);
     mem_free(rndr->vk, &rndr->vk_free_list);
-    
+
     mem_terminate_arena(&rndr->vk_free_list);
     mem_terminate_arena(&rndr->vk_frame_linear);
     mem_terminate_arena(&rndr->frame_fl);

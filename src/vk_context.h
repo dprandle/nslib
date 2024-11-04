@@ -266,6 +266,7 @@ struct vkr_cmd_buf_ind
 struct vkr_descriptor_set
 {
     VkDescriptorSet hndl;
+    VkDescriptorSetLayout layout;
 };
 
 struct vkr_descriptor_pool
@@ -296,7 +297,7 @@ struct vkr_swapchain
     VkExtent2D extent;
     VkSwapchainKHR swapchain;
 };
- 
+
 struct vkr_rpass_cfg_subpass
 {
     VkPipelineBindPoint pipeline_bind_point{};
@@ -306,7 +307,6 @@ struct vkr_rpass_cfg_subpass
     static_array<u32, 16> preserve_attachments;
     const VkAttachmentReference *depth_stencil_attachment{};
 };
-
 
 struct vkr_rpass_cfg
 {
@@ -495,11 +495,10 @@ struct vkr_instance
     vkr_device device;
 };
 
-inline const int MAX_DESC_SETS_PER_POOL = MAX_FRAMES_IN_FLIGHT * 10100;
-
-struct vkr_max_descriptor_count
+struct vkr_descriptor_cfg
 {
-    u32 count[VKR_DESCRIPTOR_TYPE_COUNT] = {0, 0, 0, 0, 0, 0, MAX_DESC_SETS_PER_POOL, 0, 0, 0, 0};
+    u32 max_desc_per_type[VKR_DESCRIPTOR_TYPE_COUNT] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    u32 max_sets{};
 };
 
 struct vkr_cfg
@@ -510,10 +509,8 @@ struct vkr_cfg
     int log_verbosity;
     void *window;
     VkInstanceCreateFlags inst_create_flags;
-
-    vkr_max_descriptor_count max_desc_per_type_per_pool{};
-    u32 max_desc_sets_per_pool{MAX_DESC_SETS_PER_POOL};
-
+    vkr_descriptor_cfg desc_cfg{};
+    
     // Array of additional instance extension names - besides defaults determined by window
     const char *const *extra_instance_extension_names;
     u32 extra_instance_extension_count;
@@ -563,7 +560,7 @@ void vkr_enumerate_device_extensions(const vkr_phys_device *pdevice,
 void vkr_enumerate_validation_layers(const char *const *enabled_layers, u32 enabled_layer_count, const vk_arenas *arenas);
 
 // Descriptors
-int vkr_init_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk, u32 max_sets);
+int vkr_init_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk, const vkr_descriptor_cfg *cfg);
 void vkr_reset_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk);
 void vkr_terminate_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk);
 vkr_add_result vkr_add_descriptor_sets(vkr_descriptor_pool *pool, const vkr_context *vk, const VkDescriptorSetLayout *layouts, sizet count = 1);
