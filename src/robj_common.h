@@ -41,6 +41,7 @@ struct robj_cache
 };
 
 using mesh_cache = robj_cache<struct mesh>;
+using material_cache = robj_cache<struct material>;
 
 struct robj_cache_group
 {

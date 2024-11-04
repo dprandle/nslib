@@ -34,7 +34,7 @@ const sizet MAX_PIPELINE_COUNT = 1024;
 // Maximum number of materials the renderer supports
 const sizet MAX_MATERIAL_COUNT = 4096;
 // Maximum number of objects
-const sizet MAX_OBJECT_COUNT = 131072;
+const sizet MAX_OBJECT_COUNT = 1000000;
 // Default material
 const rid DEFAULT_MAT_ID = rid("default");
 
@@ -121,18 +121,20 @@ struct rmesh_info
 struct render_pass_draw_group;
 struct frame_draw_info
 {
-    hashmap<rid, render_pass_draw_group*> rpasses;
+    hashmap<rid, render_pass_draw_group *> rpasses;
 };
 // What we really want to do is have a big SSAO with all transforms for entire scene right?
 
-struct pipeline_info {
+struct pipeline_info
+{
     sizet plind;
     rid id;
     rid rpass_id;
     mat4 proj_view;
 };
 
-struct rpass_info {
+struct rpass_info
+{
     sizet rpind;
     rid id;
 };
@@ -174,7 +176,7 @@ struct renderer
     sizet swapchain_fb_depth_stencil_im_ind{INVALID_IND};
 };
 
-int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const robj_cache_group *cg);
+int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const mesh_cache *msh_cache, const material_cache *mat_cache);
 
 // NOTE: All of these mesh operations kind of need to wait on all rendering operations to complete as they modify the
 // vertex and index buffers - not sure yet if this is better done within the functions or in the caller. Also these should be done at the

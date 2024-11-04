@@ -8,7 +8,7 @@ namespace nslib
 {
 
 const sizet JOINTS_PER_VERTEX = 4;
-const sizet MAX_SUBMESH_COUNT = 32;
+const sizet MAX_SUBMESH_COUNT = 16;
 const sizet TEXTURE_SLOT_COUNT = 8;
 using ind_t = u16;
 

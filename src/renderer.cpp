@@ -73,6 +73,7 @@ struct render_pass_draw_group
     const rpass_info *rpinfo;
     sizet fset{INVALID_IND};
     sizet oset{INVALID_IND};
+    array<VkDescriptorSetLayout> sets_to_make;
     array<VkWriteDescriptorSet> desc_updates;
     hashmap<rid, pipeline_draw_group *> plines;
 };
@@ -841,8 +842,9 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
     // hashmap_init(&rndr->dcs.rpasses, &rndr->frame_fl);
     vkr_descriptor_cfg desc_cfg{};
     // Frame + pl + mat + obj uob
-    desc_cfg.max_sets = MAX_FRAMES_IN_FLIGHT * (MAX_RENDERPASS_COUNT*2 + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT);
-    desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER] = MAX_FRAMES_IN_FLIGHT * (MAX_RENDERPASS_COUNT + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT);
+    desc_cfg.max_sets = MAX_FRAMES_IN_FLIGHT * (MAX_RENDERPASS_COUNT * 2 + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT);
+    desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER] =
+        MAX_FRAMES_IN_FLIGHT * (MAX_RENDERPASS_COUNT + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT);
     desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC] = MAX_FRAMES_IN_FLIGHT * MAX_RENDERPASS_COUNT;
     desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = MAX_FRAMES_IN_FLIGHT * MAX_MATERIAL_COUNT * TEXTURE_SLOT_COUNT;
     vkr_cfg vkii{"rdev",
@@ -958,14 +960,13 @@ intern vkr_frame *get_current_frame(renderer *rndr)
     return &rndr->vk->inst.device.rframes[current_frame_ind];
 }
 
-int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const robj_cache_group *cg)
+int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const mesh_cache *msh_cache, const material_cache *mat_cache)
 {
-    auto msh_cache = get_cache<mesh>(cg);
-    auto mat_cache = get_cache<material>(cg);
     auto dev = &rndr->vk->inst.device;
     auto cur_frame = get_current_frame(rndr);
 
     auto rmesh = hashmap_find(&rndr->rmi.meshes, sm->mesh_id);
+    static auto default_mat = get_robj(DEFAULT_MAT_ID, mat_cache);
     assert(rmesh);
 
     // First iterate through all submeshes and associated materials
@@ -973,10 +974,15 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
     auto msh = get_robj(sm->mesh_id, msh_cache);
     assert(msh);
     assert(rmesh->value.submesh_entrees.size == msh->submeshes.size);
+    sizet cur_desc_ind = cur_frame->desc_pool.desc_sets.size;
+
     for (int i = 0; i < msh->submeshes.size; ++i) {
-        auto mat = get_robj(sm->mat_ids[i], mat_cache);
-        if (!mat) {
-            mat = get_robj(DEFAULT_MAT_ID, mat_cache);
+        auto mat = default_mat;
+        if (sm->mat_ids[i].id != 0) {
+            auto mato = get_robj(sm->mat_ids[i], mat_cache);
+            if (mato) {
+                mat = mato;
+            }
         }
 
         sizet pli{};
@@ -997,23 +1003,18 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
                 memset(rpdg, 0, sizeof(render_pass_draw_group));
                 rpdg->rpinfo = &rp_fiter->value;
                 arr_init(&rpdg->desc_updates, &rndr->frame_fl);
+                arr_init(&rpdg->sets_to_make, &rndr->frame_fl);
                 hashmap_init(&rpdg->plines, &rndr->frame_fl);
 
                 // Add the frame rpass descriptor set
-                vkr_add_result desc_ind =
-                    vkr_add_descriptor_sets(&cur_frame->desc_pool, rndr->vk, &pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_FRAME], 1);
-                if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
-                    return desc_ind.err_code;
-                }
-                rpdg->fset = desc_ind.begin;
+                arr_emplace_back(&rpdg->sets_to_make, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_FRAME]);
+                rpdg->fset = cur_desc_ind;
+                ++cur_desc_ind;
 
                 // Add the obj rpass descriptor set
-                desc_ind =
-                    vkr_add_descriptor_sets(&cur_frame->desc_pool, rndr->vk, &pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_OBJECT], 1);
-                if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
-                    return desc_ind.err_code;
-                }
-                rpdg->oset = desc_ind.begin;
+                arr_emplace_back(&rpdg->sets_to_make, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_OBJECT]);
+                rpdg->oset = cur_desc_ind;
+                ++cur_desc_ind;
 
                 hashmap_set(&rndr->dcs.rpasses, rp_fiter->key, rpdg);
                 push_rp_fiter = hashmap_find(&rndr->dcs.rpasses, rp_fiter->key);
@@ -1030,12 +1031,9 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
                 hashmap_init(&pldg->mats, &rndr->frame_fl);
 
                 // Add the pipeline discriptor set
-                vkr_add_result desc_ind =
-                    vkr_add_descriptor_sets(&cur_frame->desc_pool, rndr->vk, &pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_PIPELINE], 1);
-                if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
-                    return desc_ind.err_code;
-                }
-                pldg->set_ind = desc_ind.begin;
+                arr_emplace_back(&push_rp_fiter->value->sets_to_make, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_PIPELINE]);
+                pldg->set_ind = cur_desc_ind;
+                ++cur_desc_ind;
 
                 hashmap_set(&push_rp_fiter->value->plines, pl_fiter->key, pldg);
                 push_pl_fiter = hashmap_find(&push_rp_fiter->value->plines, pl_fiter->key);
@@ -1052,12 +1050,10 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
                 arr_init(&matdg->dcs, &rndr->frame_fl);
 
                 // Add the material discriptor set
-                vkr_add_result desc_ind =
-                    vkr_add_descriptor_sets(&cur_frame->desc_pool, rndr->vk, &pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_MATERIAL], 1);
-                if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
-                    return desc_ind.err_code;
-                }
-                matdg->set_ind = desc_ind.begin;
+                // Add the pipeline discriptor set
+                arr_emplace_back(&push_rp_fiter->value->sets_to_make, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_MATERIAL]);
+                matdg->set_ind = cur_desc_ind;
+                ++cur_desc_ind;
 
                 hashmap_set(&push_pl_fiter->value->mats, mat->id, matdg);
                 push_mat_fiter = hashmap_find(&push_pl_fiter->value->mats, mat->id);
@@ -1110,13 +1106,19 @@ int render_frame_begin(renderer *rndr, int finished_frame_count)
     return err_code::VKR_NO_ERROR;
 }
 
-intern void update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
+intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
 {
     auto dev = &rndr->vk->inst.device;
     // Update all descriptor sets
     sizet rpi{};
     sizet total_dci{};
     while (auto rp_iter = hashmap_iter(&rndr->dcs.rpasses, &rpi)) {
+        vkr_add_result desc_ind =
+            vkr_add_descriptor_sets(&cur_frame->desc_pool, rndr->vk, rp_iter->value->sets_to_make.data, rp_iter->value->sets_to_make.size);
+        if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
+            return desc_ind.err_code;
+        }
+
         auto updates = &rp_iter->value->desc_updates;
         // Now update our pipeline ubo with this pipeline data
         frame_ubo_data frame_ubo{};
@@ -1190,6 +1192,7 @@ intern void update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
 
         vkUpdateDescriptorSets(dev->hndl, rp_iter->value->desc_updates.size, rp_iter->value->desc_updates.data, 0, nullptr);
     }
+    return err_code::VKR_NO_ERROR;
 }
 
 int render_frame_end(renderer *rndr, camera *cam)
@@ -1228,7 +1231,10 @@ int render_frame_end(renderer *rndr, camera *cam)
     }
 
     // Update all uniform buffers and write the descriptor set updates for them
-    update_uniform_descriptors(rndr, cur_frame);
+    err = update_uniform_descriptors(rndr, cur_frame);
+    if (err != err_code::RENDER_NO_ERROR) {
+        return err;
+    }
 
     // The command buf index struct has an ind struct into the pool the cmd buf comes from, and then an ind into the buffer
     // The ind into the pool has an ind into the queue family (as that contains our array of command pools) and then and

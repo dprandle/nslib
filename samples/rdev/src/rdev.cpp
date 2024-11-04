@@ -173,7 +173,7 @@ int init(platform_ctxt *ctxt, void *user_data)
     init_sim_region(&app->rgn, mem_global_arena());
 
     // Create a grid of entities with odd ones being cubes and even being rectangles
-    int len = 25, width = 25, height = 25;
+    int len = 32, width = 32, height = 10;
     add_entities(len * width * height, &app->rgn);
 
     for (int zind = 0; zind < height; ++zind) {
@@ -234,12 +234,14 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
         cam_tform->cached = math::model_tform(cam_tform->world_pos, cam_tform->orientation, cam_tform->scale);
         cam->view = math::inverse(cam_tform->cached);
     }
-    static double rpush_tm = 0.0;
+    static double update_tm = 0.0;
     static double render_tm = 0.0;
 
     // Spin some entities
     ptimer_restart(&pt);
     auto tform_tbl = get_comp_tbl<transform>(&app->rgn.cdb);
+    auto mat_cache = get_cache<material>(&app->cg);
+    auto msh_cache = get_cache<mesh>(&app->cg);
     for (sizet i = 0; i < tform_tbl->entries.size; ++i) {
         auto curtf = &tform_tbl->entries[i];
         if (curtf->ent_id != app->cam_id) {
@@ -252,16 +254,16 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
             else {
                 curtf->orientation *= math::orientation(vec4{0.0, 0.0, 1.0, (f32)ctxt->time_pts.dt});
             }
-            curtf->flags = COMP_FLAG_DIRTY;
             curtf->cached = math::model_tform(curtf->world_pos, curtf->orientation, curtf->scale);
         }
         auto sm = get_comp<static_model>(tform_tbl->entries[i].ent_id, &app->rgn.cdb);
         if (sm) {
-            rpush_sm(&app->rndr, sm, curtf, &app->cg);
+            rpush_sm(&app->rndr, sm, curtf, msh_cache, mat_cache);
         }
     }
+
     ptimer_split(&pt);
-    rpush_tm += pt.dt;
+    update_tm += pt.dt;
 
     res = render_frame_end(&app->rndr, cam);
     ptimer_split(&pt);
@@ -270,13 +272,15 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
     static double counter = 2.0;
     double elapsed = nanos_to_sec(ptimer_elapsed_dt(&ctxt->time_pts));
     if (elapsed > counter) {
-        double tot_factor = 100 / (rpush_tm + render_tm);
-        ilog("Average FPS: %.02f  RPush:%.02f%%  Render:%.02f%%",
+        double tot_factor = 100 / (update_tm + render_tm);
+        double update_factor = 100 / (update_tm);
+
+        ilog("Average FPS: %.02f  Update:%.02f%%  Render:%.02f%%",
              ctxt->finished_frames / elapsed,
-             rpush_tm * tot_factor,
+             update_tm * tot_factor,
              render_tm * tot_factor);
         counter += 2.0;
-        rpush_tm = 0.0;
+        update_tm = 0.0;
         render_tm = 0.0;
     }
 
@@ -301,7 +305,8 @@ int configure_platform(platform_init_info *settings, app_data *app)
     settings->user_cb.init = init;
     settings->user_cb.run_frame = run_frame;
     settings->user_cb.terminate = terminate;
-    settings->mem.stack_size = 4 * 1024 * MB_SIZE;
+    settings->mem.free_list_size = 4 * 1024 * MB_SIZE;
+
     return err_code::PLATFORM_NO_ERROR;
 }
 

@@ -277,7 +277,7 @@ const void *ihashmap_get_with_hash(ihashmap *map, const void *key, u64 hash)
             }
         }
         i = (i + 1) & map->mask;
-        bucket = bucket_at(map, i);        
+        bucket = bucket_at(map, i);
     }
     return nullptr;
 }
