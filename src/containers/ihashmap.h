@@ -172,6 +172,4 @@ const void *ihashmap_set_with_hash(ihashmap *map, const void *item, u64 hash);
 
 void ihashmap_set_grow_by_power(ihashmap *map, sizet power);
 
-int generate_rand_seed();
-
 } // namespace nslib

@@ -359,9 +359,7 @@ intern void mem_linear_free(mem_arena *, void *)
 void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment)
 {
     void *ret{nullptr};
-    if (!arena) {
-        arena = g_fl_arena;
-    }
+
     if (arena) {
         switch (arena->alloc_type) {
         case (mem_alloc_type::FREE_LIST):
@@ -422,9 +420,6 @@ sizet mem_block_user_size(void *ptr, mem_arena *arena)
 
 void *mem_realloc(void *ptr, sizet new_size, mem_arena *arena, sizet alignment, bool free_ptr_after_copy)
 {
-    if (!arena) {
-        arena = g_fl_arena;
-    }
     if (arena) {
         // Create a new block and copy the mem to it from the old block (we use the lesser of the block sizes)
         auto new_block = mem_alloc(new_size, arena, alignment);
@@ -471,11 +466,7 @@ void mem_free(void *ptr, mem_arena *arena)
 {
     if (!ptr)
         return;
-
-    if (!arena) {
-        arena = g_fl_arena;
-    }
-
+    
     if (arena) {
         switch (arena->alloc_type) {
         case (mem_alloc_type::FREE_LIST):

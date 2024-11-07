@@ -2,7 +2,6 @@
 #include <cstring>
 
 #include "logging.h"
-
 #include "basic_types.h"
 #include "basic_type_traits.h"
 

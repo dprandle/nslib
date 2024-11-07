@@ -43,14 +43,14 @@ struct array
     sizet capacity{};
     sizet mem_alignment{};
 
-    array()
+    array(mem_arena *arena = mem_global_arena(), sizet initial_capacity = 0, sizet mem_alignment = DEFAULT_MIN_ALIGNMENT)
     {
-        arr_init(this);
+        arr_init(this, arena, initial_capacity, mem_alignment);
     }
 
     array(const array &copy)
     {
-        arr_init(this, copy.arena, copy.capacity);
+        arr_init(this, copy.arena, copy.capacity, copy.mem_alignment);
         arr_copy(this, &copy);
     }
 
@@ -85,14 +85,9 @@ void swap(array<T> *lhs, array<T> *rhs)
 }
 
 template<class T>
-void arr_init(array<T> *arr, mem_arena *arena = nullptr, sizet initial_capacity = 0, sizet mem_alignment = DEFAULT_MIN_ALIGNMENT)
+void arr_init(array<T> *arr, mem_arena *arena = mem_global_arena(), sizet initial_capacity = 0, sizet mem_alignment = DEFAULT_MIN_ALIGNMENT)
 {
-    if (arena) {
-        arr->arena = arena;
-    }
-    else if (!arr->arena) {
-        arr->arena = mem_global_arena();
-    }
+    arr->arena = arena;
     arr->mem_alignment = mem_alignment;
     arr_set_capacity(arr, initial_capacity);
 }
@@ -209,6 +204,14 @@ void arr_set_capacity(array<T> *arr, sizet new_cap)
     if (new_cap == arr->capacity) {
         return;
     }
+    
+    // Shrink the old size if its greater than the new capacity calling dtor on each item
+    if (arr->size > new_cap) {
+        for (sizet i = new_cap; i < arr->size; ++i) {
+            arr->data[i].~T();
+        }
+        arr->size = new_cap;
+    }
 
     if (new_cap > 0) {
         // New cap can't be any smaller than mem_nod since we are using free list allocator
@@ -222,11 +225,6 @@ void arr_set_capacity(array<T> *arr, sizet new_cap)
         arr->data = nullptr;
     }
     arr->capacity = new_cap;
-
-    // Shrink the old size if its greater than the new capacity (so we only copy those items)
-    if (arr->size > arr->capacity) {
-        arr->size = arr->capacity;
-    }
 }
 
 template<class T>

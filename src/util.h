@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdlib>
 #include "archive_common.h"
 
 namespace nslib
@@ -31,6 +32,8 @@ struct pair
     F first;
     S second;
 };
+
+inline u64 generate_rand_seed() { return rand();}
 
 pup_func_tt(key_val_pair)
 {

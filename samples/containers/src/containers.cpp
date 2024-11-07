@@ -1,11 +1,11 @@
-#include "input_mapping.h"
 #include "platform.h"
 #include "logging.h"
-#include "robj_common.h"
+#include "rid.h"
 #include "string_archive.h"
 #include "containers/string.h"
 #include "containers/hashmap.h"
 #include "containers/hashset.h"
+#include "containers/hmap.h"
 
 using namespace nslib;
 
@@ -99,6 +99,7 @@ void test_arrays()
     dlog("Starting array test");
     array<int> arr1;
     array<rid> rids;
+    array<array<int>> arr_arr;
     string output;
 
     arr_emplace_back(&arr1, 35);
@@ -107,12 +108,15 @@ void test_arrays()
     arr_emplace_back(&arr1, 9);
     arr_emplace_back(&arr1, -122);
 
+    arr_push_back(&arr_arr, arr1);
+
     for (int i = 0; i < arr1.size; ++i) {
         ilog("Arr1[%d]: %d", i, arr1[i]);
         auto arr2(arr1);
         for (int i = 0; i < arr2.size; ++i) {
             ilog("Arr2[%d]: %d", i, arr2[i]);
         }
+        // arr_push_back(&arr_arr, arr2);
     }
 
     arr_push_back(&rids, rid("key1"));
@@ -125,6 +129,12 @@ void test_arrays()
         output += to_str(*iter);
         ++iter;
     }
+
+    // auto iter2 = arr_begin(&arr_arr);
+    // while (iter2 != arr_end(&arr_arr)) {
+    //     output += to_str(*iter2);
+    //     ++iter2;
+    // }
     ilog("Output: %s", str_cstr(&output));
 }
 
@@ -133,18 +143,18 @@ void test_hashmaps()
     dlog("Starting hashmap test");
     hashmap<rid, custom_type_2> hm1;
     hashmap<string, custom_type_2> hm2;
-    hashmap_init(&hm1, nullptr);
-    hashmap_init(&hm2, nullptr);
+    hashmap_init(&hm1, mem_global_arena());
+    hashmap_init(&hm2, mem_global_arena());
 
     hashset<rid> hs1;
     hashset<string> hs2;
-    hashset_init(&hs1, nullptr);
-    hashset_init(&hs2, nullptr);
+    hashset_init(&hs1, mem_global_arena());
+    hashset_init(&hs2, mem_global_arena());
 
     hashset<custom_type_0> hs3;
     hashset<custom_type_1> hs4;
-    hashset_init(&hs3, nullptr);
-    hashset_init(&hs4, nullptr);
+    hashset_init(&hs3, mem_global_arena());
+    hashset_init(&hs4, mem_global_arena());
 
     hashmap_set(&hm1, rid("key1"), {1, 2});
     hashmap_set(&hm1, rid("key2"), {3, 4});
@@ -184,11 +194,40 @@ void test_hashmaps()
     ilog("HS4 %s", to_cstr(hs4));
 }
 
+void test_new_hashmaps()
+{
+    ilog("Starting new hashmap test");
+
+    hmap<rid, custom_type_0> hm1{};
+    hmap_init(&hm1, hash_type, generate_rand_seed(), generate_rand_seed(), mem_global_arena(), 4);
+
+    hmap_insert(&hm1, rid("blabla"), {5, rid("blabla")});
+    hmap_insert(&hm1, rid("bleeblee"), {8, rid("bleeblee")});
+    hmap_insert(&hm1, rid("kowabungu"), {405, rid("kowabungu")});
+
+    ilog("Forward...");
+    auto iter = hmap_first(&hm1);
+    while (iter) {
+        ilog("key: %s  value:%s", to_cstr(iter->key), to_cstr(iter->val));
+        iter = hmap_next(&hm1, iter);
+    }
+
+    ilog("Reverse...");
+    iter = hmap_last(&hm1);
+    while (iter) {
+        ilog("key: %s  value:%s", to_cstr(iter->key), to_cstr(iter->val));
+        iter = hmap_prev(&hm1, iter);
+    }
+
+    hmap_terminate(&hm1);
+}
+
 int app_init(platform_ctxt *ctxt, void *)
 {
     test_strings();
     test_arrays();
     test_hashmaps();
+    test_new_hashmaps();
     return err_code::PLATFORM_NO_ERROR;
 }
 

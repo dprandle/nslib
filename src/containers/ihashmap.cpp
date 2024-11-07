@@ -125,11 +125,6 @@ ihashmap *ihashmap_new(malloc_func_type *_malloc,
     return map;
 }
 
-int generate_rand_seed()
-{
-    return rand();
-}
-
 intern void free_elements(ihashmap *map)
 {
     if (map->elfree) {

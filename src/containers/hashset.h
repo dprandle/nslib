@@ -2,6 +2,7 @@
 
 #include "ihashmap.h"
 #include "../hashfuncs.h"
+#include "../util.h"
 #include "string.h"
 
 namespace nslib
