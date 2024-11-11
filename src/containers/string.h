@@ -157,7 +157,7 @@ string to_str(const char *format_txt, Args &&...args)
 u64 hash_type(const string &key, u64 seed0, u64 seed1);
 
 template<signed_integral T>
-string to_str(T n)
+string to_str(const T &n)
 {
     string ret;
     str_printf(&ret, "%d", n);
@@ -165,7 +165,7 @@ string to_str(T n)
 }
 
 template<unsigned_integral T>
-string to_str(T n)
+string to_str(const T &n)
 {
     string ret;
     str_printf(&ret, "%u", n);
@@ -173,7 +173,7 @@ string to_str(T n)
 }
 
 template<floating_pt T>
-string to_str(T n)
+string to_str(const T &n)
 {
     string ret;
     str_printf(&ret, "%f", n);

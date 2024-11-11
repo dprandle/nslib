@@ -2,7 +2,6 @@
 
 #include "basic_types.h"
 #include "basic_type_traits.h"
-#include "logging.h"
 
 namespace nslib
 {
@@ -59,7 +58,7 @@ u64 hash_ptr_xxhash3(const void *data, sizet len, u64 seed0, u64 seed1);
 
 // Simply 1 for 1 hash - the key has been computed already and we just make use of the hash buckets
 template<integral T>
-inline T hash_type(T key, u64, u64) {
+inline u64 hash_type(T key, u64, u64) {
     return (T)key;
 }
 

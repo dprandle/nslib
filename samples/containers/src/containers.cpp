@@ -2,6 +2,7 @@
 #include "logging.h"
 #include "rid.h"
 #include "string_archive.h"
+#include "hashfuncs.h"
 #include "containers/string.h"
 #include "containers/hashmap.h"
 #include "containers/hashset.h"
@@ -198,24 +199,24 @@ void test_new_hashmaps()
 {
     ilog("Starting new hashmap test");
 
-    hmap<rid, custom_type_0> hm1{};
-    hmap_init(&hm1, hash_type, generate_rand_seed(), generate_rand_seed(), mem_global_arena(), 4);
+    hmap<u32, string> hm1{};
+    hmap_init(&hm1, hash_type, generate_rand_seed(), generate_rand_seed(), mem_global_arena(), 8);
 
-    hmap_insert(&hm1, rid("blabla"), {5, rid("blabla")});
-    hmap_insert(&hm1, rid("bleeblee"), {8, rid("bleeblee")});
-    hmap_insert(&hm1, rid("kowabungu"), {405, rid("kowabungu")});
+    hmap_insert(&hm1, (u32)3, string("bla"));
+    hmap_insert(&hm1, (u32)11, string("blabla"));
+    hmap_insert(&hm1, (u32)19, string("blablabla"));
 
     ilog("Forward...");
     auto iter = hmap_first(&hm1);
     while (iter) {
-        ilog("key: %s  value:%s", to_cstr(iter->key), to_cstr(iter->val));
+        ilog("key: %s  value:%s", to_cstr((u32)iter->key), str_cstr(iter->val));
         iter = hmap_next(&hm1, iter);
     }
 
     ilog("Reverse...");
     iter = hmap_last(&hm1);
     while (iter) {
-        ilog("key: %s  value:%s", to_cstr(iter->key), to_cstr(iter->val));
+        ilog("key: %s  value:%s", to_cstr(iter->key), str_cstr(iter->val));
         iter = hmap_prev(&hm1, iter);
     }
 
