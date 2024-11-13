@@ -200,11 +200,34 @@ void test_new_hashmaps()
     ilog("Starting new hashmap test");
 
     hmap<u32, string> hm1{};
-    hmap_init(&hm1, hash_type, generate_rand_seed(), generate_rand_seed(), mem_global_arena(), 8);
+    hmap_init(&hm1, hash_type, generate_rand_seed(), generate_rand_seed(), mem_global_arena(), 24);
 
-    hmap_insert(&hm1, (u32)3, string("bla"));
-    hmap_insert(&hm1, (u32)11, string("blabla"));
-    hmap_insert(&hm1, (u32)19, string("blablabla"));
+#define IND_EXP(bucket_ind, bucket_cnt) (u32)(bucket_ind+bucket_cnt*hm1.buckets.size)
+
+    hmap_insert(&hm1, IND_EXP(0,0), string("0-bla"));
+    hmap_insert(&hm1, IND_EXP(0,1), string("0-blabla"));
+    hmap_insert(&hm1, IND_EXP(0,2), string("0-blablabla"));
+    hmap_insert(&hm1, IND_EXP(1,0), string("1-bla"));
+    hmap_insert(&hm1, IND_EXP(1,1), string("1-blabla"));
+    hmap_insert(&hm1, IND_EXP(1,2), string("1-blablabla"));
+    hmap_insert(&hm1, IND_EXP(2,0), string("2-bla"));
+    hmap_insert(&hm1, IND_EXP(2,1), string("2-blabla"));
+    hmap_insert(&hm1, IND_EXP(2,2), string("2-blablabla"));
+    hmap_insert(&hm1, IND_EXP(3,0), string("3-bla"));
+    hmap_insert(&hm1, IND_EXP(3,1), string("3-blabla"));
+    hmap_insert(&hm1, IND_EXP(3,2), string("3-blablabla"));
+    hmap_insert(&hm1, IND_EXP(4,0), string("4-bla"));
+    hmap_insert(&hm1, IND_EXP(4,1), string("4-blabla"));
+    hmap_insert(&hm1, IND_EXP(4,2), string("4-blablabla"));
+    hmap_insert(&hm1, IND_EXP(5,0), string("5-bla"));
+    hmap_insert(&hm1, IND_EXP(5,1), string("5-blabla"));
+    hmap_insert(&hm1, IND_EXP(5,2), string("5-blablabla"));
+    hmap_insert(&hm1, IND_EXP(6,0), string("6-bla"));
+    hmap_insert(&hm1, IND_EXP(6,1), string("6-blabla"));
+    hmap_insert(&hm1, IND_EXP(6,2), string("6-blablabla"));
+    hmap_insert(&hm1, IND_EXP(7,0), string("7-bla"));
+    hmap_insert(&hm1, IND_EXP(7,1), string("7-blabla"));
+    hmap_insert(&hm1, IND_EXP(7,2), string("7-blablabla"));
 
     ilog("Forward...");
     auto iter = hmap_first(&hm1);
@@ -220,6 +243,9 @@ void test_new_hashmaps()
         iter = hmap_prev(&hm1, iter);
     }
 
+    ilog("Buckets...");
+    hmap_debug_print(hm1);
+    
     hmap_terminate(&hm1);
 }
 

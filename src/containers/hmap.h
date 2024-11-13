@@ -199,7 +199,7 @@ hmap_item<Key, Val> *hmap_insert(hmap<Key, Val> *hm, const Key &k, const Val &va
     hm->buckets[cur_bckt_ind].item.key = k;
     hm->buckets[cur_bckt_ind].item.val = val;
 
-    // If this is the first item, we create head pointing to itself as prev
+    // If this is the first item, we create head pointing to itself as prev and leave next invalid
     if (!is_valid(hm->head)) {
         hm->head = cur_bckt_ind;
         hm->buckets[cur_bckt_ind].item.prev = cur_bckt_ind;
@@ -288,6 +288,24 @@ hmap_item<Key, Val> *hmap_prev(hmap<Key, Val> *hm, hmap_item<Key, Val> *item)
     }
     return nullptr;
 }
+
+template<typename Key, typename Val>
+void hmap_debug_print(const hmap<Key, Val> &hm)
+{
+    for (int i = 0; i < hm.buckets.size; ++i) {
+        auto b = &hm.buckets[i];
+        dlog("Bucket: %lu  hval:%lu  prev:%lu  next:%lu  item [key:%d  val:%s  prev:%lu  next:%lu]",
+             i,
+             b->hashed_v,
+             b->prev,
+             b->next,
+             b->item.key,
+             str_cstr(b->item.val),
+             b->item.prev,
+             b->item.next);
+    }
+}
+
 
 template<typename Key, typename Val>
 void hmap_terminate(hmap<Key, Val> *hm)
