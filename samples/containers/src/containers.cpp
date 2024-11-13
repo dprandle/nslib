@@ -200,7 +200,7 @@ void test_new_hashmaps()
     ilog("Starting new hashmap test");
 
     hmap<u32, string> hm1{};
-    hmap_init(&hm1, hash_type, generate_rand_seed(), generate_rand_seed(), mem_global_arena(), 24);
+    hmap_init(&hm1, hash_type, generate_rand_seed(), generate_rand_seed(), mem_global_arena(), 48);
 
 #define IND_EXP(bucket_ind, bucket_cnt) (u32)(bucket_ind+bucket_cnt*hm1.buckets.size)
 
@@ -244,7 +244,27 @@ void test_new_hashmaps()
     }
 
     ilog("Buckets...");
-    hmap_debug_print(hm1);
+    hmap_debug_print(hm1.buckets);
+
+    hmap_rehash(&hm1, 96);
+
+    ilog("Forward...");
+    iter = hmap_first(&hm1);
+    while (iter) {
+        ilog("key: %s  value:%s", to_cstr((u32)iter->key), str_cstr(iter->val));
+        iter = hmap_next(&hm1, iter);
+    }
+
+    ilog("Reverse...");
+    iter = hmap_last(&hm1);
+    while (iter) {
+        ilog("key: %s  value:%s", to_cstr(iter->key), str_cstr(iter->val));
+        iter = hmap_prev(&hm1, iter);
+    }
+
+    ilog("Buckets...");
+    hmap_debug_print(hm1.buckets);
+    
     
     hmap_terminate(&hm1);
 }

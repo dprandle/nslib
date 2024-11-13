@@ -287,8 +287,9 @@ T *arr_emplace_back(static_array<T, N> *arr, Args &&...args)
 template<class T>
 void arr_clear_to(T *bufobj, const typename T::value_type &item)
 {
-    for (int i = 0; i < bufobj->capacity; ++i)
+    for (int i = 0; i < bufobj->size; ++i) {
         bufobj->data[i] = item;
+    }
 }
 
 template<class T>
@@ -296,20 +297,20 @@ void arr_pop_back(T *bufobj)
 {
     if (bufobj->size == 0)
         return;
-#if !defined(NDEBUG)
+    using MT = typename T::value_type;
+    bufobj->data[bufobj->size - 1].~MT();
     bufobj->data[bufobj->size - 1] = {};
-#endif
     --bufobj->size;
 }
 
 template<class T>
 void arr_clear(T *bufobj)
 {
+    using MT = typename T::value_type;
+    for (int i = 0; i < bufobj->size; ++i) {
+        bufobj->data[i].~MT();
+    }
     bufobj->size = 0;
-#if !defined(NDEBUG)
-    for (int i = 0; i < bufobj->capacity; ++i)
-        bufobj->data[i] = {};
-#endif
 }
 
 template<class T>
