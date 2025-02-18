@@ -1171,7 +1171,7 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
                 // Now update our material ubo with this mat data
                 material_ubo_data mat_ubo{};
                 mat_ubo.color = mat_iter->val->mat->col;
-                sizet byte_offset = (mati - 1) * sizeof(material_ubo_data);
+                sizet byte_offset = mati * sizeof(material_ubo_data);
                 char *adjusted_addr = (char *)dev->buffers[cur_frame->mat_ubo_ind].mem_info.pMappedData + byte_offset;
                 memcpy(adjusted_addr, &mat_ubo, sizeof(material_ubo_data));
 
@@ -1195,6 +1195,7 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
                     ++total_dci;
                 }
                 mat_iter = hmap_next(&pl_iter->val->mats, mat_iter);
+                ++mati;
             }
             pl_iter = hmap_next(&rp_iter->val->plines, pl_iter);
             ++pli;
