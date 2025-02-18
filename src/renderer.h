@@ -115,23 +115,23 @@ struct rmesh_entry
 // We use a single vertex and indice buffer for all meshes
 struct rmesh_info
 {
-    hashmap<rid, rmesh_entry> meshes;
+    hmap<rid, rmesh_entry> meshes;
     sbuffer_info verts;
     sbuffer_info inds;
 };
 struct render_pass_draw_group;
 struct frame_draw_info
 {
-    hashmap<rid, render_pass_draw_group *> rpasses;
+    hmap<rid, render_pass_draw_group *> rpasses;
 };
 // What we really want to do is have a big SSAO with all transforms for entire scene right?
 
 struct pipeline_info
 {
-    sizet plind;
-    rid id;
-    rid rpass_id;
-    mat4 proj_view;
+    sizet plind{};
+    rid id{};
+    rid rpass_id{};
+    mat4 proj_view{};
 };
 
 struct rpass_info
@@ -152,13 +152,13 @@ struct renderer
     mem_arena frame_fl;
 
     // Pipeline indices referenced by ids
-    hmap<rid, pipeline_info> pipelines;
+    hmap<rid, pipeline_info> pipelines{};
 
     // Render pass indices referenced by ids
-    hmap<rid, rpass_info> rpasses;
+    hmap<rid, rpass_info> rpasses{};
 
     // A mapping between framebuffers and render passes
-    hmap<sizet, array<rid> *> fb_rpasses;
+    //hmap<sizet, array<rid> *> fb_rpasses;
 
     // All frame draw call info
     frame_draw_info dcs;

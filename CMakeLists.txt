@@ -18,6 +18,8 @@ set(DEPS_DIR ${CMAKE_SOURCE_DIR}/deps)
 
 if(${CMAKE_BUILD_TYPE} STREQUAL Release)
   set(BUILD_DIR ${CMAKE_SOURCE_DIR}/build/release)
+elseif(${CMAKE_BUILD_TYPE} STREQUAL RelWithDebInfo)
+  set(BUILD_DIR ${CMAKE_SOURCE_DIR}/build/relwdeb)
 else()
   set(BUILD_DIR ${CMAKE_SOURCE_DIR}/build/debug)
 endif()

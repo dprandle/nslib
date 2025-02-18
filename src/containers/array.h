@@ -343,7 +343,6 @@ array<T> *arr_resize(array<T> *arr, sizet new_size, Args &&...args)
 
     // Make sure our current size doesn't exceed the capacity - it shouldnt that would definitely be a bug if it did.
     assert(arr->size <= arr->capacity);
-
     sizet cap = arr->capacity;
     if (new_size > cap) {
         if (cap < 1) {
@@ -353,7 +352,6 @@ array<T> *arr_resize(array<T> *arr, sizet new_size, Args &&...args)
             cap *= 2;
         arr_set_capacity(arr, cap);
     }
-
     for (sizet i = arr->size; i < new_size; ++i) {
         new (&arr->data[i]) T(std::forward<Args>(args)...);
     }

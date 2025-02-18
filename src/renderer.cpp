@@ -65,7 +65,7 @@ struct pipeline_draw_group
 {
     sizet set_ind;
     const pipeline_info *plinfo;
-    hashmap<rid, material_draw_group *> mats;
+    hmap<rid, material_draw_group *> mats;
 };
 
 struct render_pass_draw_group
@@ -75,7 +75,7 @@ struct render_pass_draw_group
     sizet oset{INVALID_IND};
     array<VkDescriptorSetLayout> sets_to_make;
     array<VkWriteDescriptorSet> desc_updates;
-    hashmap<rid, pipeline_draw_group *> plines;
+    hmap<rid, pipeline_draw_group *> plines;
 };
 
 intern int setup_render_pass(renderer *rndr)
@@ -344,7 +344,7 @@ intern int setup_rmesh_info(renderer *rndr)
 
     mem_init_pool_arena<sbuffer_entry_slnode>(&rndr->rmi.verts.node_pool, MAX_FREE_SBUFFER_NODE_COUNT, mem_global_stack_arena());
     mem_init_pool_arena<sbuffer_entry_slnode>(&rndr->rmi.inds.node_pool, MAX_FREE_SBUFFER_NODE_COUNT, mem_global_stack_arena());
-    hashmap_init(&rndr->rmi.meshes, mem_global_arena());
+    hmap_init(&rndr->rmi.meshes, hash_type);
 
     // Create the head nodes of our vert and index buffer free list - indice 0 and full buffer size
     auto vert_head = mem_alloc<sbuffer_entry_slnode>(&rndr->rmi.verts.node_pool);
@@ -405,7 +405,7 @@ intern sbuffer_entry find_sbuffer_block(sbuffer_info *sbuf, sizet req_size)
 // be drawn
 bool upload_to_gpu(mesh *msh, renderer *rndr)
 {
-    auto fiter = hashmap_find(&rndr->rmi.meshes, msh->id);
+    auto fiter = hmap_find(&rndr->rmi.meshes, msh->id);
     if (fiter) {
         return false;
     }
@@ -469,7 +469,7 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
              sub->inds.size);
     }
     // Add the smesh entry we just built to the renderer mesh entry map (stored by id)
-    hashmap_set(&rndr->rmi.meshes, msh->id, new_mentry);
+    hmap_set(&rndr->rmi.meshes, msh->id, new_mentry);
 
     return true;
 }
@@ -492,15 +492,15 @@ intern void insert_node_to_free_list(sbuffer_info *sbuf, const sbuffer_entry *en
 bool remove_from_gpu(mesh *msh, renderer *rndr)
 {
     // TODO: This code is basically completely untested
-    auto minfo = hashmap_find(&rndr->rmi.meshes, msh->id);
+    auto minfo = hmap_find(&rndr->rmi.meshes, msh->id);
     if (minfo) {
-        for (int subi = 0; subi < minfo->value.submesh_entrees.size; ++subi) {
+        for (int subi = 0; subi < minfo->val.submesh_entrees.size; ++subi) {
             // Insert the block to our free list
-            auto cur_entry = &minfo->value.submesh_entrees[subi];
+            auto cur_entry = &minfo->val.submesh_entrees[subi];
             insert_node_to_free_list(&rndr->rmi.verts, &cur_entry->verts);
             insert_node_to_free_list(&rndr->rmi.inds, &cur_entry->inds);
         }
-        hashmap_remove(&rndr->rmi.meshes, msh->id);
+        hmap_remove(&rndr->rmi.meshes, msh->id);
     }
     return minfo;
 }
@@ -754,20 +754,22 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
     vkCmdBindIndexBuffer(cmd_buf->hndl, ind_buf->hndl, 0, VK_INDEX_TYPE_UINT16);
 
     sizet rpass_i{};
-    while (auto rpass_iter = hashmap_iter(&rndr->dcs.rpasses, &rpass_i)) {
+    auto rpass_iter = hmap_first(&rndr->dcs.rpasses);
+    while (rpass_iter) {
         // Bind frame rpass descriptor set
-        auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->value->fset].hndl;
+        auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->val->fset].hndl;
         vkCmdBindDescriptorSets(
             cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, G_FRAME_PL_LAYOUT, DESCRIPTOR_SET_LAYOUT_FRAME, 1, &ds, 0, nullptr);
 
         // We could make our render pass have the vert/index buffer info.. ie
         sizet pl_i{};
-        while (auto pl_iter = hashmap_iter(&rpass_iter->value->plines, &pl_i)) {
+        auto pl_iter = hmap_first(&rpass_iter->val->plines);
+        while (pl_iter) {
             // Grab the pipeline and set it, and set the viewport/scissor
-            auto pipeline = &dev->pipelines[pl_iter->value->plinfo->plind];
+            auto pipeline = &dev->pipelines[pl_iter->val->plinfo->plind];
             vkCmdBindPipeline(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->hndl);
 
-            auto ds = cur_frame->desc_pool.desc_sets[pl_iter->value->set_ind].hndl;
+            auto ds = cur_frame->desc_pool.desc_sets[pl_iter->val->set_ind].hndl;
             vkCmdBindDescriptorSets(
                 cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, DESCRIPTOR_SET_LAYOUT_PIPELINE, 1, &ds, 0, nullptr);
 
@@ -786,17 +788,18 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
             vkCmdSetScissor(cmd_buf->hndl, 0, 1, &scissor);
 
             sizet mat_i{};
-            while (auto mat_iter = hashmap_iter(&pl_iter->value->mats, &mat_i)) {
+            auto mat_iter = hmap_first(&pl_iter->val->mats);
+            while (mat_iter) {
                 // Bind the material set
-                auto ds = cur_frame->desc_pool.desc_sets[mat_iter->value->set_ind].hndl;
+                auto ds = cur_frame->desc_pool.desc_sets[mat_iter->val->set_ind].hndl;
                 vkCmdBindDescriptorSets(
                     cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, DESCRIPTOR_SET_LAYOUT_MATERIAL, 1, &ds, 0, nullptr);
 
                 sizet obj_set_ind{INVALID_IND};
-                for (u32 dci = 0; dci < mat_iter->value->dcs.size; ++dci) {
-                    const draw_call *cur_dc = &mat_iter->value->dcs[dci];
+                for (u32 dci = 0; dci < mat_iter->val->dcs.size; ++dci) {
+                    const draw_call *cur_dc = &mat_iter->val->dcs[dci];
 
-                    auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->value->oset].hndl;
+                    auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->val->oset].hndl;
                     u32 dyn_offset = dci * sizeof(obj_ubo_data);
                     vkCmdBindDescriptorSets(cmd_buf->hndl,
                                             VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -816,8 +819,11 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
                                      cur_dc->vertex_offset,
                                      cur_dc->first_instance);
                 }
+                mat_iter = hmap_next(&pl_iter->val->mats, mat_iter);
             }
+            pl_iter = hmap_next(&rpass_iter->val->plines, pl_iter);
         }
+        rpass_iter = hmap_next(&rndr->dcs.rpasses, rpass_iter);
     }
 
     vkr_cmd_end_rpass(cmd_buf);
@@ -860,6 +866,7 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
                  DEVICE_EXTENSION_COUNT,
                  VALIDATION_LAYERS,
                  VALIDATION_LAYER_COUNT};
+    ilog("here3");
 
     if (vkr_init(&vkii, rndr->vk) != err_code::VKR_NO_ERROR) {
         return err_code::RENDER_INIT_FAIL;
@@ -965,7 +972,7 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
     auto dev = &rndr->vk->inst.device;
     auto cur_frame = get_current_frame(rndr);
 
-    auto rmesh = hashmap_find(&rndr->rmi.meshes, sm->mesh_id);
+    auto rmesh = hmap_find(&rndr->rmi.meshes, sm->mesh_id);
     static auto default_mat = get_robj(DEFAULT_MAT_ID, mat_cache);
     assert(rmesh);
 
@@ -973,7 +980,7 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
     // TODO: Create a default material to fall back on in the case that a submesh does not have a material
     auto msh = get_robj(sm->mesh_id, msh_cache);
     assert(msh);
-    assert(rmesh->value.submesh_entrees.size == msh->submeshes.size);
+    assert(rmesh->val.submesh_entrees.size == msh->submeshes.size);
     sizet cur_desc_ind = cur_frame->desc_pool.desc_sets.size;
 
     for (int i = 0; i < msh->submeshes.size; ++i) {
@@ -997,14 +1004,14 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
             assert(rp_fiter);
 
             // If the render pass has not yet been added to our renderer's push list, add it now
-            auto push_rp_fiter = hashmap_find(&rndr->dcs.rpasses, rp_fiter->key);
+            auto push_rp_fiter = hmap_find(&rndr->dcs.rpasses, rp_fiter->key);
             if (!push_rp_fiter) {
                 auto rpdg = mem_alloc<render_pass_draw_group>(&rndr->frame_fl);
                 memset(rpdg, 0, sizeof(render_pass_draw_group));
                 rpdg->rpinfo = &rp_fiter->val;
                 arr_init(&rpdg->desc_updates, &rndr->frame_fl);
                 arr_init(&rpdg->sets_to_make, &rndr->frame_fl);
-                hashmap_init(&rpdg->plines, &rndr->frame_fl);
+                hmap_init(&rpdg->plines, hash_type, generate_rand_seed(), generate_rand_seed(), &rndr->frame_fl);
 
                 // Add the frame rpass descriptor set
                 arr_emplace_back(&rpdg->sets_to_make, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_FRAME]);
@@ -1016,32 +1023,30 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
                 rpdg->oset = cur_desc_ind;
                 ++cur_desc_ind;
 
-                hashmap_set(&rndr->dcs.rpasses, rp_fiter->key, rpdg);
-                push_rp_fiter = hashmap_find(&rndr->dcs.rpasses, rp_fiter->key);
+                push_rp_fiter = hmap_insert(&rndr->dcs.rpasses, rp_fiter->key, rpdg);
             }
             assert(push_rp_fiter);
 
             // If the pipeline has not yey been added to our render pass' push list, add it now
-            auto push_pl_fiter = hashmap_find(&push_rp_fiter->value->plines, pl_fiter->key);
+            auto push_pl_fiter = hmap_find(&push_rp_fiter->val->plines, pl_fiter->key);
             if (!push_pl_fiter) {
                 auto pldg = mem_alloc<pipeline_draw_group>(&rndr->frame_fl);
                 memset(pldg, 0, sizeof(pipeline_draw_group));
 
                 pldg->plinfo = &pl_fiter->val;
-                hashmap_init(&pldg->mats, &rndr->frame_fl);
+                hmap_init(&pldg->mats, hash_type, generate_rand_seed(), generate_rand_seed(), &rndr->frame_fl);
 
                 // Add the pipeline discriptor set
-                arr_emplace_back(&push_rp_fiter->value->sets_to_make, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_PIPELINE]);
+                arr_emplace_back(&push_rp_fiter->val->sets_to_make, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_PIPELINE]);
                 pldg->set_ind = cur_desc_ind;
                 ++cur_desc_ind;
 
-                hashmap_set(&push_rp_fiter->value->plines, pl_fiter->key, pldg);
-                push_pl_fiter = hashmap_find(&push_rp_fiter->value->plines, pl_fiter->key);
+                push_pl_fiter = hmap_insert(&push_rp_fiter->val->plines, pl_fiter->key, pldg);
             }
             assert(push_pl_fiter);
 
             // Now create the material set, if it doesn't exist
-            auto push_mat_fiter = hashmap_find(&push_pl_fiter->value->mats, mat->id);
+            auto push_mat_fiter = hmap_find(&push_pl_fiter->val->mats, mat->id);
             if (!push_mat_fiter) {
                 auto matdg = mem_alloc<material_draw_group>(&rndr->frame_fl);
                 memset(matdg, 0, sizeof(material_draw_group));
@@ -1051,24 +1056,23 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
 
                 // Add the material discriptor set
                 // Add the pipeline discriptor set
-                arr_emplace_back(&push_rp_fiter->value->sets_to_make, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_MATERIAL]);
+                arr_emplace_back(&push_rp_fiter->val->sets_to_make, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_MATERIAL]);
                 matdg->set_ind = cur_desc_ind;
                 ++cur_desc_ind;
 
-                hashmap_set(&push_pl_fiter->value->mats, mat->id, matdg);
-                push_mat_fiter = hashmap_find(&push_pl_fiter->value->mats, mat->id);
+                push_mat_fiter = hmap_insert(&push_pl_fiter->val->mats, mat->id, matdg);
             }
             assert(push_mat_fiter);
 
             // Now we create the actual draw call, and add the tform to the tform uniform buffer and increase the cur index
-            draw_call dc{.index_count = (u32)rmesh->value.submesh_entrees[i].inds.size,
+            draw_call dc{.index_count = (u32)rmesh->val.submesh_entrees[i].inds.size,
                          .instance_count = 1,
-                         .first_index = (u32)rmesh->value.submesh_entrees[i].inds.offset,
-                         .vertex_offset = (u32)rmesh->value.submesh_entrees[i].verts.offset,
+                         .first_index = (u32)rmesh->val.submesh_entrees[i].inds.offset,
+                         .vertex_offset = (u32)rmesh->val.submesh_entrees[i].verts.offset,
                          .first_instance = 0,
                          .tf = &tf->cached};
 
-            arr_push_back(&push_mat_fiter->value->dcs, dc);
+            arr_push_back(&push_mat_fiter->val->dcs, dc);
         }
     }
     return err_code::VKR_NO_ERROR;
@@ -1079,12 +1083,12 @@ int render_frame_begin(renderer *rndr, int finished_frame_count)
     auto dev = &rndr->vk->inst.device;
 
     // Clear our frame rendering entries
-    hashmap_terminate(&rndr->dcs.rpasses);
+    hmap_terminate(&rndr->dcs.rpasses);
 
     mem_reset_arena(&rndr->vk_frame_linear);
     mem_reset_arena(&rndr->frame_fl);
 
-    hashmap_init(&rndr->dcs.rpasses, &rndr->frame_fl);
+    hmap_init(&rndr->dcs.rpasses, hash_type, generate_rand_seed(), generate_rand_seed(), &rndr->frame_fl);
 
     // Update finished frames which is used to get the current frame
     rndr->finished_frames = finished_frame_count;
@@ -1112,14 +1116,15 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
     // Update all descriptor sets
     sizet rpi{};
     sizet total_dci{};
-    while (auto rp_iter = hashmap_iter(&rndr->dcs.rpasses, &rpi)) {
+    auto rp_iter = hmap_first(&rndr->dcs.rpasses);
+    while (rp_iter) {
         vkr_add_result desc_ind =
-            vkr_add_descriptor_sets(&cur_frame->desc_pool, rndr->vk, rp_iter->value->sets_to_make.data, rp_iter->value->sets_to_make.size);
+            vkr_add_descriptor_sets(&cur_frame->desc_pool, rndr->vk, rp_iter->val->sets_to_make.data, rp_iter->val->sets_to_make.size);
         if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
             return desc_ind.err_code;
         }
 
-        auto updates = &rp_iter->value->desc_updates;
+        auto updates = &rp_iter->val->desc_updates;
         // Now update our pipeline ubo with this pipeline data
         frame_ubo_data frame_ubo{};
         frame_ubo.frame_count = rndr->finished_frames;
@@ -1128,7 +1133,7 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
 
         // Add the frame rpass desc write update
         add_desc_write_update(
-            rndr, cur_frame, 0, sizeof(frame_ubo_data), cur_frame->frame_ubo_ind, rp_iter->value->fset, updates, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+            rndr, cur_frame, 0, sizeof(frame_ubo_data), cur_frame->frame_ubo_ind, rp_iter->val->fset, updates, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 
         // Add the dynamic per obj desc write update
         add_desc_write_update(rndr,
@@ -1136,17 +1141,18 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
                               0,
                               sizeof(obj_ubo_data),
                               cur_frame->obj_ubo_ind,
-                              rp_iter->value->oset,
+                              rp_iter->val->oset,
                               updates,
                               VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
 
         // Update material and pipeline UBOs and create the descriptor writes for them
-        sizet pli{};
-        while (auto pl_iter = hashmap_iter(&rp_iter->value->plines, &pli)) {
+        sizet pli{0};
+        auto pl_iter = hmap_first(&rp_iter->val->plines);
+        while (pl_iter) {
             // Now update our pipeline ubo with this pipeline data
             pipeline_ubo_data pl_ubo{};
-            pl_ubo.proj_view = pl_iter->value->plinfo->proj_view;
-            sizet byte_offset = (pli - 1) * sizeof(pipeline_ubo_data);
+            pl_ubo.proj_view = pl_iter->val->plinfo->proj_view;
+            sizet byte_offset = pli * sizeof(pipeline_ubo_data);
             char *adjusted_addr = (char *)dev->buffers[cur_frame->pl_ubo_ind].mem_info.pMappedData + byte_offset;
             memcpy(adjusted_addr, &pl_ubo, sizeof(pipeline_ubo_data));
 
@@ -1155,15 +1161,16 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
                                   byte_offset,
                                   sizeof(pipeline_ubo_data),
                                   cur_frame->pl_ubo_ind,
-                                  pl_iter->value->set_ind,
+                                  pl_iter->val->set_ind,
                                   updates,
                                   VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 
             sizet mati{};
-            while (auto mat_iter = hashmap_iter(&pl_iter->value->mats, &mati)) {
+            auto mat_iter = hmap_first(&pl_iter->val->mats);
+            while (mat_iter) {
                 // Now update our material ubo with this mat data
                 material_ubo_data mat_ubo{};
-                mat_ubo.color = mat_iter->value->mat->col;
+                mat_ubo.color = mat_iter->val->mat->col;
                 sizet byte_offset = (mati - 1) * sizeof(material_ubo_data);
                 char *adjusted_addr = (char *)dev->buffers[cur_frame->mat_ubo_ind].mem_info.pMappedData + byte_offset;
                 memcpy(adjusted_addr, &mat_ubo, sizeof(material_ubo_data));
@@ -1173,13 +1180,13 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
                                       byte_offset,
                                       sizeof(material_ubo_data),
                                       cur_frame->mat_ubo_ind,
-                                      mat_iter->value->set_ind,
+                                      mat_iter->val->set_ind,
                                       updates,
                                       VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 
-                for (int dci = 0; dci < mat_iter->value->dcs.size; ++dci) {
+                for (int dci = 0; dci < mat_iter->val->dcs.size; ++dci) {
                     // Now update our object ubo with this dc data and update the total count
-                    auto cur_dc = &mat_iter->value->dcs[dci];
+                    auto cur_dc = &mat_iter->val->dcs[dci];
                     obj_ubo_data oubo{};
                     oubo.transform = *cur_dc->tf;
                     sizet byte_offset = total_dci * sizeof(obj_ubo_data);
@@ -1187,10 +1194,14 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
                     memcpy(adjusted_addr, &oubo, sizeof(obj_ubo_data));
                     ++total_dci;
                 }
+                mat_iter = hmap_next(&pl_iter->val->mats, mat_iter);
             }
+            pl_iter = hmap_next(&rp_iter->val->plines, pl_iter);
+            ++pli;
         }
 
-        vkUpdateDescriptorSets(dev->hndl, rp_iter->value->desc_updates.size, rp_iter->value->desc_updates.data, 0, nullptr);
+        vkUpdateDescriptorSets(dev->hndl, rp_iter->val->desc_updates.size, rp_iter->val->desc_updates.data, 0, nullptr);
+        rp_iter = hmap_next(&rndr->dcs.rpasses, rp_iter);
     }
     return err_code::VKR_NO_ERROR;
 }
@@ -1261,12 +1272,12 @@ int render_frame_end(renderer *rndr, camera *cam)
 
 void terminate_renderer(renderer *rndr)
 {
-    hashmap_terminate(&rndr->dcs.rpasses);
+    hmap_terminate(&rndr->dcs.rpasses);
     mem_reset_arena(&rndr->vk_frame_linear);
     mem_reset_arena(&rndr->frame_fl);
 
     // These are stack arenas so must go in this order
-    hashmap_terminate(&rndr->rmi.meshes);
+    hmap_terminate(&rndr->rmi.meshes);
     mem_terminate_arena(&rndr->rmi.inds.node_pool);
     mem_terminate_arena(&rndr->rmi.verts.node_pool);
 

@@ -4,7 +4,7 @@
 
 namespace nslib
 {
-#define DEFAULT_HMAP_BUCKET_COUNT 64
+#define DEFAULT_HMAP_BUCKET_COUNT 67
 
 enum hmap_bucket_flags
 {
@@ -14,8 +14,8 @@ enum hmap_bucket_flags
 template<typename Key, typename Val>
 struct hmap_item
 {
-    Key key;
-    Val val;
+    Key key{};
+    Val val{};
     sizet next{INVALID_IND};
     sizet prev{INVALID_IND};
 };
@@ -37,12 +37,12 @@ using hash_func = u64(const Key &, u64, u64);
 template<typename Key, typename Val>
 struct hmap
 {
-    hash_func<Key> *hashf;
-    u64 seed0;
-    u64 seed1;
-    array<hmap_bucket<Key, Val>> buckets;
-    sizet head{INVALID_IND};
-    sizet count;
+    hash_func<Key> *hashf{};
+    u64 seed0{};
+    u64 seed1{};
+    array<hmap_bucket<Key, Val>> buckets{};
+    sizet head{};
+    sizet count{0};
 };
 
 template<typename Key, typename Val>
@@ -56,7 +56,7 @@ void hmap_debug_print(const array<hmap_bucket<Key, Val>> &buckets)
              b->prev,
              b->next,
              to_cstr(b->item.key),
-             str_cstr(b->item.val),
+             to_cstr(b->item.val),
              b->item.prev,
              b->item.next);
     }
@@ -69,11 +69,13 @@ void hmap_init(hmap<Key, Val> *hm,
                u64 seed1 = generate_rand_seed(),
                mem_arena *arena = mem_global_arena(),
                sizet initial_capacity = DEFAULT_HMAP_BUCKET_COUNT,
-               sizet mem_alignment = DEFAULT_MIN_ALIGNMENT)
+               sizet mem_alignment = SIMD_MIN_ALIGNMENT)
 {
     hm->hashf = hashf;
     hm->seed0 = seed0;
     hm->seed1 = seed1;
+    hm->head = INVALID_IND;
+    hm->count = 0;
     arr_init(&hm->buckets, arena, initial_capacity, mem_alignment);
     arr_resize(&hm->buckets, initial_capacity);
 }
