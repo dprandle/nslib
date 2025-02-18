@@ -131,7 +131,7 @@ intern int setup_render_pass(renderer *rndr)
 
     int ret = vkr_init_render_pass(vk, &rp_cfg, &vk->inst.device.render_passes[rpi.rpind]);
     if (ret == err_code::VKR_NO_ERROR) {
-        hashmap_set(&rndr->rpasses, rpi.id, rpi);
+        hmap_set(&rndr->rpasses, rpi.id, rpi);
     }
     return ret;
 }
@@ -287,16 +287,16 @@ intern int setup_pipeline(renderer *rndr)
         info.shader_stages[i].entry_point = "main";
     }
 
-    auto rpass_fiter = hashmap_find(&rndr->rpasses, FWD_RPASS);
+    auto rpass_fiter = hmap_find(&rndr->rpasses, FWD_RPASS);
     if (rpass_fiter) {
-        info.rpass = &vk->inst.device.render_passes[rpass_fiter->value.rpind];
+        info.rpass = &vk->inst.device.render_passes[rpass_fiter->val.rpind];
         pipeline_info plinfo{};
         plinfo.id = PLINE_FWD_RPASS_S0_OPAQUE;
         plinfo.plind = vkr_add_pipeline(&vk->inst.device, {});
-        plinfo.rpass_id = rpass_fiter->value.id;
+        plinfo.rpass_id = rpass_fiter->val.id;
         int code = vkr_init_pipeline(vk, &info, &vk->inst.device.pipelines[plinfo.plind]);
         if (code == err_code::VKR_NO_ERROR) {
-            hashmap_set(&rndr->pipelines, plinfo.id, plinfo);
+            hmap_set(&rndr->pipelines, plinfo.id, plinfo);
 
             // Set our global frame layout
             G_FRAME_PL_LAYOUT = vk->inst.device.pipelines[plinfo.plind].layout_hndl;
@@ -607,12 +607,12 @@ intern int init_swapchain_framebuffers(renderer *rndr)
     }
 
     // We need the render pass associated with our main framebuffer
-    auto rp_fiter = hashmap_find(&rndr->rpasses, FWD_RPASS);
+    auto rp_fiter = hmap_find(&rndr->rpasses, FWD_RPASS);
     assert(rp_fiter);
     if (rp_fiter) {
         vkr_init_swapchain_framebuffers(dev,
                                         vk,
-                                        &dev->render_passes[rp_fiter->value.rpind],
+                                        &dev->render_passes[rp_fiter->val.rpind],
                                         vkr_framebuffer_attachment{dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind]});
     }
     return err;
@@ -652,7 +652,7 @@ intern int setup_rendering(renderer *rndr)
     ////////////////////////////////////////////////////////////////////////////////
     // Create uniform buffers and descriptor sets pointing to them for each frame //
     ////////////////////////////////////////////////////////////////////////////////
-    auto pline = hashmap_find(&rndr->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
+    auto pline = hmap_find(&rndr->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
     assert(pline);
     if (!pline) {
         return err_code::RENDER_INIT_FAIL;
@@ -835,8 +835,8 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
     rndr->vk = mem_alloc<vkr_context>(&rndr->vk_free_list, 8);
     memset(rndr->vk, 0, sizeof(vkr_context));
 
-    hashmap_init(&rndr->rpasses, fl_arena);
-    hashmap_init(&rndr->pipelines, fl_arena);
+    hmap_init(&rndr->rpasses, hash_type, generate_rand_seed(), generate_rand_seed(), fl_arena);
+    hmap_init(&rndr->pipelines, hash_type, generate_rand_seed(), generate_rand_seed(), fl_arena);
 
     // Set up our draw call list render pass hashmap with frame linear memory
     // hashmap_init(&rndr->dcs.rpasses, &rndr->frame_fl);
@@ -988,12 +988,12 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
         sizet pli{};
         // Go through all pipelines this material references
         while (auto pl_iter = hashset_iter(&mat->pipelines, &pli)) {
-            auto pl_fiter = hashmap_find(&rndr->pipelines, *pl_iter);
+            auto pl_fiter = hmap_find(&rndr->pipelines, *pl_iter);
             assert(pl_fiter);
-            auto pline = &dev->pipelines[pl_fiter->value.plind];
+            auto pline = &dev->pipelines[pl_fiter->val.plind];
 
             // Get the pipelines render pass
-            auto rp_fiter = hashmap_find(&rndr->rpasses, pl_fiter->value.rpass_id);
+            auto rp_fiter = hmap_find(&rndr->rpasses, pl_fiter->val.rpass_id);
             assert(rp_fiter);
 
             // If the render pass has not yet been added to our renderer's push list, add it now
@@ -1001,7 +1001,7 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
             if (!push_rp_fiter) {
                 auto rpdg = mem_alloc<render_pass_draw_group>(&rndr->frame_fl);
                 memset(rpdg, 0, sizeof(render_pass_draw_group));
-                rpdg->rpinfo = &rp_fiter->value;
+                rpdg->rpinfo = &rp_fiter->val;
                 arr_init(&rpdg->desc_updates, &rndr->frame_fl);
                 arr_init(&rpdg->sets_to_make, &rndr->frame_fl);
                 hashmap_init(&rpdg->plines, &rndr->frame_fl);
@@ -1027,7 +1027,7 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
                 auto pldg = mem_alloc<pipeline_draw_group>(&rndr->frame_fl);
                 memset(pldg, 0, sizeof(pipeline_draw_group));
 
-                pldg->plinfo = &pl_fiter->value;
+                pldg->plinfo = &pl_fiter->val;
                 hashmap_init(&pldg->mats, &rndr->frame_fl);
 
                 // Add the pipeline discriptor set
@@ -1225,9 +1225,9 @@ int render_frame_end(renderer *rndr, camera *cam)
 
     // Update our main pipeline view_proj with the cam transform update
     if (cam) {
-        auto pline_to_update = hashmap_find(&rndr->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
+        auto pline_to_update = hmap_find(&rndr->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
         assert(pline_to_update);
-        pline_to_update->value.proj_view = cam->proj * cam->view;
+        pline_to_update->val.proj_view = cam->proj * cam->view;
     }
 
     // Update all uniform buffers and write the descriptor set updates for them
@@ -1277,8 +1277,8 @@ void terminate_renderer(renderer *rndr)
     mem_terminate_arena(&rndr->vk_frame_linear);
     mem_terminate_arena(&rndr->frame_fl);
 
-    hashmap_terminate(&rndr->rpasses);
-    hashmap_terminate(&rndr->pipelines);
+    hmap_terminate(&rndr->rpasses);
+    hmap_terminate(&rndr->pipelines);
 }
 
 } // namespace nslib

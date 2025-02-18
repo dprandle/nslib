@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdlib>
 #include "archive_common.h"
 
 namespace nslib
@@ -17,7 +16,7 @@ pup_func(version_info)
     pup_member(major);
     pup_member(minor);
     pup_member(patch);
-}    
+}
 
 template<class F, class S>
 struct key_val_pair
@@ -33,7 +32,7 @@ struct pair
     S second;
 };
 
-inline u64 generate_rand_seed() { return rand();}
+u64 generate_rand_seed();
 
 pup_func_tt(key_val_pair)
 {

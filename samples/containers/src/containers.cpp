@@ -1,7 +1,7 @@
 #include "platform.h"
 #include "logging.h"
 #include "rid.h"
-#include "string_archive.h"
+#include "containers/string.h"
 #include "hashfuncs.h"
 #include "containers/string.h"
 #include "containers/hashmap.h"
@@ -200,34 +200,34 @@ void test_new_hashmaps()
     ilog("Starting new hashmap test");
 
     hmap<u32, string> hm1{};
-    hmap_init(&hm1, hash_type, generate_rand_seed(), generate_rand_seed(), mem_global_arena(), 48);
+    hmap_init(&hm1, hash_type, generate_rand_seed(), generate_rand_seed(), mem_global_arena(), 24);
 
-#define IND_EXP(bucket_ind, bucket_cnt) (u32)(bucket_ind+bucket_cnt*hm1.buckets.size)
+#define IND_EXP(bucket_ind, bucket_cnt) (u32)(bucket_ind + bucket_cnt * hm1.buckets.size)
 
-    hmap_insert(&hm1, IND_EXP(0,0), string("0-bla"));
-    hmap_insert(&hm1, IND_EXP(0,1), string("0-blabla"));
-    hmap_insert(&hm1, IND_EXP(0,2), string("0-blablabla"));
-    hmap_insert(&hm1, IND_EXP(1,0), string("1-bla"));
-    hmap_insert(&hm1, IND_EXP(1,1), string("1-blabla"));
-    hmap_insert(&hm1, IND_EXP(1,2), string("1-blablabla"));
-    hmap_insert(&hm1, IND_EXP(2,0), string("2-bla"));
-    hmap_insert(&hm1, IND_EXP(2,1), string("2-blabla"));
-    hmap_insert(&hm1, IND_EXP(2,2), string("2-blablabla"));
-    hmap_insert(&hm1, IND_EXP(3,0), string("3-bla"));
-    hmap_insert(&hm1, IND_EXP(3,1), string("3-blabla"));
-    hmap_insert(&hm1, IND_EXP(3,2), string("3-blablabla"));
-    hmap_insert(&hm1, IND_EXP(4,0), string("4-bla"));
-    hmap_insert(&hm1, IND_EXP(4,1), string("4-blabla"));
-    hmap_insert(&hm1, IND_EXP(4,2), string("4-blablabla"));
-    hmap_insert(&hm1, IND_EXP(5,0), string("5-bla"));
-    hmap_insert(&hm1, IND_EXP(5,1), string("5-blabla"));
-    hmap_insert(&hm1, IND_EXP(5,2), string("5-blablabla"));
-    hmap_insert(&hm1, IND_EXP(6,0), string("6-bla"));
-    hmap_insert(&hm1, IND_EXP(6,1), string("6-blabla"));
-    hmap_insert(&hm1, IND_EXP(6,2), string("6-blablabla"));
-    hmap_insert(&hm1, IND_EXP(7,0), string("7-bla"));
-    hmap_insert(&hm1, IND_EXP(7,1), string("7-blabla"));
-    hmap_insert(&hm1, IND_EXP(7,2), string("7-blablabla"));
+    hmap_insert(&hm1, IND_EXP(0, 0), string("0-bla"));
+    hmap_insert(&hm1, IND_EXP(0, 1), string("0-blabla"));
+    hmap_insert(&hm1, IND_EXP(0, 2), string("0-blablabla"));
+    hmap_insert(&hm1, IND_EXP(1, 0), string("1-bla"));
+    hmap_insert(&hm1, IND_EXP(1, 1), string("1-blabla"));
+    hmap_insert(&hm1, IND_EXP(1, 2), string("1-blablabla"));
+    hmap_insert(&hm1, IND_EXP(2, 0), string("2-bla"));
+    hmap_insert(&hm1, IND_EXP(2, 1), string("2-blabla"));
+    hmap_insert(&hm1, IND_EXP(2, 2), string("2-blablabla"));
+    hmap_insert(&hm1, IND_EXP(3, 0), string("3-bla"));
+    hmap_insert(&hm1, IND_EXP(3, 1), string("3-blabla"));
+    hmap_insert(&hm1, IND_EXP(3, 2), string("3-blablabla"));
+    hmap_insert(&hm1, IND_EXP(4, 0), string("4-bla"));
+    hmap_insert(&hm1, IND_EXP(4, 1), string("4-blabla"));
+    hmap_insert(&hm1, IND_EXP(4, 2), string("4-blablabla"));
+    hmap_insert(&hm1, IND_EXP(5, 0), string("5-bla"));
+    hmap_insert(&hm1, IND_EXP(5, 1), string("5-blabla"));
+    hmap_insert(&hm1, IND_EXP(5, 2), string("5-blablabla"));
+    hmap_insert(&hm1, IND_EXP(6, 0), string("6-bla"));
+    hmap_insert(&hm1, IND_EXP(6, 1), string("6-blabla"));
+    hmap_insert(&hm1, IND_EXP(6, 2), string("6-blablabla"));
+    hmap_insert(&hm1, IND_EXP(7, 0), string("7-bla"));
+    hmap_insert(&hm1, IND_EXP(7, 1), string("7-blabla"));
+    hmap_insert(&hm1, IND_EXP(7, 2), string("7-blablabla"));
 
     ilog("Forward...");
     auto iter = hmap_first(&hm1);
@@ -246,7 +246,63 @@ void test_new_hashmaps()
     ilog("Buckets...");
     hmap_debug_print(hm1.buckets);
 
-    hmap_rehash(&hm1, 96);
+    auto fnd = hmap_find(&hm1, IND_EXP(5, 0));
+    ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
+    fnd = hmap_find(&hm1, IND_EXP(0, 2));
+    ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
+    fnd = hmap_find(&hm1, IND_EXP(6, 1));
+    ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
+    fnd = hmap_find(&hm1, IND_EXP(3, 0));
+    ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
+    fnd = hmap_find(&hm1, IND_EXP(1, 1));
+    ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
+    fnd = hmap_find(&hm1, IND_EXP(7, 2));
+    ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
+    fnd = hmap_find(&hm1, IND_EXP(2, 1));
+    ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
+    fnd = hmap_find(&hm1, IND_EXP(0, 0));
+    ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
+    fnd = hmap_find(&hm1, IND_EXP(4, 1));
+    ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
+    fnd = hmap_find(&hm1, IND_EXP(4, 4));
+    if (fnd) {
+        ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
+    }
+    else {
+        ilog("Could not find key %s", to_cstr(IND_EXP(4, 4)));
+    }
+    hmap_remove(&hm1, IND_EXP(0, 0));
+    hmap_remove(&hm1, IND_EXP(1, 2));
+    hmap_remove(&hm1, IND_EXP(2, 1));
+    hmap_remove(&hm1, IND_EXP(3, 0));
+    hmap_remove(&hm1, IND_EXP(4, 1));
+    hmap_remove(&hm1, IND_EXP(5, 2));
+    hmap_remove(&hm1, IND_EXP(6, 0));
+    hmap_remove(&hm1, IND_EXP(7, 2));
+
+    auto ins = hmap_insert(&hm1, IND_EXP(0, 0), string("0-bla"));
+    ilog("0-bla: %p", ins);
+
+    ins = hmap_insert(&hm1, IND_EXP(0, 1), string("0-blabla"));
+    ilog("0-blabla: %p", ins);
+
+    ins = hmap_insert(&hm1, IND_EXP(0, 2), string("0-blablabla"));
+    ilog("0-blablabla: %p", ins);
+
+    ins = hmap_insert(&hm1, IND_EXP(1, 0), string("1-bla"));
+    ilog("1-bla: %p", ins);
+
+    ins = hmap_insert(&hm1, IND_EXP(1, 1), string("1-blabla"));
+    ilog("1-blabla: %p", ins);
+
+    ins = hmap_insert(&hm1, IND_EXP(1, 2), string("1-blablabla"));
+    ilog("1-blablabla: %p", ins);
+
+    ins = hmap_insert(&hm1, IND_EXP(2, 0), string("2-bla"));
+    ilog("2-bla: %p", ins);
+
+    ins = hmap_insert(&hm1, IND_EXP(2, 1), string("2-blabla"));
+    ilog("2-blabla: %p", ins);
 
     ilog("Forward...");
     iter = hmap_first(&hm1);
@@ -264,8 +320,88 @@ void test_new_hashmaps()
 
     ilog("Buckets...");
     hmap_debug_print(hm1.buckets);
-    
-    
+
+    hmap_terminate(&hm1);
+}
+
+void test_new_hashmaps_string_keys()
+{
+    ilog("Starting new hashmap test");
+
+    hmap<rid, string> hm1{};
+
+    hmap_init(&hm1, hash_type, generate_rand_seed(), generate_rand_seed(), mem_global_arena());
+    hmap_insert(&hm1, rid("scooby"), string("scooby-data"));
+    hmap_insert(&hm1, rid("sandwiches"), string("sandwiches-data"));
+    hmap_insert(&hm1, rid("alowishish"), string("alowishish-data"));
+    hmap_insert(&hm1, rid("do-the-dance"), string("do-the-dance-data"));
+    hmap_insert(&hm1, rid("booty_cake"), string("booty_cake-data"));
+    hmap_insert(&hm1, rid("gogogo300"), string("gogogo300-data"));
+    hmap_insert(&hm1, rid("67-under"), string("67-under-data"));
+    hmap_insert(&hm1, rid("kjhj"), string("kjhj-data"));
+    hmap_insert(&hm1, rid("lemar"), string("lemar-data"));
+
+    ilog("Forward...");
+    auto iter = hmap_first(&hm1);
+    while (iter) {
+        ilog("key: %s  value:%s", to_cstr(iter->key), str_cstr(iter->val));
+        iter = hmap_next(&hm1, iter);
+    }
+
+    ilog("Reverse...");
+    iter = hmap_last(&hm1);
+    while (iter) {
+        ilog("key: %s  value:%s", to_cstr(iter->key), str_cstr(iter->val));
+        iter = hmap_prev(&hm1, iter);
+    }
+
+    ilog("Buckets...");
+    hmap_debug_print(hm1.buckets);
+
+    hmap_remove(&hm1, rid("do-the-dance"));
+    hmap_remove(&hm1, rid("booty_cake"));
+    hmap_remove(&hm1, rid("gogogo300"));
+    hmap_remove(&hm1, rid("67-under"));
+
+    ilog("Forward...");
+    iter = hmap_first(&hm1);
+    while (iter) {
+        ilog("key: %s  value:%s", to_cstr(iter->key), str_cstr(iter->val));
+        iter = hmap_next(&hm1, iter);
+    }
+
+    ilog("Reverse...");
+    iter = hmap_last(&hm1);
+    while (iter) {
+        ilog("key: %s  value:%s", to_cstr(iter->key), str_cstr(iter->val));
+        iter = hmap_prev(&hm1, iter);
+    }
+
+    ilog("Buckets...");
+    hmap_debug_print(hm1.buckets);
+
+    hmap_insert(&hm1, rid("another"), string("another-data"));
+    hmap_insert(&hm1, rid("type-of"), string("type-of-data"));
+    hmap_insert(&hm1, rid("thing-that"), string("thing-that-data"));
+    hmap_insert(&hm1, rid("wereallyshould"), string("wereallyshould-data"));
+    hmap_insert(&hm1, rid("beadding"), string("beadding-data"));
+
+    ilog("Forward...");
+    iter = hmap_first(&hm1);
+    while (iter) {
+        ilog("key: %s  value:%s", to_cstr(iter->key), str_cstr(iter->val));
+        iter = hmap_next(&hm1, iter);
+    }
+
+    ilog("Reverse...");
+    iter = hmap_last(&hm1);
+    while (iter) {
+        ilog("key: %s  value:%s", to_cstr(iter->key), str_cstr(iter->val));
+        iter = hmap_prev(&hm1, iter);
+    }
+
+    ilog("Buckets...");
+    hmap_debug_print(hm1.buckets);
     hmap_terminate(&hm1);
 }
 
@@ -275,6 +411,7 @@ int app_init(platform_ctxt *ctxt, void *)
     test_arrays();
     test_hashmaps();
     test_new_hashmaps();
+    test_new_hashmaps_string_keys();
     return err_code::PLATFORM_NO_ERROR;
 }
 

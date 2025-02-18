@@ -3,6 +3,7 @@
 #include "model.h"
 #include "math/matrix4.h"
 #include "containers/array.h"
+#include "containers/hmap.h"
 
 namespace nslib
 {
@@ -151,13 +152,13 @@ struct renderer
     mem_arena frame_fl;
 
     // Pipeline indices referenced by ids
-    hashmap<rid, pipeline_info> pipelines;
+    hmap<rid, pipeline_info> pipelines;
 
     // Render pass indices referenced by ids
-    hashmap<rid, rpass_info> rpasses;
+    hmap<rid, rpass_info> rpasses;
 
     // A mapping between framebuffers and render passes
-    hashmap<sizet, array<rid> *> fb_rpasses;
+    hmap<sizet, array<rid> *> fb_rpasses;
 
     // All frame draw call info
     frame_draw_info dcs;

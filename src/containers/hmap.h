@@ -1,7 +1,6 @@
 #pragma once
-
-#include "../util.h"
 #include "array.h"
+#include "../util.h"
 
 namespace nslib
 {
@@ -30,8 +29,8 @@ struct hmap_bucket
     sizet prev{INVALID_IND};
 };
 
-template<typename Key>
-using hash_func = u64(Key, u64, u64);
+template<class Key>
+using hash_func = u64(const Key &, u64, u64);
 
 // Since hmap manages memory, but we want it to act like a built in type in terms of copying and equality testing, we
 // have to write copy ctor, dtor, assignment operator, and equality operators.
@@ -51,12 +50,12 @@ void hmap_debug_print(const array<hmap_bucket<Key, Val>> &buckets)
 {
     for (sizet i = 0; i < buckets.size; ++i) {
         auto b = &buckets[i];
-        dlog("Bucket: %lu  hval:%lu  prev:%lu  next:%lu  item [key:%d  val:%s  prev:%lu  next:%lu]",
+        dlog("Bucket: %lu  hval:%lu  prev:%lu  next:%lu  item [key:%s  val:%s  prev:%lu  next:%lu]",
              i,
              b->hashed_v,
              b->prev,
              b->next,
-             b->item.key,
+             to_cstr(b->item.key),
              str_cstr(b->item.val),
              b->item.prev,
              b->item.next);
@@ -87,33 +86,111 @@ sizet hmap_find_bucket(hmap<Key, Val> *hm, const Key &k)
         return false;
     }
     u64 hashval = hm->hashf(k, hm->seed0, hm->seed1);
+    sizet fnd_bckt = INVALID_IND;
     sizet bckt_ind = hashval % hm->buckets.size;
-    if (is_valid(hm->buckets[bckt_ind].prev)) {
-        while (hashval != hm->buckets[bckt_ind].hashed_v && is_valid(hm->buckets[bckt_ind].next)) {
-            bckt_ind = hm->buckets[bckt_ind].next;
-            if (hm->buckets[bckt_ind].hashed_v == hashval && hm->buckets[bckt_ind].item.key == k) {
-                return bckt_ind;
+    sizet cur_bckt_ind = bckt_ind;
+    sizet i = 0;
+    // Find the correct bucket first - hashed_v mod bucket count should give us bckt_ind if a match
+    while (cur_bckt_ind >= bckt_ind && is_valid(hm->buckets[cur_bckt_ind].prev) &&
+           (bckt_ind != (hm->buckets[cur_bckt_ind].hashed_v % hm->buckets.size))) {
+        cur_bckt_ind = (hashval + ++i) % hm->buckets.size;
+    }
+
+    // If we found a matching bucket
+    if (cur_bckt_ind != hm->buckets.size && is_valid(hm->buckets[cur_bckt_ind].prev)) {
+        // Follow the bucket linked list to check for matches on any of the items in the bucket
+        while (is_valid(cur_bckt_ind)) {
+            if ((hashval != hm->buckets[cur_bckt_ind].hashed_v || k != hm->buckets[cur_bckt_ind].item.key)) {
+                cur_bckt_ind = hm->buckets[cur_bckt_ind].next;
+            }
+            else {
+                fnd_bckt = cur_bckt_ind;
+                cur_bckt_ind = INVALID_IND;
             }
         }
     }
-    return INVALID_IND;
+    return fnd_bckt;
+}
+
+template<typename Key, typename Val>
+void hmap_copy_bucket(hmap<Key, Val> *hm, sizet dest_ind, sizet src_ind)
+{
+    auto cur_b = &hm->buckets[src_ind];
+
+    // If we are the tail node, we need to point the head node's prev dest ind.
+    if (!is_valid(cur_b->next)) {
+        auto cur_bckt = src_ind;
+        while (hm->buckets[cur_bckt].prev != src_ind) {
+            cur_bckt = hm->buckets[cur_bckt].prev;
+        }
+        if (cur_bckt != src_ind) {
+            hm->buckets[cur_bckt].prev = dest_ind;
+        }
+    }
+
+    if (hm->buckets[cur_b->prev].next == src_ind) {
+        hm->buckets[cur_b->prev].next = dest_ind;
+    }
+    if (is_valid(cur_b->next) && hm->buckets[cur_b->next].prev == src_ind) {
+        hm->buckets[cur_b->next].prev = dest_ind;
+    }
+
+    auto previ_b = &hm->buckets[cur_b->item.prev];
+    if (previ_b->item.next == src_ind) {
+        previ_b->item.next = dest_ind;
+    }
+    if (is_valid(cur_b->item.next) && hm->buckets[cur_b->item.next].item.prev == src_ind) {
+        hm->buckets[cur_b->item.next].item.prev = dest_ind;
+    }
+
+    hm->buckets[dest_ind] = hm->buckets[src_ind];
+    if (hm->buckets[dest_ind].prev == src_ind) {
+        hm->buckets[dest_ind].prev = dest_ind;
+    }
+    if (hm->buckets[dest_ind].item.prev == src_ind) {
+        hm->buckets[dest_ind].item.prev = dest_ind;
+    }
+    if (hm->buckets[hm->head].item.prev == src_ind) {
+        hm->buckets[hm->head].item.prev = dest_ind;
+    }
 }
 
 template<typename Key, typename Val>
 void hmap_clear_bucket(hmap<Key, Val> *hm, sizet bckt_ind)
 {
     assert(bckt_ind < hm->buckets.size);
+
     // If our next index is valid, use it to get the next bucket - set the next bucket's prev index to our prev index
     if (is_valid(hm->buckets[bckt_ind].next)) {
         hm->buckets[hm->buckets[bckt_ind].next].prev = hm->buckets[bckt_ind].prev;
     }
-    // If the prev bucket's next index is invalid, it means we are the head node of the bucket. If the prev bucket is us
-    // then we are the only node. If we are the head node, but not the only node in the bucket, then we want to preserve
-    // our next index so the other nodes can still be found even though we are removed
-    if (is_valid(hm->buckets[hm->buckets[bckt_ind].prev].next) || hm->buckets[bckt_ind].prev == bckt_ind) {
+
+    // If head is pointing to us (we are the last bucket), then make head point to our prev
+    if (hm->buckets[hm->head].item.prev == bckt_ind) {
+        hm->buckets[hm->head].item.prev = hm->buckets[bckt_ind].prev;
+    }
+
+    // If we are the tail node, we need to point the head node's prev to our prev. If we are the tail and the head node,
+    // this will just point the head nodes's (us) prev to our prev (us) essentially doing nothing, so we just skip it in
+    // that case (where the head node ind ends up as our ind)
+    if (!is_valid(hm->buckets[bckt_ind].next)) {
+        auto cur_bckt = bckt_ind;
+        while (hm->buckets[cur_bckt].prev != bckt_ind) {
+            cur_bckt = hm->buckets[cur_bckt].prev;
+        }
+        if (cur_bckt != bckt_ind) {
+            hm->buckets[cur_bckt].prev = hm->buckets[bckt_ind].prev;
+        }
+    }
+
+    // If the prev bucket's next index is invalid, it means we are the head node of the bucket. We only want to remove
+    // the node from the bucket ll if we are NOT the head node - or technically if we are the head node but the only
+    // node. The thing is, in that case, our next index will already be invalid anyways.
+    if (is_valid(hm->buckets[hm->buckets[bckt_ind].prev].next)) { // || hm->buckets[bckt_ind].prev == bckt_ind) {
         hm->buckets[hm->buckets[bckt_ind].prev].next = hm->buckets[bckt_ind].next;
         hm->buckets[bckt_ind].next = INVALID_IND;
     }
+
     // Set the previous ind to invalid - we don't set the hashed_v on purpose that is never used
     hm->buckets[bckt_ind].prev = INVALID_IND;
 
@@ -126,8 +203,32 @@ void hmap_clear_bucket(hmap<Key, Val> *hm, sizet bckt_ind)
     if (is_valid(hm->buckets[hm->buckets[bckt_ind].item.prev].item.next)) {
         hm->buckets[hm->buckets[bckt_ind].item.prev].item.next = hm->buckets[bckt_ind].item.next;
     }
+
     // Reset the bucket item
     hm->buckets[bckt_ind].item = {};
+}
+
+template<typename Key, typename Val>
+void hmap_remove_bucket(hmap<Key, Val> *hm, sizet bckt_ind)
+{
+    assert(bckt_ind < hm->buckets.size);
+    if (!is_valid(hm->buckets[bckt_ind].prev)) {
+        return;
+    }
+    sizet next_bckt = bckt_ind;
+    hmap_clear_bucket(hm, bckt_ind);
+    while (1) {
+        next_bckt = (next_bckt + 1) % hm->buckets.size;
+        if (next_bckt < bckt_ind || !is_valid(hm->buckets[next_bckt].prev)) {
+            break;
+        }
+        sizet target_bckt = hm->buckets[next_bckt].hashed_v % hm->buckets.size;
+        if (next_bckt > bckt_ind && (target_bckt <= bckt_ind || target_bckt > next_bckt)) {
+            hmap_copy_bucket(hm, bckt_ind, next_bckt);
+            bckt_ind = next_bckt;
+        }
+    }
+    hm->buckets[bckt_ind] = {};
 }
 
 template<typename Key, typename Val>
@@ -147,7 +248,7 @@ hmap_item<Key, Val> *hmap_erase(hmap<Key, Val> *hm, const hmap_item<Key, Val> *i
     if (!is_valid(bckt_ind)) {
         bckt_ind = item->prev;
     }
-    hmap_clear_bucket(hm, bckt_ind);
+    hmap_remove_bucket(hm, bckt_ind);
     return ret;
 }
 
@@ -156,7 +257,7 @@ bool hmap_remove(hmap<Key, Val> *hm, const Key &k)
 {
     sizet bckt_ind = hmap_find_bucket(hm, k);
     if (bckt_ind != INVALID_IND) {
-        hmap_clear_bucket(hm, bckt_ind);
+        hmap_remove_bucket(hm, bckt_ind);
         return true;
     }
     return false;
@@ -173,7 +274,7 @@ hmap_item<Key, Val> *hmap_find(hmap<Key, Val> *hm, const Key &k)
 }
 
 template<typename Key, typename Val>
-hmap_item<Key, Val> *hmap_insert(hmap<Key, Val> *hm, const Key &k, const Val &val)
+hmap_item<Key, Val> *hmap_insert_or_set(hmap<Key, Val> *hm, const Key &k, const Val &val, bool set_if_exists)
 {
     assert(hm->hashf);
     if (hm->buckets.size == 0) {
@@ -188,7 +289,7 @@ hmap_item<Key, Val> *hmap_insert(hmap<Key, Val> *hm, const Key &k, const Val &va
     // item however).
     auto cur_bckt_ind = bckt_ind;
     auto head_bckt_ind = INVALID_IND;
-    sizet cur_hval = hashval;
+    sizet i{};
     while (is_valid(hm->buckets[cur_bckt_ind].prev)) {
         // If we found a match (both hashed_v and the actual key) then return null
         if (hm->buckets[cur_bckt_ind].hashed_v == hashval && hm->buckets[cur_bckt_ind].item.key == k) {
@@ -201,7 +302,7 @@ hmap_item<Key, Val> *hmap_insert(hmap<Key, Val> *hm, const Key &k, const Val &va
         }
 
         // TODO: Check if bitwise & is any faster
-        cur_bckt_ind = cur_hval++ % hm->buckets.size;
+        cur_bckt_ind = (hashval + ++i) % hm->buckets.size;
     }
 
     // New bucket insertion
@@ -213,7 +314,13 @@ hmap_item<Key, Val> *hmap_insert(hmap<Key, Val> *hm, const Key &k, const Val &va
     sizet n = hm->buckets[head_bckt_ind].next;
     while (is_valid(n)) {
         if (hm->buckets[n].hashed_v == hashval && hm->buckets[n].item.key == k) {
-            return nullptr;
+            if (set_if_exists) {
+                hm->buckets[n].item.val = val;
+                return &hm->buckets[n].item;
+            }
+            else {
+                return nullptr;
+            }
         }
         n = hm->buckets[n].next;
     }
@@ -275,6 +382,18 @@ hmap_item<Key, Val> *hmap_insert(hmap<Key, Val> *hm, const Key &k, const Val &va
 }
 
 template<typename Key, typename Val>
+hmap_item<Key, Val> *hmap_insert(hmap<Key, Val> *hm, const Key &k, const Val &val)
+{
+    return hmap_insert_or_set(hm, k, val, false);
+}
+
+template<typename Key, typename Val>
+hmap_item<Key, Val> *hmap_set(hmap<Key, Val> *hm, const Key &k, const Val &val)
+{
+    return hmap_insert_or_set(hm, k, val, true);
+}
+
+template<typename Key, typename Val>
 void hmap_clear(hmap<Key, Val> *hm)
 {
     hm->head = INVALID_IND;
@@ -292,8 +411,7 @@ void hmap_rehash(hmap<Key, Val> *hm, sizet new_size)
     do {
         hmap_insert(hm, tmp[ind].item.key, tmp[ind].item.val);
         ind = tmp[ind].item.next;
-    }
-    while (is_valid(ind));
+    } while (is_valid(ind));
 }
 
 template<typename Key, typename Val>
