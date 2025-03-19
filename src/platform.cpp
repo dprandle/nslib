@@ -1,4 +1,5 @@
 #include "basic_types.h"
+#include "osdef.h"
 #ifdef PLATFORM_UNIX
     #include <unistd.h>
     #include <pthread.h>

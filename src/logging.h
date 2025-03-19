@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdio>
-#include <inttypes.h>
+#include <cstdint>
 #include "osdef.h"
 
 #define tlog(...) nslib::lprint(nslib::GLOBAL_LOGGER, nslib::LOG_TRACE, __FILE__, __func__, __LINE__, __VA_ARGS__)

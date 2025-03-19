@@ -2,9 +2,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <cassert>
-
-#include "osdef.h"
-#include "limits.h"
+#include <climits>
 
 // Check if all of the flags in provided flags
 #define test_all_flags(bitmask, flags) (((bitmask) & (flags)) == (flags))
