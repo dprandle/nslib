@@ -1,7 +1,15 @@
 #pragma once
 
 #include <cstdio>
-#include "basic_types.h"
+#include <inttypes.h>
+#include "osdef.h"
+
+#define tlog(...) nslib::lprint(nslib::GLOBAL_LOGGER, nslib::LOG_TRACE, __FILE__, __func__, __LINE__, __VA_ARGS__)
+#define dlog(...) nslib::lprint(nslib::GLOBAL_LOGGER, nslib::LOG_DEBUG, __FILE__, __func__, __LINE__, __VA_ARGS__)
+#define ilog(...) nslib::lprint(nslib::GLOBAL_LOGGER, nslib::LOG_INFO, __FILE__, __func__, __LINE__, __VA_ARGS__)
+#define wlog(...) nslib::lprint(nslib::GLOBAL_LOGGER, nslib::LOG_WARN, __FILE__, __func__, __LINE__, __VA_ARGS__)
+#define elog(...) nslib::lprint(nslib::GLOBAL_LOGGER, nslib::LOG_ERROR, __FILE__, __func__, __LINE__, __VA_ARGS__)
+#define flog(...) nslib::lprint(nslib::GLOBAL_LOGGER, nslib::LOG_FATAL, __FILE__, __func__, __LINE__, __VA_ARGS__)
 
 struct tm;
 namespace nslib {
@@ -19,7 +27,7 @@ struct log_event
     void *udata;
     int line;
     int level;
-    u64 thread_id;
+    uint64_t thread_id;
 };
 
 using logging_cbfn = void(log_event *ev);
@@ -47,13 +55,6 @@ enum
     LOG_ERROR,
     LOG_FATAL
 };
-
-#define tlog(...) lprint(GLOBAL_LOGGER, LOG_TRACE, __FILE__, __func__, __LINE__, __VA_ARGS__)
-#define dlog(...) lprint(GLOBAL_LOGGER, LOG_DEBUG, __FILE__, __func__, __LINE__, __VA_ARGS__)
-#define ilog(...) lprint(GLOBAL_LOGGER, LOG_INFO, __FILE__, __func__, __LINE__, __VA_ARGS__)
-#define wlog(...) lprint(GLOBAL_LOGGER, LOG_WARN, __FILE__, __func__, __LINE__, __VA_ARGS__)
-#define elog(...) lprint(GLOBAL_LOGGER, LOG_ERROR, __FILE__, __func__, __LINE__, __VA_ARGS__)
-#define flog(...) lprint(GLOBAL_LOGGER, LOG_FATAL, __FILE__, __func__, __LINE__, __VA_ARGS__)
 
 logging_ctxt *create_logger(const char *name, int level, bool quiet);
 void destroy_logger(logging_ctxt *logger);

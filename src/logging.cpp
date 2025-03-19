@@ -3,7 +3,6 @@
 
 #include "platform.h"
 #include "logging.h"
-#include "string.h"
 
 #define MAX_CALLBACKS 32
 #define LOG_USE_COLOR
