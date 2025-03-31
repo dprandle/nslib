@@ -665,7 +665,7 @@ intern int setup_rendering(renderer *rndr)
         buf_cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
         buf_cfg.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
         buf_cfg.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-        buf_cfg.buffer_size = sizeof(frame_ubo_data);
+        buf_cfg.buffer_size = vkr_uniform_buffer_offset_alignment(vk, sizeof(frame_ubo_data));
         buf_cfg.alloc_flags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
         buf_cfg.vma_alloc = &dev->vma_alloc;
 
@@ -677,7 +677,7 @@ intern int setup_rendering(renderer *rndr)
         dev->rframes[i].frame_ubo_ind = vkr_add_buffer(dev, frame_uniform_buf);
 
         // Pipeline uniform buffer - per pipeline data
-        buf_cfg.buffer_size = MAX_PIPELINE_COUNT * sizeof(pipeline_ubo_data);
+        buf_cfg.buffer_size = MAX_PIPELINE_COUNT * vkr_uniform_buffer_offset_alignment(vk, sizeof(pipeline_ubo_data));
         vkr_buffer pl_uniform_buf{};
         err = vkr_init_buffer(&pl_uniform_buf, &buf_cfg);
         if (err != err_code::VKR_NO_ERROR) {
@@ -686,7 +686,7 @@ intern int setup_rendering(renderer *rndr)
         dev->rframes[i].pl_ubo_ind = vkr_add_buffer(dev, pl_uniform_buf);
 
         // Material uniform buffer - per material data
-        buf_cfg.buffer_size = MAX_MATERIAL_COUNT * sizeof(material_ubo_data);
+        buf_cfg.buffer_size = MAX_MATERIAL_COUNT * vkr_uniform_buffer_offset_alignment(vk, sizeof(material_ubo_data));
         vkr_buffer mat_uniform_buf{};
         err = vkr_init_buffer(&mat_uniform_buf, &buf_cfg);
         if (err != err_code::VKR_NO_ERROR) {
@@ -695,7 +695,7 @@ intern int setup_rendering(renderer *rndr)
         dev->rframes[i].mat_ubo_ind = vkr_add_buffer(dev, mat_uniform_buf);
 
         // Object uniform buffer - per material data
-        buf_cfg.buffer_size = MAX_OBJECT_COUNT * sizeof(obj_ubo_data);
+        buf_cfg.buffer_size = MAX_OBJECT_COUNT * vkr_uniform_buffer_offset_alignment(vk, sizeof(obj_ubo_data));
         vkr_buffer obj_uniform_buf{};
         err = vkr_init_buffer(&obj_uniform_buf, &buf_cfg);
         if (err != err_code::VKR_NO_ERROR) {
@@ -797,7 +797,8 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
                     const draw_call *cur_dc = &mat_iter->value->dcs[dci];
 
                     auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->value->oset].hndl;
-                    u32 dyn_offset = dci * sizeof(obj_ubo_data);
+                    sizet obj_ubo_item_size = vkr_uniform_buffer_offset_alignment(rndr->vk, sizeof(obj_ubo_data));
+                    u32 dyn_offset = dci * obj_ubo_item_size;
                     vkCmdBindDescriptorSets(cmd_buf->hndl,
                                             VK_PIPELINE_BIND_POINT_GRAPHICS,
                                             pipeline->layout_hndl,
@@ -1122,19 +1123,21 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
         auto updates = &rp_iter->value->desc_updates;
         // Now update our pipeline ubo with this pipeline data
         frame_ubo_data frame_ubo{};
+        sizet frame_ubo_item_size = vkr_uniform_buffer_offset_alignment(rndr->vk, sizeof(frame_ubo_data));
         frame_ubo.frame_count = rndr->finished_frames;
         char *addr = (char *)rndr->vk->inst.device.buffers[cur_frame->frame_ubo_ind].mem_info.pMappedData;
-        memcpy(addr, &frame_ubo, sizeof(frame_ubo_data));
+        memcpy(addr, &frame_ubo, frame_ubo_item_size);
 
         // Add the frame rpass desc write update
         add_desc_write_update(
-            rndr, cur_frame, 0, sizeof(frame_ubo_data), cur_frame->frame_ubo_ind, rp_iter->value->fset, updates, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+            rndr, cur_frame, 0, frame_ubo_item_size, cur_frame->frame_ubo_ind, rp_iter->value->fset, updates, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 
         // Add the dynamic per obj desc write update
+        sizet obj_ubo_item_size = vkr_uniform_buffer_offset_alignment(rndr->vk, sizeof(obj_ubo_data));
         add_desc_write_update(rndr,
                               cur_frame,
                               0,
-                              sizeof(obj_ubo_data),
+                              obj_ubo_item_size,
                               cur_frame->obj_ubo_ind,
                               rp_iter->value->oset,
                               updates,
@@ -1146,14 +1149,18 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
             // Now update our pipeline ubo with this pipeline data
             pipeline_ubo_data pl_ubo{};
             pl_ubo.proj_view = pl_iter->value->plinfo->proj_view;
-            sizet byte_offset = (pli - 1) * sizeof(pipeline_ubo_data);
-            char *adjusted_addr = (char *)dev->buffers[cur_frame->pl_ubo_ind].mem_info.pMappedData + byte_offset;
-            memcpy(adjusted_addr, &pl_ubo, sizeof(pipeline_ubo_data));
 
+            // Update the actual buffer data memory
+            sizet pl_ubo_item_size = vkr_uniform_buffer_offset_alignment(rndr->vk, sizeof(pipeline_ubo_data));
+            sizet byte_offset = (pli - 1) * pl_ubo_item_size;
+            char *adjusted_addr = (char *)dev->buffers[cur_frame->pl_ubo_ind].mem_info.pMappedData + byte_offset;
+            memcpy(adjusted_addr, &pl_ubo, pl_ubo_item_size);
+
+            // Update the descriptor set to point
             add_desc_write_update(rndr,
                                   cur_frame,
                                   byte_offset,
-                                  sizeof(pipeline_ubo_data),
+                                  pl_ubo_item_size,
                                   cur_frame->pl_ubo_ind,
                                   pl_iter->value->set_ind,
                                   updates,
@@ -1164,14 +1171,15 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
                 // Now update our material ubo with this mat data
                 material_ubo_data mat_ubo{};
                 mat_ubo.color = mat_iter->value->mat->col;
-                sizet byte_offset = (mati - 1) * sizeof(material_ubo_data);
+                sizet mat_ubo_item_size = vkr_uniform_buffer_offset_alignment(rndr->vk, sizeof(material_ubo_data));
+                sizet byte_offset = (mati - 1) * mat_ubo_item_size;
                 char *adjusted_addr = (char *)dev->buffers[cur_frame->mat_ubo_ind].mem_info.pMappedData + byte_offset;
-                memcpy(adjusted_addr, &mat_ubo, sizeof(material_ubo_data));
+                memcpy(adjusted_addr, &mat_ubo, mat_ubo_item_size);
 
                 add_desc_write_update(rndr,
                                       cur_frame,
                                       byte_offset,
-                                      sizeof(material_ubo_data),
+                                      mat_ubo_item_size,
                                       cur_frame->mat_ubo_ind,
                                       mat_iter->value->set_ind,
                                       updates,
@@ -1182,9 +1190,9 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
                     auto cur_dc = &mat_iter->value->dcs[dci];
                     obj_ubo_data oubo{};
                     oubo.transform = *cur_dc->tf;
-                    sizet byte_offset = total_dci * sizeof(obj_ubo_data);
+                    sizet byte_offset = total_dci * obj_ubo_item_size;
                     char *adjusted_addr = (char *)dev->buffers[cur_frame->obj_ubo_ind].mem_info.pMappedData + byte_offset;
-                    memcpy(adjusted_addr, &oubo, sizeof(obj_ubo_data));
+                    memcpy(adjusted_addr, &oubo, obj_ubo_item_size);
                     ++total_dci;
                 }
             }

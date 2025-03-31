@@ -2120,7 +2120,7 @@ sizet vkr_min_uniform_buffer_offset_alignment(vkr_context *vk)
 sizet vkr_uniform_buffer_offset_alignment(vkr_context *vk, sizet uniform_block_size)
 {
     auto min_alignment = vkr_min_uniform_buffer_offset_alignment(vk);
-    if (uniform_block_size % min_alignment == uniform_block_size) {
+    if (uniform_block_size % min_alignment == 0) {
         return uniform_block_size;
     }
     else {
