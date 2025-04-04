@@ -1,6 +1,7 @@
 #pragma once
 
 #include "basic_types.h"
+#include "osdef.h"
 
 #if defined(PLATFORM_UNIX)
 #include <ctime>
