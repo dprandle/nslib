@@ -697,6 +697,9 @@ int vkr_end_cmd_buf(const vkr_command_buffer *buf);
 void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf, const vkr_framebuffer *fb, const VkClearValue *att_clear_vals, sizet clear_val_size);
 void vkr_cmd_end_rpass(const vkr_command_buffer *cmd_buf);
 
+sizet vkr_min_uniform_buffer_offset_alignment(vkr_context *vk);
+sizet vkr_uniform_buffer_offset_alignment(vkr_context *vk, sizet uniform_block_size);
+
 struct vkr_image_transition_cfg
 {
     VkImageLayout old_layout;

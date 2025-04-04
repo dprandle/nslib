@@ -11,7 +11,7 @@
 #define PRINT_MEM_INSTANCE_ONLY false
 #define PRINT_MEM_OBJECT_ONLY true
 
-#define PRINT_MEM_GPU_ALLOC true
+#define PRINT_MEM_GPU_ALLOC false
 
 namespace nslib
 {
@@ -902,6 +902,7 @@ void vkr_recreate_swapchain(vkr_instance *inst, const vkr_context *vk)
     vkr_terminate_surface(vk, inst->surface);
     vkr_init_surface(vk, &inst->surface);
     vkr_init_swapchain(&inst->device.swapchain, vk);
+    //vkDeviceWaitIdle(inst->device.hndl);
 }
 
 vkr_add_result vkr_add_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, sizet count)
@@ -2111,6 +2112,23 @@ int vkr_end_cmd_buf(const vkr_command_buffer *buf)
     }
     return err_code::VKR_NO_ERROR;
 }
+
+sizet vkr_min_uniform_buffer_offset_alignment(vkr_context *vk)
+{
+    return vk->inst.pdev_info.props.limits.minUniformBufferOffsetAlignment;
+}
+
+sizet vkr_uniform_buffer_offset_alignment(vkr_context *vk, sizet uniform_block_size)
+{
+    auto min_alignment = vkr_min_uniform_buffer_offset_alignment(vk);
+    if (uniform_block_size % min_alignment == 0) {
+        return uniform_block_size;
+    }
+    else {
+        return (uniform_block_size / min_alignment + 1) * min_alignment;
+    }
+}
+
 
 void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf, const vkr_framebuffer *fb, const VkClearValue *att_clear_vals, sizet clear_val_size)
 {
