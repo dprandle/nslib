@@ -919,6 +919,7 @@ intern i32 acquire_swapchain_image(renderer *rndr, vkr_frame *cur_frame, u32 *im
     VkResult result = vkAcquireNextImageKHR(dev->hndl, dev->swapchain.swapchain, UINT64_MAX, cur_frame->image_avail, VK_NULL_HANDLE, im_ind);
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         recreate_swapchain(rndr);
+        return VK_ERROR_OUT_OF_DATE_KHR;
     }
     else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         elog("Failed to acquire swapchain image");
@@ -961,10 +962,7 @@ intern i32 present_image(renderer *rndr, vkr_frame *cur_frame, u32 image_ind)
     present_info.pImageIndices = &image_ind;
     present_info.pResults = nullptr; // Optional - check for individual swaps
     VkResult result = vkQueuePresentKHR(dev->qfams[VKR_QUEUE_FAM_TYPE_PRESENT].qs[0].hndl, &present_info);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
-        recreate_swapchain(rndr);
-    }
-    else if (result != VK_SUCCESS) {
+    if (result != VK_SUCCESS && result != VK_ERROR_OUT_OF_DATE_KHR && result != VK_SUBOPTIMAL_KHR) {
         elog("Failed to presenet KHR");
         return err_code::RENDER_PRESENT_KHR_FAIL;
     }
@@ -1226,6 +1224,9 @@ int render_frame_end(renderer *rndr, camera *cam)
     u32 im_ind{};
     i32 err = acquire_swapchain_image(rndr, cur_frame, &im_ind);
     if (err != err_code::RENDER_NO_ERROR) {
+        if (err == VK_ERROR_OUT_OF_DATE_KHR) {
+            return err_code::RENDER_NO_ERROR;
+        }
         return err;
     }
 
