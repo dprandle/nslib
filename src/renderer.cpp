@@ -825,6 +825,20 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
     return vkr_end_cmd_buf(cmd_buf);
 }
 
+intern vkr_frame *get_current_frame(renderer *rndr)
+{
+    // Grab the current in flight frame and its command buffer
+    int current_frame_ind = rndr->finished_frames % MAX_FRAMES_IN_FLIGHT;
+    return &rndr->vk->inst.device.rframes[current_frame_ind];
+}
+
+intern vkr_frame *get_previous_frame(renderer *rndr)
+{
+    // Grab the current in flight frame and its command buffer
+    int prev_frame_ind = (rndr->finished_frames-1) % MAX_FRAMES_IN_FLIGHT;
+    return &rndr->vk->inst.device.rframes[prev_frame_ind];
+}
+
 int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_arena *fl_arena)
 {
     assert(fl_arena->alloc_type == mem_alloc_type::FREE_LIST);
@@ -896,7 +910,7 @@ intern void recreate_swapchain(renderer *rndr)
 intern i32 acquire_swapchain_image(renderer *rndr, vkr_frame *cur_frame, u32 *im_ind)
 {
     auto dev = &rndr->vk->inst.device;
-
+    auto prev_frame = get_previous_frame(rndr);
     // Acquire the image, signal the image_avail semaphore once the image has been acquired. We get the index back, but
     // that doesn't mean the image is ready. The image is only ready (on the GPU side) once the image avail semaphore is triggered
     VkResult result = vkAcquireNextImageKHR(dev->hndl, dev->swapchain.swapchain, UINT64_MAX, cur_frame->image_avail, VK_NULL_HANDLE, im_ind);
@@ -952,13 +966,6 @@ intern i32 present_image(renderer *rndr, vkr_frame *cur_frame, u32 image_ind)
         return err_code::RENDER_PRESENT_KHR_FAIL;
     }
     return err_code::RENDER_NO_ERROR;
-}
-
-intern vkr_frame *get_current_frame(renderer *rndr)
-{
-    // Grab the current in flight frame and its command buffer
-    int current_frame_ind = rndr->finished_frames % MAX_FRAMES_IN_FLIGHT;
-    return &rndr->vk->inst.device.rframes[current_frame_ind];
 }
 
 int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const mesh_cache *msh_cache, const material_cache *mat_cache)
@@ -1230,6 +1237,7 @@ int render_frame_end(renderer *rndr, camera *cam)
         elog("Failed to reset fence");
         return err_code::RENDER_RESET_FENCE_FAIL;
     }
+
 
     // Update our main pipeline view_proj with the cam transform update
     if (cam) {

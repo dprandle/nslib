@@ -11,7 +11,7 @@
 #define PRINT_MEM_INSTANCE_ONLY false
 #define PRINT_MEM_OBJECT_ONLY true
 
-#define PRINT_MEM_GPU_ALLOC true
+#define PRINT_MEM_GPU_ALLOC false
 
 namespace nslib
 {
@@ -902,6 +902,7 @@ void vkr_recreate_swapchain(vkr_instance *inst, const vkr_context *vk)
     vkr_terminate_surface(vk, inst->surface);
     vkr_init_surface(vk, &inst->surface);
     vkr_init_swapchain(&inst->device.swapchain, vk);
+    //vkDeviceWaitIdle(inst->device.hndl);
 }
 
 vkr_add_result vkr_add_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, sizet count)
