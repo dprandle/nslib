@@ -962,7 +962,10 @@ intern i32 present_image(renderer *rndr, vkr_frame *cur_frame, u32 image_ind)
     present_info.pImageIndices = &image_ind;
     present_info.pResults = nullptr; // Optional - check for individual swaps
     VkResult result = vkQueuePresentKHR(dev->qfams[VKR_QUEUE_FAM_TYPE_PRESENT].qs[0].hndl, &present_info);
-    if (result != VK_SUCCESS && result != VK_ERROR_OUT_OF_DATE_KHR && result != VK_SUBOPTIMAL_KHR) {
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        recreate_swapchain(rndr);
+    }
+    else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         elog("Failed to presenet KHR");
         return err_code::RENDER_PRESENT_KHR_FAIL;
     }
