@@ -797,7 +797,7 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
 
                     auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->val->oset].hndl;
                     sizet obj_ubo_item_size = vkr_uniform_buffer_offset_alignment(rndr->vk, sizeof(obj_ubo_data));
-                    u32 dyn_offset = dci * obj_ubo_item_size;
+                    u32 dyn_offset = dci * (u32)obj_ubo_item_size;
                     vkCmdBindDescriptorSets(cmd_buf->hndl,
                                             VK_PIPELINE_BIND_POINT_GRAPHICS,
                                             pipeline->layout_hndl,
@@ -1212,7 +1212,7 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
             ++pli;
         }
 
-        vkUpdateDescriptorSets(dev->hndl, rp_iter->val->desc_updates.size, rp_iter->val->desc_updates.data, 0, nullptr);
+        vkUpdateDescriptorSets(dev->hndl, (u32)rp_iter->val->desc_updates.size, rp_iter->val->desc_updates.data, 0, nullptr);
         rp_iter = hmap_next(&rndr->dcs.rpasses, rp_iter);
     }
     return err_code::VKR_NO_ERROR;

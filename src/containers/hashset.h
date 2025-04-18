@@ -173,8 +173,8 @@ void hashset_terminate(hashset<T> *hs)
 template<class T>
 void hashset_init(hashset<T> *hs, mem_arena *arena, sizet mem_alignment = DEFAULT_MIN_ALIGNMENT)
 {
-    int seed0 = generate_rand_seed();
-    int seed1 = generate_rand_seed();
+    auto seed0 = generate_rand_seed();
+    auto seed1 = generate_rand_seed();
 
     // Hash func attempts to call the hash_type function
     auto hash_func = [](const void *item, u64 seed0, u64 seed1) -> u64 {
