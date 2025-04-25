@@ -199,35 +199,36 @@ void test_new_hashmaps()
 {
     ilog("Starting new hashmap test");
 
-    hmap<u32, string> hm1{};
-    hmap_init(&hm1, hash_type, generate_rand_seed(), generate_rand_seed(), mem_global_arena(), 24);
+    hmap<char, string> hm1{};
+    hmap_init(&hm1, hash_type);
+    int orig_mult = 24;
 
-#define IND_EXP(bucket_ind, bucket_cnt) (u32)(bucket_ind + bucket_cnt * hm1.buckets.size)
+#define IND_EXP(bucket_ind, bucket_cnt) (u32)(bucket_ind + bucket_cnt * orig_mult)
 
-    hmap_insert(&hm1, IND_EXP(0, 0), string("0-bla"));
-    hmap_insert(&hm1, IND_EXP(0, 1), string("0-blabla"));
-    hmap_insert(&hm1, IND_EXP(0, 2), string("0-blablabla"));
-    hmap_insert(&hm1, IND_EXP(1, 0), string("1-bla"));
-    hmap_insert(&hm1, IND_EXP(1, 1), string("1-blabla"));
-    hmap_insert(&hm1, IND_EXP(1, 2), string("1-blablabla"));
-    hmap_insert(&hm1, IND_EXP(2, 0), string("2-bla"));
-    hmap_insert(&hm1, IND_EXP(2, 1), string("2-blabla"));
-    hmap_insert(&hm1, IND_EXP(2, 2), string("2-blablabla"));
-    hmap_insert(&hm1, IND_EXP(3, 0), string("3-bla"));
-    hmap_insert(&hm1, IND_EXP(3, 1), string("3-blabla"));
-    hmap_insert(&hm1, IND_EXP(3, 2), string("3-blablabla"));
-    hmap_insert(&hm1, IND_EXP(4, 0), string("4-bla"));
-    hmap_insert(&hm1, IND_EXP(4, 1), string("4-blabla"));
-    hmap_insert(&hm1, IND_EXP(4, 2), string("4-blablabla"));
-    hmap_insert(&hm1, IND_EXP(5, 0), string("5-bla"));
-    hmap_insert(&hm1, IND_EXP(5, 1), string("5-blabla"));
-    hmap_insert(&hm1, IND_EXP(5, 2), string("5-blablabla"));
-    hmap_insert(&hm1, IND_EXP(6, 0), string("6-bla"));
-    hmap_insert(&hm1, IND_EXP(6, 1), string("6-blabla"));
-    hmap_insert(&hm1, IND_EXP(6, 2), string("6-blablabla"));
-    hmap_insert(&hm1, IND_EXP(7, 0), string("7-bla"));
-    hmap_insert(&hm1, IND_EXP(7, 1), string("7-blabla"));
-    hmap_insert(&hm1, IND_EXP(7, 2), string("7-blablabla"));
+    hmap_insert(&hm1, 'a', string("a"));
+    hmap_insert(&hm1, 'b', string("b"));
+    hmap_insert(&hm1, 'c', string("c"));
+    hmap_insert(&hm1, 'd', string("d"));
+    hmap_insert(&hm1, 'e', string("e"));
+    hmap_insert(&hm1, 'f', string("f"));
+    hmap_insert(&hm1, 'g', string("g"));
+    hmap_insert(&hm1, 'h', string("h"));
+    hmap_insert(&hm1, 'i', string("i"));
+    hmap_insert(&hm1, 'j', string("j"));
+    hmap_insert(&hm1, 'k', string("k"));
+    hmap_insert(&hm1, 'l', string("l"));
+    hmap_insert(&hm1, 'm', string("m"));
+    hmap_insert(&hm1, 'n', string("n"));
+    hmap_insert(&hm1, 'o', string("o"));
+    hmap_insert(&hm1, 'p', string("p"));
+    hmap_insert(&hm1, 'q', string("q"));
+    hmap_insert(&hm1, 'r', string("r"));
+    hmap_insert(&hm1, 's', string("s"));
+    hmap_insert(&hm1, 't', string("t"));
+    hmap_insert(&hm1, 'u', string("u"));
+    hmap_insert(&hm1, 'v', string("v"));
+    hmap_insert(&hm1, 'w', string("w"));
+    hmap_insert(&hm1, 'x', string("x"));
 
     ilog("Forward...");
     auto iter = hmap_first(&hm1);
@@ -235,74 +236,84 @@ void test_new_hashmaps()
         ilog("key: %s  value:%s", to_cstr((u32)iter->key), str_cstr(iter->val));
         iter = hmap_next(&hm1, iter);
     }
-
     ilog("Reverse...");
     iter = hmap_last(&hm1);
     while (iter) {
         ilog("key: %s  value:%s", to_cstr(iter->key), str_cstr(iter->val));
         iter = hmap_prev(&hm1, iter);
     }
-
     ilog("Buckets...");
     hmap_debug_print(hm1.buckets);
 
-    auto fnd = hmap_find(&hm1, IND_EXP(5, 0));
+    auto fnd = hmap_find(&hm1, 'a');
     ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
-    fnd = hmap_find(&hm1, IND_EXP(0, 2));
+    fnd = hmap_find(&hm1, 'e');
     ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
-    fnd = hmap_find(&hm1, IND_EXP(6, 1));
+    fnd = hmap_find(&hm1, 'i');
     ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
-    fnd = hmap_find(&hm1, IND_EXP(3, 0));
+    fnd = hmap_find(&hm1, 'o');
     ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
-    fnd = hmap_find(&hm1, IND_EXP(1, 1));
+    fnd = hmap_find(&hm1, 'u');
     ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
-    fnd = hmap_find(&hm1, IND_EXP(7, 2));
+    fnd = hmap_find(&hm1, 'd');
     ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
-    fnd = hmap_find(&hm1, IND_EXP(2, 1));
+    fnd = hmap_find(&hm1, 'c');
     ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
-    fnd = hmap_find(&hm1, IND_EXP(0, 0));
-    ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
-    fnd = hmap_find(&hm1, IND_EXP(4, 1));
-    ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
-    fnd = hmap_find(&hm1, IND_EXP(4, 4));
+    fnd = hmap_find(&hm1, 'z');
     if (fnd) {
         ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
     }
     else {
-        ilog("Could not find key %s", to_cstr(IND_EXP(4, 4)));
+        ilog("Could not find key %c", 'z');
     }
-    hmap_remove(&hm1, IND_EXP(0, 0));
-    hmap_remove(&hm1, IND_EXP(1, 2));
-    hmap_remove(&hm1, IND_EXP(2, 1));
-    hmap_remove(&hm1, IND_EXP(3, 0));
-    hmap_remove(&hm1, IND_EXP(4, 1));
-    hmap_remove(&hm1, IND_EXP(5, 2));
-    hmap_remove(&hm1, IND_EXP(6, 0));
-    hmap_remove(&hm1, IND_EXP(7, 2));
 
-    auto ins = hmap_insert(&hm1, IND_EXP(0, 0), string("0-bla"));
-    ilog("0-bla: %p", ins);
+    ilog("Removed a: %s", (hmap_remove(&hm1, 'a')) ? "true" : "false");
+    ilog("Removed b: %s", (hmap_remove(&hm1, 'b')) ? "true" : "false");
+    ilog("Removed c: %s", (hmap_remove(&hm1, 'c')) ? "true" : "false");
+    ilog("Removed e: %s", (hmap_remove(&hm1, 'e')) ? "true" : "false");
+    ilog("Removed i: %s", (hmap_remove(&hm1, 'i')) ? "true" : "false");
+    ilog("Removed o: %s", (hmap_remove(&hm1, 'o')) ? "true" : "false");
+    ilog("Removed u: %s", (hmap_remove(&hm1, 'u')) ? "true" : "false");
+    ilog("Removed y: %s", (hmap_remove(&hm1, 'y')) ? "true" : "false");
 
-    ins = hmap_insert(&hm1, IND_EXP(0, 1), string("0-blabla"));
-    ilog("0-blabla: %p", ins);
+    ilog("Forward...");
+    iter = hmap_first(&hm1);
+    while (iter) {
+        ilog("key: %s  value:%s", to_cstr((u32)iter->key), str_cstr(iter->val));
+        iter = hmap_next(&hm1, iter);
+    }
+    ilog("Reverse...");
+    iter = hmap_last(&hm1);
+    while (iter) {
+        ilog("key: %s  value:%s", to_cstr(iter->key), str_cstr(iter->val));
+        iter = hmap_prev(&hm1, iter);
+    }
+    ilog("Buckets...");
+    hmap_debug_print(hm1.buckets);
 
-    ins = hmap_insert(&hm1, IND_EXP(0, 2), string("0-blablabla"));
-    ilog("0-blablabla: %p", ins);
+    auto ins = hmap_insert(&hm1, 'a', string("a"));
+    ilog("Inserted a ptr: %p", ins);
 
-    ins = hmap_insert(&hm1, IND_EXP(1, 0), string("1-bla"));
-    ilog("1-bla: %p", ins);
+    ins = hmap_insert(&hm1, 'b', string("b"));
+    ilog("Inserted b ptr: %p", ins);
 
-    ins = hmap_insert(&hm1, IND_EXP(1, 1), string("1-blabla"));
-    ilog("1-blabla: %p", ins);
+    ins = hmap_insert(&hm1, 'c', string("c"));
+    ilog("Inserted c ptr: %p", ins);
 
-    ins = hmap_insert(&hm1, IND_EXP(1, 2), string("1-blablabla"));
-    ilog("1-blablabla: %p", ins);
+    ins = hmap_insert(&hm1, 'd', string("d"));
+    ilog("Inserted d ptr: %p", ins);
 
-    ins = hmap_insert(&hm1, IND_EXP(2, 0), string("2-bla"));
-    ilog("2-bla: %p", ins);
+    ins = hmap_insert(&hm1, 'e', string("e"));
+    ilog("Inserted e ptr: %p", ins);
 
-    ins = hmap_insert(&hm1, IND_EXP(2, 1), string("2-blabla"));
-    ilog("2-blabla: %p", ins);
+    ins = hmap_insert(&hm1, 'f', string("f"));
+    ilog("Inserted f ptr: %p", ins);
+
+    ins = hmap_insert(&hm1, 'g', string("g"));
+    ilog("Inserted g ptr: %p", ins);
+
+    ins = hmap_insert(&hm1, 'o', string("o"));
+    ilog("Inserted o ptr: %p", ins);
 
     ilog("Forward...");
     iter = hmap_first(&hm1);
@@ -330,7 +341,7 @@ void test_new_hashmaps_string_keys()
 
     hmap<rid, string> hm1{};
 
-    hmap_init(&hm1, hash_type, generate_rand_seed(), generate_rand_seed(), mem_global_arena());
+    hmap_init(&hm1, hash_type);
     hmap_insert(&hm1, rid("scooby"), string("scooby-data"));
     hmap_insert(&hm1, rid("sandwiches"), string("sandwiches-data"));
     hmap_insert(&hm1, rid("alowishish"), string("alowishish-data"));

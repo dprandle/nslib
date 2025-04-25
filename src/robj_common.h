@@ -2,7 +2,7 @@
 
 #include "archive_common.h"
 #include "rid.h"
-#include "containers/hashmap.h"
+#include "containers/hmap.h"
 
 namespace nslib
 {
@@ -15,8 +15,7 @@ enum robj_type : u32
     ROBJ_TYPE_USER,
 };
 
-const sizet ROBJ_TYPE_DEFAULT_BUDGET[ROBJ_TYPE_USER] = {256,256,256};
-
+const sizet ROBJ_TYPE_DEFAULT_BUDGET[ROBJ_TYPE_USER] = {256, 256, 256};
 
 #define ROBJ(type)                                                                                                                         \
     static constexpr const char *type_str = #type;                                                                                         \
@@ -32,10 +31,11 @@ template<class T>
 struct robj_cache
 {
     using robj_type = T;
-    using iter = key_val_pair<rid, T *> *;
+    using iterator = hmap<rid, T *>::iterator;
+    using const_iterator = hmap<rid, T *>::const_iterator;
 
     // Resource id to pointer to resource obj
-    hashmap<rid, T *> rmap{};
+    hmap<rid, T *> rmap{};
     mem_arena arena{};
     sizet mem_alignment{};
 };
@@ -64,7 +64,7 @@ template<class T>
 void init_cache(robj_cache<T> *cache, sizet item_budget, sizet mem_alignment, mem_arena *upstream)
 {
     cache->mem_alignment = mem_alignment;
-    hashmap_init(&cache->rmap, upstream);
+    hmap_init(&cache->rmap, hash_type, upstream);
     mem_init_pool_arena(&cache->arena, sizeof(T), item_budget, upstream);
 }
 
@@ -72,13 +72,14 @@ template<class T>
 void terminate_cache(robj_cache<T> *cache)
 {
     // NOTE: We might want to call terminate on each robj here
-    sizet i{};
-    while (auto iter = cache_iter(&i, cache)) {
-        terminate_robj(iter->value);
-        mem_free(iter->value, &cache->arena);
+    auto iter = cache_first(cache);
+    while (iter) {
+        terminate_robj(iter->val);
+        mem_free(iter->val, &cache->arena);
+        iter = cache_next(cache, iter);
     }
     mem_terminate_arena(&cache->arena);
-    hashmap_terminate(&cache->rmap);
+    hmap_terminate(&cache->rmap);
 }
 
 // Add and initialize a cache to the passed in cache group
@@ -113,9 +114,51 @@ robj_cache<T> *get_cache(const robj_cache_group *cg)
 }
 
 template<class T>
-typename robj_cache<T>::iter cache_iter(sizet *i, robj_cache<T> *cache)
+robj_cache<T>::iterator cache_first(robj_cache<T> *cache)
 {
-    return hashmap_iter(&cache->rmap, i);
+    return hmap_first(&cache->rmap);
+}
+
+template<class T>
+robj_cache<T>::const_iterator cache_first(const robj_cache<T> *cache)
+{
+    return hmap_first(&cache->rmap);
+}
+
+template<class T>
+robj_cache<T>::iterator cache_last(robj_cache<T> *cache)
+{
+    return hmap_last(&cache->rmap);
+}
+
+template<class T>
+robj_cache<T>::const_iterator cache_last(const robj_cache<T> *cache)
+{
+    return hmap_last(&cache->rmap);
+}
+
+template<class T>
+robj_cache<T>::iterator cache_next(robj_cache<T> *cache, typename robj_cache<T>::iterator iter)
+{
+    return hmap_next(&cache->rmap, iter);
+}
+
+template<class T>
+robj_cache<T>::const_iterator cache_next(const robj_cache<T> *cache, typename robj_cache<T>::const_iterator iter)
+{
+    return hmap_next(&cache->rmap, iter);
+}
+
+template<class T>
+robj_cache<T>::iterator cache_prev(robj_cache<T> *cache, typename robj_cache<T>::iterator iter)
+{
+    return hmap_prev(&cache->rmap, iter);
+}
+
+template<class T>
+robj_cache<T>::const_iterator cache_prev(const robj_cache<T> *cache, typename robj_cache<T>::const_iterator iter)
+{
+    return hmap_prev(&cache->rmap, iter);
 }
 
 // Remove and terminates cache from the cache group - true on success or if the cache is not there false
@@ -140,14 +183,20 @@ bool remove_cache(robj_cache_group *cg)
     return remove_cache(cache, cg);
 }
 
-// This will add a new robj to the cache, but it will be completely zeroed out so you gotta set the id manually
+// Allocate a new object and insert it in to the cache. If inserting fails, we free the item. This assumes most of the
+// time that the user of this function will know the insertion will succeed. On failure, we needlessly create/destroy
+// the obj, but this allows not checking if the item is there before creating it.
 template<class T>
 T *add_robj(const rid &id, robj_cache<T> *cache)
 {
-    auto ret = (T *)mem_alloc(cache->arena.mpool.chunk_size, &cache->arena, cache->mem_alignment);
+    T* ret = (T *)mem_alloc(cache->arena.mpool.chunk_size, &cache->arena, cache->mem_alignment);
     memset(ret, 0, cache->arena.mpool.chunk_size);
     ret->id = id;
-    hashmap_set(&cache->rmap, id, ret);
+    auto item = hmap_insert(&cache->rmap, id, ret);
+    if (!item) {
+        mem_free(ret);
+        ret = nullptr;
+    }
     return ret;
 }
 
@@ -156,8 +205,10 @@ template<class T>
 T *add_robj(const T &copy, const rid &copy_id, robj_cache<T> *cache)
 {
     auto cpy = add_robj<T>(cache, copy_id);
-    *cpy = copy;
-    cpy->id = copy_id;
+    if (cpy) {
+        *cpy = copy;
+        cpy->id = copy_id;
+    }
     return cpy;
 }
 
@@ -178,9 +229,9 @@ T *add_robj(const T &copy, robj_cache<T> *cache)
 template<class T>
 T *get_robj(const rid &id, const robj_cache<T> *cache)
 {
-    auto item = hashmap_find(&cache->rmap, id);
+    auto item = hmap_find(&cache->rmap, id);
     if (item) {
-        return item->value;
+        return item->val;
     }
     return nullptr;
 }
@@ -211,7 +262,8 @@ bool remove_robj(const T &item, robj_cache<T> *cache)
 }
 
 template<class T>
-void terminate_robj(T *robj) {
+void terminate_robj(T *robj)
+{
     ilog("Teminate %s id %s", robj->type_str, str_cstr(robj->id.str));
 }
 

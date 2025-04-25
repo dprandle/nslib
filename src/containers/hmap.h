@@ -4,7 +4,8 @@
 
 namespace nslib
 {
-#define DEFAULT_HMAP_BUCKET_COUNT 67
+constexpr inline sizet HMAP_DEFAULT_BUCKET_COUNT = 16;
+constexpr inline float HMAP_DEFAULT_LOAD_FACTOR = 0.75f;
 
 enum hmap_bucket_flags
 {
@@ -37,12 +38,20 @@ using hash_func = u64(const Key &, u64, u64);
 template<typename Key, typename Val>
 struct hmap
 {
+    using mapped_type = Val;
+    using key_type = Key;
+    using value_type = hmap_item<Key, Val>;
+    using iterator = value_type *;
+    using const_iterator = const value_type *;
+
     hash_func<Key> *hashf{};
     u64 seed0{};
     u64 seed1{};
     array<hmap_bucket<Key, Val>> buckets{};
     sizet head{};
     sizet count{0};
+    // If this is set outside the range 0.0f to 1.0f auto rehashing on insert will not happen
+    float load_factor{0.0f};
 };
 
 template<typename Key, typename Val>
@@ -65,23 +74,56 @@ void hmap_debug_print(const array<hmap_bucket<Key, Val>> &buckets)
 template<typename Key, typename Val>
 void hmap_init(hmap<Key, Val> *hm,
                hash_func<Key> *hashf,
-               u64 seed0 = generate_rand_seed(),
-               u64 seed1 = generate_rand_seed(),
                mem_arena *arena = mem_global_arena(),
-               sizet initial_capacity = DEFAULT_HMAP_BUCKET_COUNT,
+               sizet initial_capacity = HMAP_DEFAULT_BUCKET_COUNT,
                sizet mem_alignment = SIMD_MIN_ALIGNMENT)
 {
     hm->hashf = hashf;
-    hm->seed0 = seed0;
-    hm->seed1 = seed1;
+    hm->seed0 = generate_rand_seed();
+    hm->seed1 = generate_rand_seed();
     hm->head = INVALID_IND;
+    hm->load_factor = HMAP_DEFAULT_LOAD_FACTOR;
     hm->count = 0;
     arr_init(&hm->buckets, arena, initial_capacity, mem_alignment);
     arr_resize(&hm->buckets, initial_capacity);
 }
 
 template<typename Key, typename Val>
-sizet hmap_find_bucket(hmap<Key, Val> *hm, const Key &k)
+void hmap_rehash(hmap<Key, Val> *hm, sizet new_size)
+{
+    auto tmp = hm->buckets;
+    sizet ind = hm->head;
+    hmap_clear(hm);
+    arr_resize(&hm->buckets, new_size);
+    do {
+        hmap_insert(hm, tmp[ind].item.key, tmp[ind].item.val);
+        ind = tmp[ind].item.next;
+    } while (is_valid(ind));
+}
+
+template<typename Key, typename Val>
+float hmap_load_factor(const hmap<Key, Val> *hm, sizet hm_entry_count)
+{
+    return (float)hm_entry_count / (float)hm->buckets.size;
+}
+
+template<typename Key, typename Val>
+float hmap_current_load_factor(const hmap<Key, Val> *hm, sizet hm_entry_count)
+{
+    return hmap_load_factor(hm, hm->count);
+}
+
+template<typename Key, typename Val>
+bool hmap_should_rehash_on_insert(const hmap<Key, Val> *hm)
+{
+    if (hm->load_factor >= 0.0f && hm->load_factor <= 1.0f) {
+        return hmap_load_factor(hm, hm->count + 1) > hm->load_factor;
+    }
+    return false;
+}
+
+template<typename Key, typename Val>
+sizet hmap_find_bucket(const hmap<Key, Val> *hm, const Key &k)
 {
     assert(hm->hashf);
     if (hm->buckets.size == 0) {
@@ -169,7 +211,12 @@ void hmap_clear_bucket(hmap<Key, Val> *hm, sizet bckt_ind)
 
     // If head is pointing to us (we are the last bucket), then make head point to our prev
     if (hm->buckets[hm->head].item.prev == bckt_ind) {
-        hm->buckets[hm->head].item.prev = hm->buckets[bckt_ind].prev;
+        hm->buckets[hm->head].item.prev = hm->buckets[bckt_ind].item.prev;
+    }
+
+    // If head is us, then head should point to our next index
+    if (hm->head == bckt_ind && is_valid(hm->buckets[bckt_ind].item.next)) {
+        hm->head = hm->buckets[bckt_ind].item.next;
     }
 
     // If we are the tail node, we need to point the head node's prev to our prev. If we are the tail and the head node,
@@ -234,7 +281,7 @@ void hmap_remove_bucket(hmap<Key, Val> *hm, sizet bckt_ind)
 }
 
 template<typename Key, typename Val>
-hmap_item<Key, Val> *hmap_erase(hmap<Key, Val> *hm, const hmap_item<Key, Val> *item)
+hmap<Key, Val>::iterator hmap_erase(hmap<Key, Val> *hm, typename hmap<Key, Val>::iterator item)
 {
     hmap_item<Key, Val> *ret{};
     if (!item || !is_valid(item->prev)) {
@@ -254,11 +301,15 @@ hmap_item<Key, Val> *hmap_erase(hmap<Key, Val> *hm, const hmap_item<Key, Val> *i
     return ret;
 }
 
+// Remove the entry for key k from the map. If val is not null, fill it with the value of the item removed.
 template<typename Key, typename Val>
-bool hmap_remove(hmap<Key, Val> *hm, const Key &k)
+bool hmap_remove(hmap<Key, Val> *hm, const Key &k, Val *val = nullptr)
 {
     sizet bckt_ind = hmap_find_bucket(hm, k);
     if (bckt_ind != INVALID_IND) {
+        if (val) {
+            *val = hm->buckets[bckt_ind].item.val;
+        }
         hmap_remove_bucket(hm, bckt_ind);
         return true;
     }
@@ -266,7 +317,7 @@ bool hmap_remove(hmap<Key, Val> *hm, const Key &k)
 }
 
 template<typename Key, typename Val>
-hmap_item<Key, Val> *hmap_find(hmap<Key, Val> *hm, const Key &k)
+hmap<Key, Val>::iterator hmap_find(hmap<Key, Val> *hm, const Key &k)
 {
     sizet bucket_ind = hmap_find_bucket(hm, k);
     if (bucket_ind != INVALID_IND) {
@@ -276,11 +327,24 @@ hmap_item<Key, Val> *hmap_find(hmap<Key, Val> *hm, const Key &k)
 }
 
 template<typename Key, typename Val>
-hmap_item<Key, Val> *hmap_insert_or_set(hmap<Key, Val> *hm, const Key &k, const Val &val, bool set_if_exists)
+hmap<Key, Val>::const_iterator hmap_find(const hmap<Key, Val> *hm, const Key &k)
+{
+    sizet bucket_ind = hmap_find_bucket(hm, k);
+    if (bucket_ind != INVALID_IND) {
+        return &hm->buckets[bucket_ind].item;
+    }
+    return nullptr;
+}
+
+template<typename Key, typename Val>
+hmap<Key, Val>::iterator hmap_insert_or_set(hmap<Key, Val> *hm, const Key &k, const Val &val, bool set_if_exists)
 {
     assert(hm->hashf);
     if (hm->buckets.size == 0) {
         return nullptr;
+    }
+    if (hmap_should_rehash_on_insert(hm)) {
+        hmap_rehash(hm, hm->buckets.size * 2);
     }
 
     u64 hashval = hm->hashf(k, hm->seed0, hm->seed1);
@@ -383,14 +447,18 @@ hmap_item<Key, Val> *hmap_insert_or_set(hmap<Key, Val> *hm, const Key &k, const 
     return &hm->buckets[cur_bckt_ind].item;
 }
 
+// Insert a new item into the map. If the key already exists, return null. If the key does not exist, insert it and
+// return the inserted item
 template<typename Key, typename Val>
-hmap_item<Key, Val> *hmap_insert(hmap<Key, Val> *hm, const Key &k, const Val &val)
+hmap<Key, Val>::iterator hmap_insert(hmap<Key, Val> *hm, const Key &k, const Val &val)
 {
     return hmap_insert_or_set(hm, k, val, false);
 }
 
+// Insert a new item into the map. If the key already exists, set the value and return the item. If the key does not
+// exist, create it. This may increase the hmap capacity and rehash if the new size is greater
 template<typename Key, typename Val>
-hmap_item<Key, Val> *hmap_set(hmap<Key, Val> *hm, const Key &k, const Val &val)
+hmap<Key, Val>::iterator hmap_set(hmap<Key, Val> *hm, const Key &k, const Val &val)
 {
     return hmap_insert_or_set(hm, k, val, true);
 }
@@ -404,20 +472,7 @@ void hmap_clear(hmap<Key, Val> *hm)
 }
 
 template<typename Key, typename Val>
-void hmap_rehash(hmap<Key, Val> *hm, sizet new_size)
-{
-    auto tmp = hm->buckets;
-    sizet ind = hm->head;
-    hmap_clear(hm);
-    arr_resize(&hm->buckets, new_size);
-    do {
-        hmap_insert(hm, tmp[ind].item.key, tmp[ind].item.val);
-        ind = tmp[ind].item.next;
-    } while (is_valid(ind));
-}
-
-template<typename Key, typename Val>
-hmap_item<Key, Val> *hmap_first(hmap<Key, Val> *hm)
+hmap<Key, Val>::iterator hmap_first(hmap<Key, Val> *hm)
 {
     if (is_valid(hm->head)) {
         return &hm->buckets[hm->head].item;
@@ -426,7 +481,16 @@ hmap_item<Key, Val> *hmap_first(hmap<Key, Val> *hm)
 }
 
 template<typename Key, typename Val>
-hmap_item<Key, Val> *hmap_last(hmap<Key, Val> *hm)
+hmap<Key, Val>::const_iterator hmap_first(const hmap<Key, Val> *hm)
+{
+    if (is_valid(hm->head)) {
+        return &hm->buckets[hm->head].item;
+    }
+    return nullptr;
+}
+
+template<typename Key, typename Val>
+hmap<Key, Val>::iterator hmap_last(hmap<Key, Val> *hm)
 {
     if (is_valid(hm->head)) {
         assert(is_valid(hm->buckets[hm->head].item.prev));
@@ -436,7 +500,17 @@ hmap_item<Key, Val> *hmap_last(hmap<Key, Val> *hm)
 }
 
 template<typename Key, typename Val>
-hmap_item<Key, Val> *hmap_next(hmap<Key, Val> *hm, hmap_item<Key, Val> *item)
+hmap<Key, Val>::const_iterator hmap_last(const hmap<Key, Val> *hm)
+{
+    if (is_valid(hm->head)) {
+        assert(is_valid(hm->buckets[hm->head].item.prev));
+        return &hm->buckets[hm->buckets[hm->head].item.prev].item;
+    }
+    return nullptr;
+}
+
+template<typename Key, typename Val>
+hmap<Key, Val>::iterator hmap_next(hmap<Key, Val> *hm, typename hmap<Key, Val>::iterator item)
 {
     if (!item) {
         item = hmap_first(hm);
@@ -448,7 +522,31 @@ hmap_item<Key, Val> *hmap_next(hmap<Key, Val> *hm, hmap_item<Key, Val> *item)
 }
 
 template<typename Key, typename Val>
-hmap_item<Key, Val> *hmap_prev(hmap<Key, Val> *hm, hmap_item<Key, Val> *item)
+hmap<Key, Val>::const_iterator hmap_next(const hmap<Key, Val> *hm, typename hmap<Key, Val>::const_iterator item)
+{
+    if (!item) {
+        item = hmap_first(hm);
+    }
+    if (item && is_valid(item->next)) {
+        return &hm->buckets[item->next].item;
+    }
+    return nullptr;
+}
+
+template<typename Key, typename Val>
+hmap<Key, Val>::iterator hmap_prev(hmap<Key, Val> *hm, typename hmap<Key, Val>::iterator item)
+{
+    if (!item) {
+        item = hmap_last(hm);
+    }
+    if (item && item != &hm->buckets[hm->head].item && is_valid(item->prev)) {
+        return &hm->buckets[item->prev].item;
+    }
+    return nullptr;
+}
+
+template<typename Key, typename Val>
+hmap<Key, Val>::const_iterator hmap_prev(const hmap<Key, Val> *hm, typename hmap<Key, Val>::const_iterator item)
 {
     if (!item) {
         item = hmap_last(hm);

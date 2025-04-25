@@ -20,9 +20,8 @@ sizet add_entities(sizet count, sim_region *reg)
     for (sizet i = 0; i < count; ++i) {
         reg->ents[ind + i].id = ++reg->last_id;
         reg->ents[ind + i].cdb = &reg->cdb;
-        auto iter = hashmap_set(&reg->entmap, reg->ents[ind + i].id, ind + i);
-        assert(!iter);
-        
+        auto iter = hmap_insert(&reg->entmap, reg->ents[ind + i].id, ind + i);
+        assert(iter);
     }
     return ind;
 }
@@ -33,8 +32,8 @@ entity *add_entity(const entity &copy, sim_region *reg)
     arr_emplace_back(&reg->ents, copy);
     reg->ents[ind].id = ++reg->last_id;
     reg->ents[ind].cdb = &reg->cdb;
-    auto iter = hashmap_set(&reg->entmap, reg->ents[ind].id, ind);
-    assert(!iter);
+    auto iter = hmap_insert(&reg->entmap, reg->ents[ind].id, ind);
+    assert(iter);
     return &reg->ents[ind];
 }
 
@@ -42,52 +41,49 @@ entity *add_entity(const char *name, sim_region *reg)
 {
     sizet ind = reg->ents.size;
     arr_emplace_back(&reg->ents, entity{++reg->last_id, name, &reg->cdb});
-    auto iter = hashmap_set(&reg->entmap, reg->ents[ind].id, ind);
-    assert(!iter);
+    auto iter = hmap_insert(&reg->entmap, reg->ents[ind].id, ind);
+    assert(iter);
     return &reg->ents[ind];
 }
 
 entity *get_entity(u32 ent_id, sim_region *reg)
 {
-    auto fiter = hashmap_find(&reg->entmap, ent_id);
+    auto fiter = hmap_find(&reg->entmap, ent_id);
     if (fiter) {
-        return &reg->ents[fiter->value];
+        return &reg->ents[fiter->val];
     }
     return nullptr;
 }
 
 bool remove_entity(u32 ent_id, sim_region *reg)
 {
-    auto fiter = hashmap_find(&reg->entmap, ent_id);
-    if (fiter) {
+    sizet ent_ind{};
+    auto rem = hmap_remove(&reg->entmap, ent_id, &ent_ind);
+    if (!rem) {
+        return rem;
+    }
+    assert(ent_ind!=INVALID_IND);
+    assert(ent_ind < reg->ents.size);
+    if (arr_swap_remove(&reg->ents, ent_ind)) {
+        if (ent_ind < reg->ents.size) {
+            // Update the entry for this entity that has been swapped to have the correct index in to the entity array
+            hmap_set(&reg->entmap, reg->ents[ent_ind].id, ent_ind);
+        }
+        return true;
     }
     return false;
 }
 
 bool remove_entity(entity *ent, sim_region *reg)
 {
-    auto rem = hashmap_remove(&reg->entmap, ent->id);
-    if (!rem) {
-        return false;
-    }
-
-    sizet ind = arr_index_of(&reg->ents, ent);
-    if (ind != INVALID_IND) {
-        if (arr_swap_remove(&reg->ents, ind)) {
-            if (ind < reg->ents.size) {
-                hashmap_set(&reg->entmap, reg->ents[ind].id, ind);
-            }
-            return true;
-        }
-    }
-    return false;
+    return remove_entity(ent->id, reg);
 }
 
 void init_sim_region(sim_region *reg, mem_arena *arena)
 {
     arr_init(&reg->ents, arena);
     init_comp_db(&reg->cdb, arena);
-    hashmap_init(&reg->entmap, arena);
+    hmap_init(&reg->entmap, hash_type, arena);
 
     add_comp_tbl<static_model>(&reg->cdb);
     add_comp_tbl<camera>(&reg->cdb, 64, SIMD_MIN_ALIGNMENT);
@@ -100,7 +96,7 @@ void terminate_sim_region(sim_region *reg)
     remove_comp_tbl<camera>(&reg->cdb);
     remove_comp_tbl<static_model>(&reg->cdb);
 
-    hashmap_terminate(&reg->entmap);
+    hmap_terminate(&reg->entmap);
     terminate_comp_db(&reg->cdb);
     arr_terminate(&reg->ents);
 }

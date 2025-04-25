@@ -52,7 +52,7 @@ template<class T>
 struct comp_table
 {
     array<T> entries;
-    hashmap<u32, sizet> entc_hm;
+    hmap<u32, sizet> entc_hm;
 };
 
 struct comp_db
@@ -70,7 +70,7 @@ struct entity
 struct sim_region
 {
     array<entity> ents;
-    hashmap<u32, sizet> entmap;
+    hmap<u32, sizet> entmap;
     comp_db cdb;
     u32 last_id{};
 };
@@ -79,13 +79,13 @@ template<class T>
 void init_comp_tbl(comp_table<T> *tbl, mem_arena *arena, sizet initial_capacity, sizet mem_alignment)
 {
     arr_init(&tbl->entries, arena, initial_capacity, mem_alignment);
-    hashmap_init(&tbl->entc_hm, arena);
+    hmap_init(&tbl->entc_hm, hash_type, arena);
 }
 
 template<class T>
 void terminate_comp_tbl(comp_table<T> *tbl)
 {
-    hashmap_terminate(&tbl->entc_hm);
+    hmap_terminate(&tbl->entc_hm);
     arr_terminate(&tbl->entries);
 }
 
@@ -132,15 +132,15 @@ void terminate_comp_db(comp_db *cdb);
 template<class T>
 T *add_comp(u32 ent_id, comp_table<T> *ctbl, const T &copy = {})
 {
-    auto fiter = hashmap_find(&ctbl->entc_hm, ent_id);
-    if (fiter) {
-        return nullptr;
-    }
+    T* ret{};
     sizet cid = ctbl->entries.size;
-    arr_push_back(&ctbl->entries, copy);
-    ctbl->entries[cid].ent_id = ent_id;
-    hashmap_set(&ctbl->entc_hm, ent_id, cid);
-    return &ctbl->entries[cid];
+    auto item = hmap_insert(&ctbl->entc_hm, ent_id, cid);
+    if (item) {
+        arr_push_back(&ctbl->entries, copy);
+        ctbl->entries[cid].ent_id = ent_id;
+        ret = &ctbl->entries[cid];
+    }
+    return ret;
 }
 
 template<class T>
@@ -159,11 +159,11 @@ T *add_comp(entity *ent, const T &copy = {})
 template<class T>
 T *get_comp(u32 ent_id, comp_table<T> *ctbl)
 {
-    auto fiter = hashmap_find(&ctbl->entc_hm, ent_id);
+    auto fiter = hmap_find(&ctbl->entc_hm, ent_id);
     if (!fiter) {
         return nullptr;
     }
-    return &ctbl->entries[fiter->value];
+    return &ctbl->entries[fiter->val];
 }
 
 template<class T>

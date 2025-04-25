@@ -470,7 +470,6 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
     }
     // Add the smesh entry we just built to the renderer mesh entry map (stored by id)
     hmap_set(&rndr->rmi.meshes, msh->id, new_mentry);
-
     return true;
 }
 
@@ -852,11 +851,10 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
     rndr->vk = mem_alloc<vkr_context>(&rndr->vk_free_list, 8);
     memset(rndr->vk, 0, sizeof(vkr_context));
 
-    hmap_init(&rndr->rpasses, hash_type, generate_rand_seed(), generate_rand_seed(), fl_arena);
-    hmap_init(&rndr->pipelines, hash_type, generate_rand_seed(), generate_rand_seed(), fl_arena);
+    hmap_init(&rndr->rpasses, hash_type, fl_arena);
+    hmap_init(&rndr->pipelines, hash_type, fl_arena);
 
     // Set up our draw call list render pass hashmap with frame linear memory
-    // hashmap_init(&rndr->dcs.rpasses, &rndr->frame_fl);
     vkr_descriptor_cfg desc_cfg{};
     // Frame + pl + mat + obj uob
     desc_cfg.max_sets = MAX_FRAMES_IN_FLIGHT * (MAX_RENDERPASS_COUNT * 2 + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT);
@@ -877,8 +875,7 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
                  DEVICE_EXTENSION_COUNT,
                  VALIDATION_LAYERS,
                  VALIDATION_LAYER_COUNT};
-    ilog("here3");
-
+    
     if (vkr_init(&vkii, rndr->vk) != err_code::VKR_NO_ERROR) {
         return err_code::RENDER_INIT_FAIL;
     }
@@ -962,8 +959,11 @@ intern i32 present_image(renderer *rndr, vkr_frame *cur_frame, u32 image_ind)
     present_info.pImageIndices = &image_ind;
     present_info.pResults = nullptr; // Optional - check for individual swaps
     VkResult result = vkQueuePresentKHR(dev->qfams[VKR_QUEUE_FAM_TYPE_PRESENT].qs[0].hndl, &present_info);
-    if (result != VK_SUCCESS && result != VK_ERROR_OUT_OF_DATE_KHR && result != VK_SUBOPTIMAL_KHR) {
-        elog("Failed to presenet KHR");
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+        recreate_swapchain(rndr);
+    }
+    else if (result != VK_SUCCESS) {
+        elog("Failed to present KHR");
         return err_code::RENDER_PRESENT_KHR_FAIL;
     }
     return err_code::RENDER_NO_ERROR;
@@ -1013,9 +1013,9 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
                 rpdg->rpinfo = &rp_fiter->val;
                 arr_init(&rpdg->desc_updates, &rndr->frame_fl);
                 arr_init(&rpdg->sets_to_make, &rndr->frame_fl);
-                hmap_init(&rpdg->plines, hash_type, generate_rand_seed(), generate_rand_seed(), &rndr->frame_fl);
+                hmap_init(&rpdg->plines, hash_type, &rndr->frame_fl);
 
-                // Add the frame rpass descriptor set
+                // Add the frame rpass descriptor set;
                 arr_emplace_back(&rpdg->sets_to_make, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_FRAME]);
                 rpdg->fset = cur_desc_ind;
                 ++cur_desc_ind;
@@ -1036,7 +1036,7 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
                 memset(pldg, 0, sizeof(pipeline_draw_group));
 
                 pldg->plinfo = &pl_fiter->val;
-                hmap_init(&pldg->mats, hash_type, generate_rand_seed(), generate_rand_seed(), &rndr->frame_fl);
+                hmap_init(&pldg->mats, hash_type, &rndr->frame_fl);
 
                 // Add the pipeline discriptor set
                 arr_emplace_back(&push_rp_fiter->val->sets_to_make, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_PIPELINE]);
@@ -1090,7 +1090,7 @@ int render_frame_begin(renderer *rndr, int finished_frame_count)
     mem_reset_arena(&rndr->vk_frame_linear);
     mem_reset_arena(&rndr->frame_fl);
 
-    hmap_init(&rndr->dcs.rpasses, hash_type, generate_rand_seed(), generate_rand_seed(), &rndr->frame_fl);
+    hmap_init(&rndr->dcs.rpasses, hash_type, &rndr->frame_fl);
 
     // Update finished frames which is used to get the current frame
     rndr->finished_frames = finished_frame_count;
