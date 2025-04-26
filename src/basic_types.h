@@ -48,7 +48,7 @@ const sizet MB_SIZE = 1024 * KB_SIZE;
 
 using small_str = char[SMALL_STR_LEN];
 
-inline constexpr const sizet INVALID_IND = ULONG_LONG_MAX;
+inline constexpr const sizet INVALID_IND = ULLONG_MAX;
 inline constexpr const u32 INVALID_ID = UINT_MAX;
 
 inline bool is_valid(sizet v)

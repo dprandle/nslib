@@ -796,7 +796,7 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
 
                     auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->val->oset].hndl;
                     sizet obj_ubo_item_size = vkr_uniform_buffer_offset_alignment(rndr->vk, sizeof(obj_ubo_data));
-                    u32 dyn_offset = dci * obj_ubo_item_size;
+                    u32 dyn_offset = dci * (u32)obj_ubo_item_size;
                     vkCmdBindDescriptorSets(cmd_buf->hndl,
                                             VK_PIPELINE_BIND_POINT_GRAPHICS,
                                             pipeline->layout_hndl,
@@ -959,11 +959,11 @@ intern i32 present_image(renderer *rndr, vkr_frame *cur_frame, u32 image_ind)
     present_info.pImageIndices = &image_ind;
     present_info.pResults = nullptr; // Optional - check for individual swaps
     VkResult result = vkQueuePresentKHR(dev->qfams[VKR_QUEUE_FAM_TYPE_PRESENT].qs[0].hndl, &present_info);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         recreate_swapchain(rndr);
     }
-    else if (result != VK_SUCCESS) {
-        elog("Failed to present KHR");
+    else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        elog("Failed to presenet KHR");
         return err_code::RENDER_PRESENT_KHR_FAIL;
     }
     return err_code::RENDER_NO_ERROR;
@@ -1209,7 +1209,7 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
             ++pli;
         }
 
-        vkUpdateDescriptorSets(dev->hndl, rp_iter->val->desc_updates.size, rp_iter->val->desc_updates.data, 0, nullptr);
+        vkUpdateDescriptorSets(dev->hndl, (u32)rp_iter->val->desc_updates.size, rp_iter->val->desc_updates.data, 0, nullptr);
         rp_iter = hmap_next(&rndr->dcs.rpasses, rp_iter);
     }
     return err_code::VKR_NO_ERROR;
