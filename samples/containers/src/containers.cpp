@@ -7,6 +7,7 @@
 #include "containers/hashmap.h"
 #include "containers/hashset.h"
 #include "containers/hmap.h"
+#include "containers/hset.h"
 
 using namespace nslib;
 
@@ -195,16 +196,152 @@ void test_hashmaps()
     ilog("HS4 %s", to_cstr(hs4));
 }
 
+void test_new_hashsets()
+{
+    ilog("Starting new hashset test");
+
+    hset<char> hs1{};
+    hset_init(&hs1, hash_type);
+
+    ilog("Inserting a through x");
+    hset_insert(&hs1, 'a');
+    hset_insert(&hs1, 'b');
+    hset_insert(&hs1, 'c');
+    hset_insert(&hs1, 'd');
+    hset_insert(&hs1, 'e');
+    hset_insert(&hs1, 'f');
+    hset_insert(&hs1, 'g');
+    hset_insert(&hs1, 'h');
+    hset_insert(&hs1, 'i');
+    hset_insert(&hs1, 'j');
+    hset_insert(&hs1, 'k');
+    hset_insert(&hs1, 'l');
+    hset_insert(&hs1, 'm');
+    hset_insert(&hs1, 'n');
+    hset_insert(&hs1, 'o');
+    hset_insert(&hs1, 'p');
+    hset_insert(&hs1, 'q');
+    hset_insert(&hs1, 'r');
+    hset_insert(&hs1, 's');
+    hset_insert(&hs1, 't');
+    hset_insert(&hs1, 'u');
+    hset_insert(&hs1, 'v');
+    hset_insert(&hs1, 'w');
+    hset_insert(&hs1, 'x');
+
+    ilog("Forward...");
+    auto iter = hset_first(&hs1);
+    while (iter) {
+        ilog("item: %s", to_cstr(iter->val));
+        iter = hset_next(&hs1, iter);
+    }
+    ilog("Reverse...");
+    iter = hset_last(&hs1);
+    while (iter) {
+        ilog("item: %s", to_cstr(iter->val));
+        iter = hset_prev(&hs1, iter);
+    }
+    ilog("Buckets...");
+    hset_debug_print(hs1.buckets);
+
+    auto fnd = hset_find(&hs1, 'a');
+    ilog("Found value %c", fnd->val);
+    fnd = hset_find(&hs1, 'e');
+    ilog("Found value %c", fnd->val);
+    fnd = hset_find(&hs1, 'i');
+    ilog("Found value %c", fnd->val);
+    fnd = hset_find(&hs1, 'o');
+    ilog("Found value %c", fnd->val);
+    fnd = hset_find(&hs1, 'u');
+    ilog("Found value %c", fnd->val);
+    fnd = hset_find(&hs1, 'd');
+    ilog("Found value %c", fnd->val);
+    fnd = hset_find(&hs1, 'c');
+    ilog("Found value %c", fnd->val);
+    fnd = hset_find(&hs1, 'z');
+    if (fnd) {
+        ilog("Found value %s for key %s", fnd->val);
+    }
+    else {
+        ilog("Could not find key %c", 'z');
+    }
+
+    ilog("Removed a: %s", (hset_remove(&hs1, 'a')) ? "true" : "false");
+    ilog("Removed b: %s", (hset_remove(&hs1, 'b')) ? "true" : "false");
+    ilog("Removed c: %s", (hset_remove(&hs1, 'c')) ? "true" : "false");
+    ilog("Removed e: %s", (hset_remove(&hs1, 'e')) ? "true" : "false");
+    ilog("Removed i: %s", (hset_remove(&hs1, 'i')) ? "true" : "false");
+    ilog("Removed o: %s", (hset_remove(&hs1, 'o')) ? "true" : "false");
+    ilog("Removed u: %s", (hset_remove(&hs1, 'u')) ? "true" : "false");
+    ilog("Removed y: %s", (hset_remove(&hs1, 'y')) ? "true" : "false");
+
+    ilog("Forward...");
+    iter = hset_first(&hs1);
+    while (iter) {
+        ilog("item: %s", to_cstr(iter->val));
+        iter = hset_next(&hs1, iter);
+    }
+    ilog("Reverse...");
+    iter = hset_last(&hs1);
+    while (iter) {
+        ilog("item: %s", to_cstr(iter->val));
+        iter = hset_prev(&hs1, iter);
+    }
+    ilog("Buckets...");
+    hset_debug_print(hs1.buckets);
+
+    auto ins = hset_insert(&hs1, 'a');
+    ilog("Inserted a ptr: %p", ins);
+
+    ins = hset_insert(&hs1, 'b');
+    ilog("Inserted b ptr: %p", ins);
+
+    ins = hset_insert(&hs1, 'c');
+    ilog("Inserted c ptr: %p", ins);
+
+    ins = hset_insert(&hs1, 'd');
+    ilog("Inserted d ptr: %p", ins);
+
+    ins = hset_insert(&hs1, 'e');
+    ilog("Inserted e ptr: %p", ins);
+
+    ins = hset_insert(&hs1, 'f');
+    ilog("Inserted f ptr: %p", ins);
+
+    ins = hset_insert(&hs1, 'g');
+    ilog("Inserted g ptr: %p", ins);
+
+    ins = hset_insert(&hs1, 'o');
+    ilog("Inserted o ptr: %p", ins);
+
+    ilog("Forward...");
+    iter = hset_first(&hs1);
+    while (iter) {
+        ilog("item: %s", to_cstr(iter->val));
+        iter = hset_next(&hs1, iter);
+    }
+
+    ilog("Reverse...");
+    iter = hset_last(&hs1);
+    while (iter) {
+        ilog("item: %s", to_cstr(iter->val));
+        iter = hset_prev(&hs1, iter);
+    }
+
+    ilog("Buckets...");
+    hset_debug_print(hs1.buckets);
+
+    hset_terminate(&hs1);
+}
+
 void test_new_hashmaps()
 {
     ilog("Starting new hashmap test");
 
     hmap<char, string> hm1{};
     hmap_init(&hm1, hash_type);
-    int orig_mult = 24;
 
-#define IND_EXP(bucket_ind, bucket_cnt) (u32)(bucket_ind + bucket_cnt * orig_mult)
-
+    ilog("Inserting a through x");
     hmap_insert(&hm1, 'a', string("a"));
     hmap_insert(&hm1, 'b', string("b"));
     hmap_insert(&hm1, 'c', string("c"));
@@ -246,22 +383,22 @@ void test_new_hashmaps()
     hmap_debug_print(hm1.buckets);
 
     auto fnd = hmap_find(&hm1, 'a');
-    ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
+    ilog("Found value %s for key %s", to_cstr(fnd->val));
     fnd = hmap_find(&hm1, 'e');
-    ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
+    ilog("Found value %s for key %s", to_cstr(fnd->val));
     fnd = hmap_find(&hm1, 'i');
-    ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
+    ilog("Found value %s for key %s", to_cstr(fnd->val));
     fnd = hmap_find(&hm1, 'o');
-    ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
+    ilog("Found value %s for key %s", to_cstr(fnd->val));
     fnd = hmap_find(&hm1, 'u');
-    ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
+    ilog("Found value %s for key %s", to_cstr(fnd->val));
     fnd = hmap_find(&hm1, 'd');
-    ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
+    ilog("Found value %s for key %s", to_cstr(fnd->val));
     fnd = hmap_find(&hm1, 'c');
-    ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
+    ilog("Found value %s for key %s", to_cstr(fnd->val));
     fnd = hmap_find(&hm1, 'z');
     if (fnd) {
-        ilog("Found value %s for key %s", to_cstr(fnd->val), to_cstr(fnd->key));
+        ilog("Found value %s for key %s", to_cstr(fnd->val));
     }
     else {
         ilog("Could not find key %c", 'z');
@@ -337,11 +474,12 @@ void test_new_hashmaps()
 
 void test_new_hashmaps_string_keys()
 {
-    ilog("Starting new hashmap test");
+    ilog("Starting new hashmap string key test");
 
     hmap<rid, string> hm1{};
 
     hmap_init(&hm1, hash_type);
+    ilog("Inserting 9 strange strings");
     hmap_insert(&hm1, rid("scooby"), string("scooby-data"));
     hmap_insert(&hm1, rid("sandwiches"), string("sandwiches-data"));
     hmap_insert(&hm1, rid("alowishish"), string("alowishish-data"));
@@ -369,6 +507,7 @@ void test_new_hashmaps_string_keys()
     ilog("Buckets...");
     hmap_debug_print(hm1.buckets);
 
+    ilog("Removing 4 entries");
     hmap_remove(&hm1, rid("do-the-dance"));
     hmap_remove(&hm1, rid("booty_cake"));
     hmap_remove(&hm1, rid("gogogo300"));
@@ -391,6 +530,7 @@ void test_new_hashmaps_string_keys()
     ilog("Buckets...");
     hmap_debug_print(hm1.buckets);
 
+    ilog("Inserting 5 more strange strings");
     hmap_insert(&hm1, rid("another"), string("another-data"));
     hmap_insert(&hm1, rid("type-of"), string("type-of-data"));
     hmap_insert(&hm1, rid("thing-that"), string("thing-that-data"));
@@ -416,6 +556,91 @@ void test_new_hashmaps_string_keys()
     hmap_terminate(&hm1);
 }
 
+void test_new_hashset_string_keys()
+{
+    ilog("Starting new hashset string test");
+
+    hset<rid> hs1{};
+
+    hset_init(&hs1, hash_type);
+    ilog("Inserting 9 strange strings");
+    hset_insert(&hs1, rid("scooby"));
+    hset_insert(&hs1, rid("sandwiches"));
+    hset_insert(&hs1, rid("alowishish"));
+    hset_insert(&hs1, rid("do-the-dance"));
+    hset_insert(&hs1, rid("booty_cake"));
+    hset_insert(&hs1, rid("gogogo300"));
+    hset_insert(&hs1, rid("67-under"));
+    hset_insert(&hs1, rid("kjhj"));
+    hset_insert(&hs1, rid("lemar"));
+
+    ilog("Forward...");
+    auto iter = hset_first(&hs1);
+    while (iter) {
+        ilog("key: %s  value:%s", to_cstr(iter->val));
+        iter = hset_next(&hs1, iter);
+    }
+
+    ilog("Reverse...");
+    iter = hset_last(&hs1);
+    while (iter) {
+        ilog("key: %s  value:%s", to_cstr(iter->val));
+        iter = hset_prev(&hs1, iter);
+    }
+
+    ilog("Buckets...");
+    hset_debug_print(hs1.buckets);
+
+    ilog("Removing 4 strings");
+    hset_remove(&hs1, rid("do-the-dance"));
+    hset_remove(&hs1, rid("booty_cake"));
+    hset_remove(&hs1, rid("gogogo300"));
+    hset_remove(&hs1, rid("67-under"));
+
+    ilog("Forward...");
+    iter = hset_first(&hs1);
+    while (iter) {
+        ilog("key: %s  value:%s", to_cstr(iter->val));
+        iter = hset_next(&hs1, iter);
+    }
+
+    ilog("Reverse...");
+    iter = hset_last(&hs1);
+    while (iter) {
+        ilog("key: %s  value:%s", to_cstr(iter->val));
+        iter = hset_prev(&hs1, iter);
+    }
+
+    ilog("Buckets...");
+    hset_debug_print(hs1.buckets);
+
+    ilog("Inserting 5 more strange strings");
+    hset_insert(&hs1, rid("another"));
+    hset_insert(&hs1, rid("type-of"));
+    hset_insert(&hs1, rid("thing-that"));
+    hset_insert(&hs1, rid("wereallyshould"));
+    hset_insert(&hs1, rid("beadding"));
+
+    ilog("Forward...");
+    iter = hset_first(&hs1);
+    while (iter) {
+        ilog("key: %s  value:%s", to_cstr(iter->val));
+        iter = hset_next(&hs1, iter);
+    }
+
+    ilog("Reverse...");
+    iter = hset_last(&hs1);
+    while (iter) {
+        ilog("key: %s  value:%s", to_cstr(iter->val));
+        iter = hset_prev(&hs1, iter);
+    }
+
+    ilog("Buckets...");
+    hset_debug_print(hs1.buckets);
+    hset_terminate(&hs1);
+}
+
+
 int app_init(platform_ctxt *ctxt, void *)
 {
     test_strings();
@@ -423,6 +648,8 @@ int app_init(platform_ctxt *ctxt, void *)
     test_hashmaps();
     test_new_hashmaps();
     test_new_hashmaps_string_keys();
+    test_new_hashsets();
+    test_new_hashset_string_keys();
     return err_code::PLATFORM_NO_ERROR;
 }
 
