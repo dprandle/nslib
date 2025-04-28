@@ -16,8 +16,13 @@ enum hmap_bucket_flags
 template<typename Key, typename Val>
 struct hmap_item
 {
+    // The key should be treated as const for users - it is a huge pain to mark it as const though so just don't change
+    // it directly
     Key key{};
+    // Val can be changed directly however
     Val val{};
+    // Mess with these outside of the hmap functions at your own risk - they are used for the linked list of items in
+    // the hmap
     sizet next{INVALID_IND};
     sizet prev{INVALID_IND};
 };
