@@ -1,9 +1,8 @@
 #include <cstring>
 #include <stdlib.h>
 
-#include "logging.h"
 #include "input_mapping.h"
-#include "containers/hashmap.h"
+#include "hashfuncs.h"
 #include "platform.h"
 
 namespace nslib
@@ -72,29 +71,33 @@ void init_keymap(const char *name, input_keymap *km, mem_arena *arena)
     int seed0 = rand();
     int seed1 = rand();
     strncpy(km->name, name, SMALL_STR_LEN);
-    hashmap_init(&km->hm, arena);
+    hmap_init(&km->hm, hash_type, arena);
 }
 
 void terminate_keymap(input_keymap *km)
 {
     assert(km);
-    hashmap_terminate(&km->hm);
+    hmap_terminate(&km->hm);
     memset(km, 0, sizeof(input_keymap));
 }
 
-bool set_keymap_entry(u32 key, const input_keymap_entry *entry, input_keymap *km)
+input_keymap_entry *set_keymap_entry(u32 key, const input_keymap_entry *entry, input_keymap *km)
 {
     assert(entry);
     assert(km);
-    return hashmap_set(&km->hm, key, *entry);
+    auto iter = hmap_set(&km->hm, key, *entry);
+    if (iter) {
+        return &iter->val;
+    }
+    return nullptr;
 }
 
 input_keymap_entry *get_keymap_entry(u32 key, input_keymap *km)
 {
     assert(km);
-    auto item = hashmap_find(&km->hm, key);
+    auto item = hmap_find(&km->hm, key);
     if (item) {
-        return &item->value;
+        return &item->val;
     }
     return nullptr;
 }
@@ -102,9 +105,9 @@ input_keymap_entry *get_keymap_entry(u32 key, input_keymap *km)
 const input_keymap_entry *get_keymap_entry(u32 key, const input_keymap *km)
 {
     assert(km);
-    auto item = hashmap_find(&km->hm, key);
+    auto item = hmap_find(&km->hm, key);
     if (item) {
-        return &item->value;
+        return &item->val;
     }
     return nullptr;
 }
@@ -113,13 +116,12 @@ input_keymap_entry *get_keymap_entry(const char *name, input_keymap *km)
 {
     assert(name);
     assert(km);
-    sizet i{0};
-    auto item = hashmap_iter(&km->hm, &i);
-    while (item) {
-        if (name == item->value.name) {
-            return &item->value;
+    auto iter = hmap_first(&km->hm);
+    while (iter) {
+        if (name == iter->val.name) {
+            return &iter->val;
         }
-        item = hashmap_iter(&km->hm, &i);
+        iter = hmap_next(&km->hm, iter);
     }
     return nullptr;
 }
@@ -128,13 +130,12 @@ const input_keymap_entry *get_keymap_entry(const char *name, const input_keymap 
 {
     assert(name);
     assert(km);
-    sizet i{0};
-    auto item = hashmap_iter(&km->hm, &i);
-    while (item) {
-        if (name == item->value.name) {
-            return &item->value;
+    auto iter = hmap_first(&km->hm);
+    while (iter) {
+        if (name == iter->val.name) {
+            return &iter->val;
         }
-        item = hashmap_iter(&km->hm, &i);
+        iter = hmap_next(&km->hm, iter);
     }
     return nullptr;
 }
@@ -142,7 +143,7 @@ const input_keymap_entry *get_keymap_entry(const char *name, const input_keymap 
 bool remove_keymap_entry(u32 key, input_keymap *km)
 {
     assert(km);
-    return hashmap_remove(&km->hm, key);
+    return hmap_remove(&km->hm, key);
 }
 
 // Push km to the top of the keymap stack - top is highest priority in input_map_event

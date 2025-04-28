@@ -2,6 +2,7 @@
 #include "array.h"
 #include "../util.h"
 #include "../containers/string.h"
+#include "../hashfuncs.h"
 
 namespace nslib
 {
@@ -71,8 +72,8 @@ void hset_debug_print(const array<hset_bucket<Val>> &buckets)
 
 template<typename Val>
 void hset_init(hset<Val> *hs,
-               hash_func<Val> *hashf,
                mem_arena *arena = mem_global_arena(),
+               hash_func<Val> *hashf = hash_type,
                sizet initial_capacity = HSET_DEFAULT_BUCKET_COUNT,
                sizet mem_alignment = SIMD_MIN_ALIGNMENT)
 {
@@ -491,15 +492,6 @@ void hset_clear(hset<Val> *hs)
     arr_clear_to(&hs->buckets, {});
 }
 
-// template<typename Val>
-// hset<Val>::iterator hset_first(hset<Val> *hs)
-// {
-//     if (is_valid(hs->head)) {
-//         return &hs->buckets[hs->head].item;
-//     }
-//     return nullptr;
-// }
-
 template<typename Val>
 hset<Val>::iterator hset_first(const hset<Val> *hs)
 {
@@ -508,16 +500,6 @@ hset<Val>::iterator hset_first(const hset<Val> *hs)
     }
     return nullptr;
 }
-
-// template<typename Val>
-// hset<Val>::iterator hset_last(hset<Val> *hs)
-// {
-//     if (is_valid(hs->head)) {
-//         assert(is_valid(hs->buckets[hs->head].item.prev));
-//         return &hs->buckets[hs->buckets[hs->head].item.prev].item;
-//     }
-//     return nullptr;
-// }
 
 template<typename Val>
 hset<Val>::iterator hset_last(const hset<Val> *hs)
@@ -528,18 +510,6 @@ hset<Val>::iterator hset_last(const hset<Val> *hs)
     }
     return nullptr;
 }
-
-// template<typename Val>
-// hset<Val>::iterator hset_next(hset<Val> *hs, typename hset<Val>::iterator item)
-// {
-//     if (!item) {
-//         item = hset_first(hs);
-//     }
-//     if (item && is_valid(item->next)) {
-//         return &hs->buckets[item->next].item;
-//     }
-//     return nullptr;
-// }
 
 template<typename Val>
 hset<Val>::iterator hset_next(const hset<Val> *hs, typename hset<Val>::iterator item)
@@ -552,18 +522,6 @@ hset<Val>::iterator hset_next(const hset<Val> *hs, typename hset<Val>::iterator 
     }
     return nullptr;
 }
-
-// template<typename Val>
-// hset<Val>::iterator hset_prev(hset<Val> *hs, typename hset<Val>::iterator item)
-// {
-//     if (!item) {
-//         item = hset_last(hs);
-//     }
-//     if (item && item != &hs->buckets[hs->head].item && is_valid(item->prev)) {
-//         return &hs->buckets[item->prev].item;
-//     }
-//     return nullptr;
-// }
 
 template<typename Val>
 hset<Val>::iterator hset_prev(const hset<Val> *hs, typename hset<Val>::iterator item)
@@ -600,7 +558,8 @@ void pack_unpack(ArchiveT *ar, hset<T> &val, const pack_var_info &vinfo)
     else {        
         auto iter = hset_first(&val);
         while (iter) {
-            pup_var(ar, iter->val, {to_cstr("{%d}", i)});
+            // We know we are packing in to the archive so we can just remove the constness
+            pup_var(ar, const_cast<T&>(iter->val), {to_cstr("{%d}", i)});
             iter = hset_next(&val, iter);
             ++i;
         }

@@ -189,7 +189,7 @@ bool remove_cache(robj_cache_group *cg)
 template<class T>
 T *add_robj(const rid &id, robj_cache<T> *cache)
 {
-    T* ret = (T *)mem_alloc(cache->arena.mpool.chunk_size, &cache->arena, cache->mem_alignment);
+    T *ret = (T *)mem_alloc(cache->arena.mpool.chunk_size, &cache->arena, cache->mem_alignment);
     memset(ret, 0, cache->arena.mpool.chunk_size);
     ret->id = id;
     auto item = hmap_insert(&cache->rmap, id, ret);
@@ -254,7 +254,7 @@ template<class T>
 bool remove_robj(const T &item, robj_cache<T> *cache)
 {
     if (item) {
-        hashmap_remove(&cache->rmap, item->id);
+        hmap_remove(&cache->rmap, item->id);
         mem_free(item, &cache->arena);
         return true;
     }

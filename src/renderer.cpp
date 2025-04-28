@@ -891,7 +891,7 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
     auto def_mat = add_robj(DEFAULT_MAT_ID, mat_cache);
     init_material(def_mat, rndr->upstream_fl_arena);
     def_mat->col = vec4{0.5f, 0.2f, 0.8f, 1.0f};
-    hashset_set(&def_mat->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
+    hset_set(&def_mat->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
 
     // Setup our indice and vert buffer sbuffer
     return err_code::RENDER_NO_ERROR;
@@ -994,10 +994,10 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
             }
         }
 
-        sizet pli{};
         // Go through all pipelines this material references
-        while (auto pl_iter = hashset_iter(&mat->pipelines, &pli)) {
-            auto pl_fiter = hmap_find(&rndr->pipelines, *pl_iter);
+        auto pl_iter = hset_first(&mat->pipelines);
+        while (pl_iter) {
+            auto pl_fiter = hmap_find(&rndr->pipelines, pl_iter->val);
             assert(pl_fiter);
             auto pline = &dev->pipelines[pl_fiter->val.plind];
 
@@ -1075,6 +1075,7 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
                          .tf = &tf->cached};
 
             arr_push_back(&push_mat_fiter->val->dcs, dc);
+            pl_iter = hset_next(&mat->pipelines, pl_iter);
         }
     }
     return err_code::VKR_NO_ERROR;

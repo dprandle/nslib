@@ -1,7 +1,8 @@
 #pragma once
 #include "array.h"
 #include "../util.h"
-#include "string.h"
+#include "../containers/string.h"
+#include "../hashfuncs.h"
 
 namespace nslib
 {
@@ -79,7 +80,7 @@ void hmap_debug_print(const array<hmap_bucket<Key, Val>> &buckets)
 
 template<typename Key, typename Val>
 void hmap_init(hmap<Key, Val> *hm,
-               hash_func<Key> *hashf,
+               hash_func<Key> *hashf = hash_type,
                mem_arena *arena = mem_global_arena(),
                sizet initial_capacity = HMAP_DEFAULT_BUCKET_COUNT,
                sizet mem_alignment = SIMD_MIN_ALIGNMENT)

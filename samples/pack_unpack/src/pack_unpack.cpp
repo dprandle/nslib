@@ -1,3 +1,4 @@
+#include "rid.h"
 #include "json_archive.h"
 #include "string_archive.h"
 #include "binary_archive.h"
@@ -240,36 +241,38 @@ int app_init(platform_ctxt *ctxt, void *user_data)
     auto app = (app_data *)user_data;
     ilog("App init");
     data_to_pup data{};
-    hmap_init(&data.hm, hash_type, mem_global_arena());
-    hmap_init(&data.hm_u64, hash_type, mem_global_arena());
-    hmap_init(&data.hm_i64, hash_type, mem_global_arena());
-    hmap_init(&data.hm_u32, hash_type, mem_global_arena());
-    hmap_init(&data.hm_i32, hash_type, mem_global_arena());
-    hmap_init(&data.hm_u16, hash_type, mem_global_arena());
-    hmap_init(&data.hm_i16, hash_type, mem_global_arena());
-    hmap_init(&data.hm_u8, hash_type, mem_global_arena());
-    hmap_init(&data.hm_i8, hash_type, mem_global_arena());
-    hmap_init(&data.hm_no_simp, hash_type, mem_global_arena());
-    hset_init(&data.hs, hash_type, mem_global_arena());
-    hset_init(&data.hs_u64, hash_type, mem_global_arena());
-    hset_init(&data.hs_i64, hash_type, mem_global_arena());
-    hset_init(&data.hs_u32, hash_type, mem_global_arena());
-    hset_init(&data.hs_i32, hash_type, mem_global_arena());
-    hset_init(&data.hs_u16, hash_type, mem_global_arena());
-    hset_init(&data.hs_i16, hash_type, mem_global_arena());
-    hset_init(&data.hs_u8, hash_type, mem_global_arena());
-    hset_init(&data.hs_i8, hash_type, mem_global_arena());
-    hset_init(&data.hs_no_simp, hash_type, mem_global_arena());
+    hmap_init(&data.hm);
+    hmap_init(&data.hm_u64);
+    hmap_init(&data.hm_i64);
+    hmap_init(&data.hm_u32);
+    hmap_init(&data.hm_i32);
+    hmap_init(&data.hm_u16);
+    hmap_init(&data.hm_i16);
+    hmap_init(&data.hm_u8);
+    hmap_init(&data.hm_i8);
+    hmap_init(&data.hm_no_simp);
+    hset_init(&data.hs);
+    hset_init(&data.hs_u64);
+    hset_init(&data.hs_i64);
+    hset_init(&data.hs_u32);
+    hset_init(&data.hs_i32);
+    hset_init(&data.hs_u16);
+    hset_init(&data.hs_i16);
+    hset_init(&data.hs_u8);
+    hset_init(&data.hs_i8);
+    hset_init(&data.hs_no_simp, mem_global_arena(), hash_type);
 
     seed_data(&data);
     ilog("data_to_pup json in: \n%s", to_cstr(data));
 
     // static_binary_buffer_archive<10000> ba{};
     // ilog("Packing to static binary buffer archive");
-    // pup_var(&ba, data, {"data_to_pup"});
+    // pup_var(&ba, data.hs, {"data_to_pup"});
+    
     // platform_file_err_desc err;
+    
     // ilog("Saving binary data to data.bin");
-    // platform_write_file("data.bin", ba.data, 1, ba.cur_offset, 0, &err);
+    // write_file("data.bin", ba.data, 1, ba.cur_offset, 0, &err);
     // if (err.code != err_code::FILE_NO_ERROR) {
     //     wlog("File write error: %s", err.str);
     // }
@@ -281,7 +284,7 @@ int app_init(platform_ctxt *ctxt, void *user_data)
     // clear_data(&data);
 
     // ilog("Reading in binary data to static binary buffer archive");
-    // sizet read_ind = platform_read_file("data.bin", ba.data, 1, ba.size, 0, &err);
+    // sizet read_ind = read_file("data.bin", ba.data, 1, ba.size, 0, &err);
     // if (err.code != err_code::FILE_NO_ERROR) {
     //     wlog("File read error: %s", err.str);
     // }

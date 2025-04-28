@@ -2,7 +2,7 @@
 #include "robj_common.h"
 #include "math/vector4.h"
 #include "containers/array.h"
-#include "containers/hashset.h"
+#include "containers/hset.h"
 
 namespace nslib
 {
@@ -22,7 +22,7 @@ struct texture
 struct material
 {
     ROBJ(MATERIAL);
-    hashset<rid> pipelines;
+    hset<rid> pipelines;
     static_array<rid,TEXTURE_SLOT_COUNT> textures;
     vec4 col;
 };

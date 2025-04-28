@@ -1,11 +1,8 @@
 #include "platform.h"
 #include "logging.h"
 #include "rid.h"
-#include "containers/string.h"
 #include "hashfuncs.h"
 #include "containers/string.h"
-#include "containers/hashmap.h"
-#include "containers/hashset.h"
 #include "containers/hmap.h"
 #include "containers/hset.h"
 
@@ -140,68 +137,12 @@ void test_arrays()
     ilog("Output: %s", str_cstr(&output));
 }
 
-void test_hashmaps()
-{
-    dlog("Starting hashmap test");
-    hashmap<rid, custom_type_2> hm1;
-    hashmap<string, custom_type_2> hm2;
-    hashmap_init(&hm1, mem_global_arena());
-    hashmap_init(&hm2, mem_global_arena());
-
-    hashset<rid> hs1;
-    hashset<string> hs2;
-    hashset_init(&hs1, mem_global_arena());
-    hashset_init(&hs2, mem_global_arena());
-
-    hashset<custom_type_0> hs3;
-    hashset<custom_type_1> hs4;
-    hashset_init(&hs3, mem_global_arena());
-    hashset_init(&hs4, mem_global_arena());
-
-    hashmap_set(&hm1, rid("key1"), {1, 2});
-    hashmap_set(&hm1, rid("key2"), {3, 4});
-    hashmap_set(&hm1, rid("key3"), {5, 6});
-    hashmap_set(&hm1, rid{"key4"}, {7, 8});
-
-    hashmap_set(&hm2, string("key1"), {1, 2});
-    hashmap_set(&hm2, string("key2"), {3, 4});
-    hashmap_set(&hm2, string("key3"), {5, 6});
-    hashmap_set(&hm2, string{"key4"}, {7, 8});
-
-    hashset_set(&hs1, rid{"key1"});
-    hashset_set(&hs1, rid{"key2"});
-    hashset_set(&hs1, rid{"key3"});
-    hashset_set(&hs1, rid{"key4"});
-
-    hashset_set(&hs2, string{"key1"});
-    hashset_set(&hs2, string{"key2"});
-    hashset_set(&hs2, string{"key3"});
-    hashset_set(&hs2, string{"key4"});
-
-    hashset_set(&hs3, custom_type_0{1, rid{"key1"}});
-    hashset_set(&hs3, custom_type_0{2, rid{"key2"}});
-    hashset_set(&hs3, custom_type_0{3, rid{"key3"}});
-    hashset_set(&hs3, custom_type_0{4, rid{"key4"}});
-
-    hashset_set(&hs4, custom_type_1{1, "key1"});
-    hashset_set(&hs4, custom_type_1{2, "key2"});
-    hashset_set(&hs4, custom_type_1{3, "key3"});
-    hashset_set(&hs4, custom_type_1{4, "key4"});
-
-    ilog("HM1 %s", to_cstr(hm1));
-    ilog("HM2 %s", to_cstr(hm2));
-    ilog("HS1 %s", to_cstr(hs1));
-    ilog("HS2 %s", to_cstr(hs2));
-    ilog("HS3 %s", to_cstr(hs3));
-    ilog("HS4 %s", to_cstr(hs4));
-}
-
-void test_new_hashsets()
+void test_hashsets()
 {
     ilog("Starting new hashset test");
 
     hset<char> hs1{};
-    hset_init(&hs1, hash_type);
+    hset_init(&hs1);
 
     ilog("Inserting a through x");
     hset_insert(&hs1, 'a');
@@ -334,7 +275,7 @@ void test_new_hashsets()
     hset_terminate(&hs1);
 }
 
-void test_new_hashmaps()
+void test_hashmaps()
 {
     ilog("Starting new hashmap test");
 
@@ -472,7 +413,7 @@ void test_new_hashmaps()
     hmap_terminate(&hm1);
 }
 
-void test_new_hashmaps_string_keys()
+void test_hashmaps_string_keys()
 {
     ilog("Starting new hashmap string key test");
 
@@ -556,13 +497,13 @@ void test_new_hashmaps_string_keys()
     hmap_terminate(&hm1);
 }
 
-void test_new_hashset_string_keys()
+void test_hashset_string_keys()
 {
     ilog("Starting new hashset string test");
 
     hset<rid> hs1{};
 
-    hset_init(&hs1, hash_type);
+    hset_init(&hs1);
     ilog("Inserting 9 strange strings");
     hset_insert(&hs1, rid("scooby"));
     hset_insert(&hs1, rid("sandwiches"));
@@ -646,10 +587,9 @@ int app_init(platform_ctxt *ctxt, void *)
     test_strings();
     test_arrays();
     test_hashmaps();
-    test_new_hashmaps();
-    test_new_hashmaps_string_keys();
-    test_new_hashsets();
-    test_new_hashset_string_keys();
+    test_hashmaps_string_keys();
+    test_hashsets();
+    test_hashset_string_keys();
     return err_code::PLATFORM_NO_ERROR;
 }
 

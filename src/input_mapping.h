@@ -1,8 +1,9 @@
 #pragma once
 
 #include "math/vector2.h"
+#include "containers/string.h"
+#include "containers/hmap.h"
 #include "input_kmcodes.h"
-#include "containers/hashmap.h"
 
 namespace nslib
 {
@@ -76,7 +77,7 @@ inline bool operator!=(const input_keymap_entry &lhs, const input_keymap_entry &
 struct input_keymap
 {
     small_str name{};
-    hashmap<u32, input_keymap_entry> hm{};
+    hmap<u32, input_keymap_entry> hm{};
 };
 
 // The most important keymap is at the back of the array
@@ -106,7 +107,7 @@ int action_from_key(u32 key);
 
 // Set keymap entry overwriting an existing one if its there - returns true if overwrote an existing entry otherwise
 // returns false
-bool set_keymap_entry(u32 key, const input_keymap_entry *entry, input_keymap *km);
+input_keymap_entry *set_keymap_entry(u32 key, const input_keymap_entry *entry, input_keymap *km);
 
 // Find keymap entry by key and return it - return null if no match is found
 input_keymap_entry *get_keymap_entry(u32 key, input_keymap *km);

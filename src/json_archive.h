@@ -2,11 +2,11 @@
 
 #include "archive_common.h"
 
+#include "rid.h"
 #include "containers/cjson.h"
 #include "containers/string.h"
 #include "containers/hset.h"
 #include "containers/hmap.h"
-#include "robj_common.h"
 
 namespace nslib
 {

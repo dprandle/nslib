@@ -2,12 +2,10 @@
 
 #include "archive_common.h"
 #include "containers/string.h"
-#include "containers/hashmap.h"
-#include "containers/hashset.h"
 #include "containers/hmap.h"
 #include "containers/hset.h"
-
-#include "robj_common.h"
+#include "rid.h"
+//#include "robj_common.h"
 
 namespace nslib
 {
@@ -129,33 +127,6 @@ void pack_unpack(string_archive *ar, array<T> &val, const pack_var_info &vinfo)
 
 // Hashset
 template<class T>
-void pack_unpack_begin(string_archive *ar, hashset<T> &, const pack_var_info &vinfo)
-{
-    ar->txt += ar->cur_indent;
-    handle_varname(&ar->txt, vinfo.name);
-    ar->txt += "[\n";
-    str_resize(&ar->cur_indent, str_len(ar->cur_indent) + ar->indent_per_level, ' ');
-}
-
-template<class T>
-void pack_unpack_end(string_archive *ar, hashset<T> &, const pack_var_info &vinfo)
-{
-    str_resize(&ar->cur_indent, str_len(ar->cur_indent) - ar->indent_per_level);
-    ar->txt += ar->cur_indent + "]\n";
-}
-
-template<class T>
-void pack_unpack(string_archive *ar, hashset<T> &val, const pack_var_info &vinfo)
-{
-    sizet i{};
-    while (auto iter = hashset_iter(&val, &i)) {
-        pup_var(ar, *iter, {});
-    }
-}
-
-
-// Hashset
-template<class T>
 void pack_unpack_begin(string_archive *ar, hset<T> &, const pack_var_info &vinfo)
 {
     ar->txt += ar->cur_indent;
@@ -212,36 +183,6 @@ void pack_unpack(string_archive *ar, hmap<K, T> &val, const pack_var_info &vinfo
     while (iter) {
         pup_var(ar, iter->val, {to_cstr(iter->key)});
         iter = hmap_next(&val, iter);
-    }
-}
-
-// Hashmap with string key
-template<class T>
-void pack_unpack(string_archive *ar, hashmap<string, T> &val, const pack_var_info &vinfo)
-{
-    sizet i{};
-    while (auto iter = hashmap_iter(&val, &i)) {
-        pup_var(ar, iter->value, {str_cstr(iter->key)});
-    }
-}
-
-// Hashmap with rid key
-template<class T>
-void pack_unpack(string_archive *ar, hashmap<rid, T> &val, const pack_var_info &vinfo)
-{
-    sizet i{};
-    while (auto iter = hashmap_iter(&val, &i)) {
-        pup_var(ar, iter->value, {str_cstr(iter->key.str)});
-    }
-}
-
-// Hashmap with integral key type
-template<integral K, class T>
-void pack_unpack(string_archive *ar, hashmap<K, T> &val, const pack_var_info &vinfo)
-{
-    sizet i{};
-    while (auto iter = hashmap_iter(&val, &i)) {
-        pup_var(ar, iter->value, {to_cstr(iter->key)});
     }
 }
 
