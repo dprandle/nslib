@@ -1,6 +1,7 @@
 #pragma once
 #include "array.h"
 #include "../util.h"
+#include "../containers/string.h"
 
 namespace nslib
 {
@@ -38,8 +39,9 @@ template<typename Val>
 struct hset
 {
     using value_type = hset_item<Val>;
-    using iterator = value_type *;
-    using const_iterator = const value_type *;
+
+    // The iterator really always must be constant because it would mess up the set to change anything in an hset item
+    using iterator = const value_type *;
 
     hash_func<Val> *hashf{};
     u64 seed0{};
@@ -231,7 +233,7 @@ void hset_clear_bucket(hset<Val> *hs, sizet bckt_ind)
     // If the prev bucket's next index is invalid, it means we are the head node of the bucket. We only want to remove
     // the node from the bucket ll if we are NOT the head node - or technically if we are the head node but the only
     // node. The thing is, in that case, our next index will already be invalid anyways.
-    if (is_valid(hs->buckets[hs->buckets[bckt_ind].prev].next)) { // || hm->buckets[bckt_ind].prev == bckt_ind) {
+    if (is_valid(hs->buckets[hs->buckets[bckt_ind].prev].next)) {
         hs->buckets[hs->buckets[bckt_ind].prev].next = hs->buckets[bckt_ind].next;
         hs->buckets[bckt_ind].next = INVALID_IND;
     }
@@ -310,17 +312,7 @@ bool hset_remove(hset<Val> *hs, const Val &v)
 }
 
 template<typename Val>
-hset<Val>::iterator hset_find(hset<Val> *hs, const Val &v)
-{
-    sizet bucket_ind = hset_find_bucket(hs, v);
-    if (bucket_ind != INVALID_IND) {
-        return &hs->buckets[bucket_ind].item;
-    }
-    return nullptr;
-}
-
-template<typename Val>
-hset<Val>::const_iterator hset_find(const hset<Val> *hs, const Val &v)
+hset<Val>::iterator hset_find(const hset<Val> *hs, const Val &v)
 {
     sizet bucket_ind = hset_find_bucket(hs, v);
     if (bucket_ind != INVALID_IND) {
@@ -447,6 +439,26 @@ hset<Val>::iterator hset_insert(hset<Val> *hs, const Val &val)
     return hset_insert_or_set(hs, val, false);
 }
 
+// Call hset_insert for all items in src on dest. Returns the number of new items inserted. If not_inserted is set,
+// fills the array with vals from src that were not inserted in dest (most likely because they already existed)
+template<typename Val>
+sizet hset_insert(hset<Val> *dest, const hset<Val> *src, array<Val> *not_inserted = nullptr)
+{
+    sizet cnt{0};
+    auto iter = hset_first(src);
+    while (iter) {
+        auto ins = hset_insert(dest, iter->val);
+        if (ins) {
+            ++cnt;
+        }
+        else if (not_inserted) {
+            arr_emplace_back(not_inserted, iter->val);
+        }
+        iter = hset_next(src, iter);
+    }
+    return cnt;
+}
+
 // Insert a new item into the map. If the key already exists, set the value and return the item. If the key does not
 // exist, create it. This may increase the hset capacity and rehash if the new size is greater
 template<typename Val>
@@ -455,16 +467,41 @@ hset<Val>::iterator hset_set(hset<Val> *hs, const Val &val)
     return hset_insert_or_set(hs, val, true);
 }
 
+// Call hset_set for all items in src on dest.
+template<typename Val>
+void hset_set(hset<Val> *dest, const hset<Val> *src)
+{
+    auto iter = hset_first(src);
+    while (iter) {
+        assert(hset_set(dest, iter->key, iter->val));
+        iter = hset_next(src, iter);
+    }
+}
+
+template<typename Val>
+bool hset_empty(const hset<Val> *hs) {
+    return hs->count == 0;
+}
+
 template<typename Val>
 void hset_clear(hset<Val> *hs)
 {
     hs->head = INVALID_IND;
     hs->count = 0;
-    arr_clear(&hs->buckets);
+    arr_clear_to(&hs->buckets, {});
 }
 
+// template<typename Val>
+// hset<Val>::iterator hset_first(hset<Val> *hs)
+// {
+//     if (is_valid(hs->head)) {
+//         return &hs->buckets[hs->head].item;
+//     }
+//     return nullptr;
+// }
+
 template<typename Val>
-hset<Val>::iterator hset_first(hset<Val> *hs)
+hset<Val>::iterator hset_first(const hset<Val> *hs)
 {
     if (is_valid(hs->head)) {
         return &hs->buckets[hs->head].item;
@@ -472,17 +509,18 @@ hset<Val>::iterator hset_first(hset<Val> *hs)
     return nullptr;
 }
 
-template<typename Val>
-hset<Val>::const_iterator hset_first(const hset<Val> *hs)
-{
-    if (is_valid(hs->head)) {
-        return &hs->buckets[hs->head].item;
-    }
-    return nullptr;
-}
+// template<typename Val>
+// hset<Val>::iterator hset_last(hset<Val> *hs)
+// {
+//     if (is_valid(hs->head)) {
+//         assert(is_valid(hs->buckets[hs->head].item.prev));
+//         return &hs->buckets[hs->buckets[hs->head].item.prev].item;
+//     }
+//     return nullptr;
+// }
 
 template<typename Val>
-hset<Val>::iterator hset_last(hset<Val> *hs)
+hset<Val>::iterator hset_last(const hset<Val> *hs)
 {
     if (is_valid(hs->head)) {
         assert(is_valid(hs->buckets[hs->head].item.prev));
@@ -491,18 +529,20 @@ hset<Val>::iterator hset_last(hset<Val> *hs)
     return nullptr;
 }
 
-template<typename Val>
-hset<Val>::const_iterator hset_last(const hset<Val> *hs)
-{
-    if (is_valid(hs->head)) {
-        assert(is_valid(hs->buckets[hs->head].item.prev));
-        return &hs->buckets[hs->buckets[hs->head].item.prev].item;
-    }
-    return nullptr;
-}
+// template<typename Val>
+// hset<Val>::iterator hset_next(hset<Val> *hs, typename hset<Val>::iterator item)
+// {
+//     if (!item) {
+//         item = hset_first(hs);
+//     }
+//     if (item && is_valid(item->next)) {
+//         return &hs->buckets[item->next].item;
+//     }
+//     return nullptr;
+// }
 
 template<typename Val>
-hset<Val>::iterator hset_next(hset<Val> *hs, typename hset<Val>::iterator item)
+hset<Val>::iterator hset_next(const hset<Val> *hs, typename hset<Val>::iterator item)
 {
     if (!item) {
         item = hset_first(hs);
@@ -513,32 +553,20 @@ hset<Val>::iterator hset_next(hset<Val> *hs, typename hset<Val>::iterator item)
     return nullptr;
 }
 
-template<typename Val>
-hset<Val>::const_iterator hset_next(const hset<Val> *hs, typename hset<Val>::const_iterator item)
-{
-    if (!item) {
-        item = hset_first(hs);
-    }
-    if (item && is_valid(item->next)) {
-        return &hs->buckets[item->next].item;
-    }
-    return nullptr;
-}
+// template<typename Val>
+// hset<Val>::iterator hset_prev(hset<Val> *hs, typename hset<Val>::iterator item)
+// {
+//     if (!item) {
+//         item = hset_last(hs);
+//     }
+//     if (item && item != &hs->buckets[hs->head].item && is_valid(item->prev)) {
+//         return &hs->buckets[item->prev].item;
+//     }
+//     return nullptr;
+// }
 
 template<typename Val>
-hset<Val>::iterator hset_prev(hset<Val> *hs, typename hset<Val>::iterator item)
-{
-    if (!item) {
-        item = hset_last(hs);
-    }
-    if (item && item != &hs->buckets[hs->head].item && is_valid(item->prev)) {
-        return &hs->buckets[item->prev].item;
-    }
-    return nullptr;
-}
-
-template<typename Val>
-hset<Val>::const_iterator hset_prev(const hset<Val> *hs, typename hset<Val>::const_iterator item)
+hset<Val>::iterator hset_prev(const hset<Val> *hs, typename hset<Val>::iterator item)
 {
     if (!item) {
         item = hset_last(hs);
@@ -553,6 +581,30 @@ template<typename Val>
 void hset_terminate(hset<Val> *hs)
 {
     arr_terminate(&hs->buckets);
+}
+
+template<class ArchiveT, class T>
+void pack_unpack(ArchiveT *ar, hset<T> &val, const pack_var_info &vinfo)
+{
+    sizet sz = val.count;
+    pup_var(ar, sz, {"count"});
+    sizet i{0};
+    if (ar->opmode == archive_opmode::UNPACK) {
+        while (i < sz) {
+            T item{};
+            pup_var(ar, item, {to_cstr("[%d]", i)});
+            hset_set(&val, item);
+            ++i;
+        }
+    }
+    else {        
+        auto iter = hset_first(&val);
+        while (iter) {
+            pup_var(ar, iter->val, {to_cstr("{%d}", i)});
+            iter = hset_next(&val, iter);
+            ++i;
+        }
+    }
 }
 
 } // namespace nslib

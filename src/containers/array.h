@@ -284,12 +284,24 @@ T *arr_emplace_back(static_array<T, N> *arr, Args &&...args)
     return ret;
 }
 
+// Assigns each element in the array to item - does not change array size or capacity.
 template<class T>
 void arr_clear_to(T *bufobj, const typename T::value_type &item)
 {
     for (int i = 0; i < bufobj->size; ++i) {
         bufobj->data[i] = item;
     }
+}
+
+// Call destructor on all items in the array and set size to 0, does not affect the capacity.
+template<class T>
+void arr_clear(T *bufobj)
+{
+    using MT = typename T::value_type;
+    for (int i = 0; i < bufobj->size; ++i) {
+        bufobj->data[i].~MT();
+    }
+    bufobj->size = 0;
 }
 
 template<class T>
@@ -301,16 +313,6 @@ void arr_pop_back(T *bufobj)
     bufobj->data[bufobj->size - 1].~MT();
     bufobj->data[bufobj->size - 1] = {};
     --bufobj->size;
-}
-
-template<class T>
-void arr_clear(T *bufobj)
-{
-    using MT = typename T::value_type;
-    for (int i = 0; i < bufobj->size; ++i) {
-        bufobj->data[i].~MT();
-    }
-    bufobj->size = 0;
 }
 
 template<class T>

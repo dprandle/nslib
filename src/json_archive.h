@@ -4,8 +4,8 @@
 
 #include "containers/cjson.h"
 #include "containers/string.h"
-#include "containers/hashset.h"
-#include "containers/hashmap.h"
+#include "containers/hset.h"
+#include "containers/hmap.h"
 #include "robj_common.h"
 
 namespace nslib
@@ -351,7 +351,7 @@ void pack_unpack(json_archive *ar, array<T> &val, const pack_var_info &vinfo)
 // Hashset - same as dynamic array in json representation
 // Dynamic arrays
 template<class T>
-void pack_unpack_begin(json_archive *ar, hashset<T> &val, const pack_var_info &vinfo)
+void pack_unpack_begin(json_archive *ar, hset<T> &, const pack_var_info &vinfo)
 {
     jsa_stack_frame *cur_frame = arr_back(&ar->stack);
     assert(cur_frame);
@@ -392,13 +392,13 @@ void pack_unpack_begin(json_archive *ar, hashset<T> &val, const pack_var_info &v
 }
 
 template<class T>
-void pack_unpack_end(json_archive *ar, hashset<T> &val, const pack_var_info &vinfo)
+void pack_unpack_end(json_archive *ar, hset<T> &, const pack_var_info &)
 {
     arr_pop_back(&ar->stack);
 }
 
 template<class T>
-void pack_unpack(json_archive *ar, hashset<T> &val, const pack_var_info &vinfo)
+void pack_unpack(json_archive *ar, hset<T> &val, const pack_var_info &vinfo)
 {
     if (ar->opmode == archive_opmode::UNPACK) {
         jsa_stack_frame *cur_frame = arr_back(&ar->stack);
@@ -408,14 +408,16 @@ void pack_unpack(json_archive *ar, hashset<T> &val, const pack_var_info &vinfo)
         for (int i = 0; i < count; ++i) {
             T item;
             pup_var(ar, item, {});
-            hashset_set(&val, item);
+            assert(hset_set(&val, item));
             ++ar->stack[frame_ind].cur_arr_ind;
         }
     }
     else {
-        sizet i{};
-        while (auto iter = hashset_iter(&val, &i)) {
-            pup_var(ar, *iter, {});
+        auto iter = hset_first(&val);
+        while (iter) {
+            // We can const cast we know we are packing in to the archive and iter->val will be iunc
+            pup_var(ar, const_cast<T&>(iter->val), {});
+            iter = hset_next(&val, iter);
         }
     }
 }
@@ -423,23 +425,24 @@ void pack_unpack(json_archive *ar, hashset<T> &val, const pack_var_info &vinfo)
 // Hashmaps can use the default begin/end functions as they will just be json objects with each member var name as a key
 // and member var value as a value. We have special cases for string convertable 
 template<class T>
-void pack_unpack(json_archive *ar, hashmap<string, T> &val, const pack_var_info &vinfo)
+void pack_unpack(json_archive *ar, hmap<string, T> &val, const pack_var_info &vinfo)
 {
     if (ar->opmode == archive_opmode::UNPACK) {
         jsa_stack_frame *cur_frame = arr_back(&ar->stack);
         assert(cur_frame);
         auto obj = cur_frame->current->child;
         while (obj) {
-            pup_var(ar, val[obj->string], {obj->string});
+            string key = obj->string;
+            auto item = hmap_find_or_insert(&val, key);
+            pup_var(ar, item->val, {obj->string});
             obj = obj->next;
         }
     }
     else {
-        sizet i{};
-        auto iter = hashmap_iter(&val,&i);
+        auto iter = hmap_first(&val);
         while (iter) {
-            pup_var(ar, iter->value, {str_cstr(iter->key)});
-            iter = hashmap_iter(&val, &i);
+            pup_var(ar, iter->val, {str_cstr(iter->key)});
+            iter = hmap_next(&val, iter);
         }
     }
 }
@@ -447,23 +450,24 @@ void pack_unpack(json_archive *ar, hashmap<string, T> &val, const pack_var_info 
 // Hashmaps can use the default begin/end functions as they will just be json objects with each member var name as a key
 // and member var value as a value. We have special cases for string convertable 
 template<class T>
-void pack_unpack(json_archive *ar, hashmap<rid, T> &val, const pack_var_info &vinfo)
+void pack_unpack(json_archive *ar, hmap<rid, T> &val, const pack_var_info &vinfo)
 {
     if (ar->opmode == archive_opmode::UNPACK) {
         jsa_stack_frame *cur_frame = arr_back(&ar->stack);
         assert(cur_frame);
         auto obj = cur_frame->current->child;
         while (obj) {
-            pup_var(ar, val[rid(obj->string)], {obj->string});
+            auto key = rid(obj->string);
+            auto item = hmap_find_or_insert(&val, key);
+            pup_var(ar, item->val, {obj->string});
             obj = obj->next;
         }
     }
     else {
-        sizet i{};
-        auto iter = hashmap_iter(&val,&i);
+        auto iter = hmap_first(&val);
         while (iter) {
-            pup_var(ar, iter->value, {str_cstr(iter->key.str)});
-            iter = hashmap_iter(&val, &i);
+            pup_var(ar, iter->val, {str_cstr(iter->key.str)});
+            iter = hmap_next(&val, iter);
         }
     }
 }
@@ -472,7 +476,7 @@ void pack_unpack(json_archive *ar, hashmap<rid, T> &val, const pack_var_info &vi
 // Hashmaps can use the default begin/end functions as they will just be json objects with each member var name as a key
 // and member var value as a value. We have special cases for string convertable 
 template<integral K, class T>
-void pack_unpack(json_archive *ar, hashmap<K, T> &val, const pack_var_info &vinfo)
+void pack_unpack(json_archive *ar, hmap<K, T> &val, const pack_var_info &vinfo)
 {
     if (ar->opmode == archive_opmode::UNPACK) {
         jsa_stack_frame *cur_frame = arr_back(&ar->stack);
@@ -481,18 +485,18 @@ void pack_unpack(json_archive *ar, hashmap<K, T> &val, const pack_var_info &vinf
         while (obj) {
             K key{};
             from_str(&key, obj->string);
-            pup_var(ar, val[key], {obj->string});
+            auto item = hmap_find_or_insert(&val, key);
+            pup_var(ar, item->val, {obj->string});
             obj = obj->next;
         }
     }
     else {
-        sizet i{};
-        auto iter = hashmap_iter(&val,&i);
+        auto iter = hmap_first(&val);
         while (iter) {
             K key{iter->key};
             string s = to_str((u64)key);
-            pup_var(ar, iter->value, {str_cstr(s)});
-            iter = hashmap_iter(&val, &i);
+            pup_var(ar, iter->val, {str_cstr(s)});
+            iter = hmap_next(&val, iter);
         }
     }
 }

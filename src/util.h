@@ -36,13 +36,14 @@ u64 generate_rand_seed();
 
 pup_func_tt(key_val_pair)
 {
-    if (test_flags(vinfo.meta.flags, pack_va_flags::PACK_PAIR_KEY_VAL)) {
-        pup_member(key);
-        pup_member(value);
-    }
-    else {
-        pup_member(first);
-        pup_member(second);
-    }
+    pup_member(key);
+    pup_member(value);
 }
+
+pup_func_tt(pair)
+{
+    pup_member(first);
+    pup_member(second);
+}
+
 } // namespace nslib

@@ -9,6 +9,7 @@
     template<class ArchiveT>                                                                                                               \
     void pack_unpack(ArchiveT *ar, type &val, const pack_var_info &vinfo)
 
+// Pup func template type
 #define pup_func_tt(type)                                                                                                                  \
     template<class ArchiveT, class... Args>                                                                                                \
     void pack_unpack(ArchiveT *ar, type<Args...> &val, const pack_var_info &vinfo)

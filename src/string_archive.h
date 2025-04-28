@@ -4,6 +4,9 @@
 #include "containers/string.h"
 #include "containers/hashmap.h"
 #include "containers/hashset.h"
+#include "containers/hmap.h"
+#include "containers/hset.h"
+
 #include "robj_common.h"
 
 namespace nslib
@@ -147,6 +150,68 @@ void pack_unpack(string_archive *ar, hashset<T> &val, const pack_var_info &vinfo
     sizet i{};
     while (auto iter = hashset_iter(&val, &i)) {
         pup_var(ar, *iter, {});
+    }
+}
+
+
+// Hashset
+template<class T>
+void pack_unpack_begin(string_archive *ar, hset<T> &, const pack_var_info &vinfo)
+{
+    ar->txt += ar->cur_indent;
+    handle_varname(&ar->txt, vinfo.name);
+    ar->txt += "[\n";
+    str_resize(&ar->cur_indent, str_len(ar->cur_indent) + ar->indent_per_level, ' ');
+}
+
+template<class T>
+void pack_unpack_end(string_archive *ar, hset<T> &, const pack_var_info &vinfo)
+{
+    str_resize(&ar->cur_indent, str_len(ar->cur_indent) - ar->indent_per_level);
+    ar->txt += ar->cur_indent + "]\n";
+}
+
+template<class T>
+void pack_unpack(string_archive *ar, hset<T> &val, const pack_var_info &vinfo)
+{
+    auto iter = hset_first(&val);
+    while (iter) {
+        // We are always packing in to the string from the set, so we can const cast here
+        pup_var(ar, const_cast<T&>(iter->val), {});
+        iter = hset_next(&val, iter);
+    }
+}
+
+// Hashmap with string key
+template<class T>
+void pack_unpack(string_archive *ar, hmap<string, T> &val, const pack_var_info &vinfo)
+{
+    auto iter = hmap_first(&val);
+    while (iter) {
+        pup_var(ar, iter->val, {str_cstr(iter->key)});
+        iter = hmap_next(&val, iter);
+    }
+}
+
+// Hashmap with rid key
+template<class T>
+void pack_unpack(string_archive *ar, hmap<rid, T> &val, const pack_var_info &vinfo)
+{
+    auto iter = hmap_first(&val);
+    while (iter) {
+        pup_var(ar, iter->val, {str_cstr(iter->key.str)});
+        iter = hmap_next(&val, iter);
+    }
+}
+
+// Hashmap with integral key type
+template<integral K, class T>
+void pack_unpack(string_archive *ar, hmap<K, T> &val, const pack_var_info &vinfo)
+{
+    auto iter = hmap_first(&val);
+    while (iter) {
+        pup_var(ar, iter->val, {to_cstr(iter->key)});
+        iter = hmap_next(&val, iter);
     }
 }
 
