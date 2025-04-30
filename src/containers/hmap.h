@@ -450,7 +450,7 @@ template<typename Key, typename Val>
 sizet hmap_insert(hmap<Key, Val> *dest, const hmap<Key, Val> *src, array<Key> *not_inserted = nullptr)
 {
     sizet cnt{0};
-    auto iter = hmap_first(src);
+    auto iter = hmap_begin(src);
     while (iter) {
         auto ins = hmap_insert(dest, iter->key, iter->val);
         if (ins) {
@@ -476,7 +476,7 @@ hmap<Key, Val>::iterator hmap_set(hmap<Key, Val> *hm, const Key &k, const Val &v
 template<typename Key, typename Val>
 void hmap_set(hmap<Key, Val> *dest, const hmap<Key, Val> *src)
 {
-    auto iter = hmap_first(src);
+    auto iter = hmap_begin(src);
     while (iter) {
         assert(hmap_set(dest, iter->key, iter->val));
         iter = hmap_next(src, iter);
@@ -545,7 +545,7 @@ void hmap_clear(hmap<Key, Val> *hm)
 }
 
 template<typename Key, typename Val>
-hmap<Key, Val>::iterator hmap_first(hmap<Key, Val> *hm)
+hmap<Key, Val>::iterator hmap_begin(hmap<Key, Val> *hm)
 {
     if (is_valid(hm->head)) {
         return &hm->buckets[hm->head].item;
@@ -554,7 +554,7 @@ hmap<Key, Val>::iterator hmap_first(hmap<Key, Val> *hm)
 }
 
 template<typename Key, typename Val>
-hmap<Key, Val>::const_iterator hmap_first(const hmap<Key, Val> *hm)
+hmap<Key, Val>::const_iterator hmap_begin(const hmap<Key, Val> *hm)
 {
     if (is_valid(hm->head)) {
         return &hm->buckets[hm->head].item;
@@ -563,7 +563,7 @@ hmap<Key, Val>::const_iterator hmap_first(const hmap<Key, Val> *hm)
 }
 
 template<typename Key, typename Val>
-hmap<Key, Val>::iterator hmap_last(hmap<Key, Val> *hm)
+hmap<Key, Val>::iterator hmap_rbegin(hmap<Key, Val> *hm)
 {
     if (is_valid(hm->head)) {
         assert(is_valid(hm->buckets[hm->head].item.prev));
@@ -573,7 +573,7 @@ hmap<Key, Val>::iterator hmap_last(hmap<Key, Val> *hm)
 }
 
 template<typename Key, typename Val>
-hmap<Key, Val>::const_iterator hmap_last(const hmap<Key, Val> *hm)
+hmap<Key, Val>::const_iterator hmap_rbegin(const hmap<Key, Val> *hm)
 {
     if (is_valid(hm->head)) {
         assert(is_valid(hm->buckets[hm->head].item.prev));
@@ -585,9 +585,6 @@ hmap<Key, Val>::const_iterator hmap_last(const hmap<Key, Val> *hm)
 template<typename Key, typename Val>
 hmap<Key, Val>::iterator hmap_next(hmap<Key, Val> *hm, typename hmap<Key, Val>::iterator item)
 {
-    if (!item) {
-        item = hmap_first(hm);
-    }
     if (item && is_valid(item->next)) {
         return &hm->buckets[item->next].item;
     }
@@ -597,9 +594,6 @@ hmap<Key, Val>::iterator hmap_next(hmap<Key, Val> *hm, typename hmap<Key, Val>::
 template<typename Key, typename Val>
 hmap<Key, Val>::const_iterator hmap_next(const hmap<Key, Val> *hm, typename hmap<Key, Val>::const_iterator item)
 {
-    if (!item) {
-        item = hmap_first(hm);
-    }
     if (item && is_valid(item->next)) {
         return &hm->buckets[item->next].item;
     }
@@ -609,9 +603,6 @@ hmap<Key, Val>::const_iterator hmap_next(const hmap<Key, Val> *hm, typename hmap
 template<typename Key, typename Val>
 hmap<Key, Val>::iterator hmap_prev(hmap<Key, Val> *hm, typename hmap<Key, Val>::iterator item)
 {
-    if (!item) {
-        item = hmap_last(hm);
-    }
     if (item && item != &hm->buckets[hm->head].item && is_valid(item->prev)) {
         return &hm->buckets[item->prev].item;
     }
@@ -621,9 +612,6 @@ hmap<Key, Val>::iterator hmap_prev(hmap<Key, Val> *hm, typename hmap<Key, Val>::
 template<typename Key, typename Val>
 hmap<Key, Val>::const_iterator hmap_prev(const hmap<Key, Val> *hm, typename hmap<Key, Val>::const_iterator item)
 {
-    if (!item) {
-        item = hmap_last(hm);
-    }
     if (item && item != &hm->buckets[hm->head].item && is_valid(item->prev)) {
         return &hm->buckets[item->prev].item;
     }
@@ -653,7 +641,7 @@ void pack_unpack(ArchiveT *ar, hmap<K, T> &val, const pack_var_info &vinfo)
         }
     }
     else {
-        auto iter = hmap_first(&val);
+        auto iter = hmap_begin(&val);
         while (iter) {
             pup_var(ar, iter->key, {to_cstr("{%d}", i)});
             pup_var(ar, iter->val, {to_cstr("{%d}", i)});

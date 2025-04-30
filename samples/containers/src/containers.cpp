@@ -171,13 +171,13 @@ void test_hashsets()
     hset_insert(&hs1, 'x');
 
     ilog("Forward...");
-    auto iter = hset_first(&hs1);
+    auto iter = hset_begin(&hs1);
     while (iter) {
         ilog("item: %s", to_cstr(iter->val));
         iter = hset_next(&hs1, iter);
     }
     ilog("Reverse...");
-    iter = hset_last(&hs1);
+    iter = hset_rbegin(&hs1);
     while (iter) {
         ilog("item: %s", to_cstr(iter->val));
         iter = hset_prev(&hs1, iter);
@@ -217,13 +217,13 @@ void test_hashsets()
     ilog("Removed y: %s", (hset_remove(&hs1, 'y')) ? "true" : "false");
 
     ilog("Forward...");
-    iter = hset_first(&hs1);
+    iter = hset_begin(&hs1);
     while (iter) {
         ilog("item: %s", to_cstr(iter->val));
         iter = hset_next(&hs1, iter);
     }
     ilog("Reverse...");
-    iter = hset_last(&hs1);
+    iter = hset_rbegin(&hs1);
     while (iter) {
         ilog("item: %s", to_cstr(iter->val));
         iter = hset_prev(&hs1, iter);
@@ -256,14 +256,14 @@ void test_hashsets()
     ilog("Inserted o ptr: %p", ins);
 
     ilog("Forward...");
-    iter = hset_first(&hs1);
+    iter = hset_begin(&hs1);
     while (iter) {
         ilog("item: %s", to_cstr(iter->val));
         iter = hset_next(&hs1, iter);
     }
 
     ilog("Reverse...");
-    iter = hset_last(&hs1);
+    iter = hset_rbegin(&hs1);
     while (iter) {
         ilog("item: %s", to_cstr(iter->val));
         iter = hset_prev(&hs1, iter);
@@ -309,13 +309,13 @@ void test_hashmaps()
     hmap_insert(&hm1, 'x', string("x"));
 
     ilog("Forward...");
-    auto iter = hmap_first(&hm1);
+    auto iter = hmap_begin(&hm1);
     while (iter) {
         ilog("key: %s  value:%s", to_cstr((u32)iter->key), str_cstr(iter->val));
         iter = hmap_next(&hm1, iter);
     }
     ilog("Reverse...");
-    iter = hmap_last(&hm1);
+    iter = hmap_rbegin(&hm1);
     while (iter) {
         ilog("key: %s  value:%s", to_cstr(iter->key), str_cstr(iter->val));
         iter = hmap_prev(&hm1, iter);
@@ -355,13 +355,13 @@ void test_hashmaps()
     ilog("Removed y: %s", (hmap_remove(&hm1, 'y')) ? "true" : "false");
 
     ilog("Forward...");
-    iter = hmap_first(&hm1);
+    iter = hmap_begin(&hm1);
     while (iter) {
         ilog("key: %s  value:%s", to_cstr((u32)iter->key), str_cstr(iter->val));
         iter = hmap_next(&hm1, iter);
     }
     ilog("Reverse...");
-    iter = hmap_last(&hm1);
+    iter = hmap_rbegin(&hm1);
     while (iter) {
         ilog("key: %s  value:%s", to_cstr(iter->key), str_cstr(iter->val));
         iter = hmap_prev(&hm1, iter);
@@ -394,14 +394,14 @@ void test_hashmaps()
     ilog("Inserted o ptr: %p", ins);
 
     ilog("Forward...");
-    iter = hmap_first(&hm1);
+    iter = hmap_begin(&hm1);
     while (iter) {
         ilog("key: %s  value:%s", to_cstr((u32)iter->key), str_cstr(iter->val));
         iter = hmap_next(&hm1, iter);
     }
 
     ilog("Reverse...");
-    iter = hmap_last(&hm1);
+    iter = hmap_rbegin(&hm1);
     while (iter) {
         ilog("key: %s  value:%s", to_cstr(iter->key), str_cstr(iter->val));
         iter = hmap_prev(&hm1, iter);
@@ -432,14 +432,14 @@ void test_hashmaps_string_keys()
     hmap_insert(&hm1, rid("lemar"), string("lemar-data"));
 
     ilog("Forward...");
-    auto iter = hmap_first(&hm1);
+    auto iter = hmap_begin(&hm1);
     while (iter) {
         ilog("key: %s  value:%s", to_cstr(iter->key), str_cstr(iter->val));
         iter = hmap_next(&hm1, iter);
     }
 
     ilog("Reverse...");
-    iter = hmap_last(&hm1);
+    iter = hmap_rbegin(&hm1);
     while (iter) {
         ilog("key: %s  value:%s", to_cstr(iter->key), str_cstr(iter->val));
         iter = hmap_prev(&hm1, iter);
@@ -455,14 +455,14 @@ void test_hashmaps_string_keys()
     hmap_remove(&hm1, rid("67-under"));
 
     ilog("Forward...");
-    iter = hmap_first(&hm1);
+    iter = hmap_begin(&hm1);
     while (iter) {
         ilog("key: %s  value:%s", to_cstr(iter->key), str_cstr(iter->val));
         iter = hmap_next(&hm1, iter);
     }
 
     ilog("Reverse...");
-    iter = hmap_last(&hm1);
+    iter = hmap_rbegin(&hm1);
     while (iter) {
         ilog("key: %s  value:%s", to_cstr(iter->key), str_cstr(iter->val));
         iter = hmap_prev(&hm1, iter);
@@ -479,14 +479,14 @@ void test_hashmaps_string_keys()
     hmap_insert(&hm1, rid("beadding"), string("beadding-data"));
 
     ilog("Forward...");
-    iter = hmap_first(&hm1);
+    iter = hmap_begin(&hm1);
     while (iter) {
         ilog("key: %s  value:%s", to_cstr(iter->key), str_cstr(iter->val));
         iter = hmap_next(&hm1, iter);
     }
 
     ilog("Reverse...");
-    iter = hmap_last(&hm1);
+    iter = hmap_rbegin(&hm1);
     while (iter) {
         ilog("key: %s  value:%s", to_cstr(iter->key), str_cstr(iter->val));
         iter = hmap_prev(&hm1, iter);
@@ -516,14 +516,14 @@ void test_hashset_string_keys()
     hset_insert(&hs1, rid("lemar"));
 
     ilog("Forward...");
-    auto iter = hset_first(&hs1);
+    auto iter = hset_begin(&hs1);
     while (iter) {
         ilog("key: %s  value:%s", to_cstr(iter->val));
         iter = hset_next(&hs1, iter);
     }
 
     ilog("Reverse...");
-    iter = hset_last(&hs1);
+    iter = hset_rbegin(&hs1);
     while (iter) {
         ilog("key: %s  value:%s", to_cstr(iter->val));
         iter = hset_prev(&hs1, iter);
@@ -539,14 +539,14 @@ void test_hashset_string_keys()
     hset_remove(&hs1, rid("67-under"));
 
     ilog("Forward...");
-    iter = hset_first(&hs1);
+    iter = hset_begin(&hs1);
     while (iter) {
         ilog("key: %s  value:%s", to_cstr(iter->val));
         iter = hset_next(&hs1, iter);
     }
 
     ilog("Reverse...");
-    iter = hset_last(&hs1);
+    iter = hset_rbegin(&hs1);
     while (iter) {
         ilog("key: %s  value:%s", to_cstr(iter->val));
         iter = hset_prev(&hs1, iter);
@@ -563,14 +563,14 @@ void test_hashset_string_keys()
     hset_insert(&hs1, rid("beadding"));
 
     ilog("Forward...");
-    iter = hset_first(&hs1);
+    iter = hset_begin(&hs1);
     while (iter) {
         ilog("key: %s  value:%s", to_cstr(iter->val));
         iter = hset_next(&hs1, iter);
     }
 
     ilog("Reverse...");
-    iter = hset_last(&hs1);
+    iter = hset_rbegin(&hs1);
     while (iter) {
         ilog("key: %s  value:%s", to_cstr(iter->val));
         iter = hset_prev(&hs1, iter);

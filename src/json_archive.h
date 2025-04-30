@@ -413,7 +413,7 @@ void pack_unpack(json_archive *ar, hset<T> &val, const pack_var_info &vinfo)
         }
     }
     else {
-        auto iter = hset_first(&val);
+        auto iter = hset_begin(&val);
         while (iter) {
             // We can const cast we know we are packing in to the archive and iter->val will be iunc
             pup_var(ar, const_cast<T&>(iter->val), {});
@@ -439,7 +439,7 @@ void pack_unpack(json_archive *ar, hmap<string, T> &val, const pack_var_info &vi
         }
     }
     else {
-        auto iter = hmap_first(&val);
+        auto iter = hmap_begin(&val);
         while (iter) {
             pup_var(ar, iter->val, {str_cstr(iter->key)});
             iter = hmap_next(&val, iter);
@@ -464,7 +464,7 @@ void pack_unpack(json_archive *ar, hmap<rid, T> &val, const pack_var_info &vinfo
         }
     }
     else {
-        auto iter = hmap_first(&val);
+        auto iter = hmap_begin(&val);
         while (iter) {
             pup_var(ar, iter->val, {str_cstr(iter->key.str)});
             iter = hmap_next(&val, iter);
@@ -491,7 +491,7 @@ void pack_unpack(json_archive *ar, hmap<K, T> &val, const pack_var_info &vinfo)
         }
     }
     else {
-        auto iter = hmap_first(&val);
+        auto iter = hmap_begin(&val);
         while (iter) {
             K key{iter->key};
             string s = to_str((u64)key);

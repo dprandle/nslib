@@ -72,7 +72,7 @@ template<class T>
 void terminate_cache(robj_cache<T> *cache)
 {
     // NOTE: We might want to call terminate on each robj here
-    auto iter = cache_first(cache);
+    auto iter = cache_begin(cache);
     while (iter) {
         terminate_robj(iter->val);
         mem_free(iter->val, &cache->arena);
@@ -114,27 +114,27 @@ robj_cache<T> *get_cache(const robj_cache_group *cg)
 }
 
 template<class T>
-robj_cache<T>::iterator cache_first(robj_cache<T> *cache)
+robj_cache<T>::iterator cache_begin(robj_cache<T> *cache)
 {
-    return hmap_first(&cache->rmap);
+    return hmap_begin(&cache->rmap);
 }
 
 template<class T>
-robj_cache<T>::const_iterator cache_first(const robj_cache<T> *cache)
+robj_cache<T>::const_iterator cache_begin(const robj_cache<T> *cache)
 {
-    return hmap_first(&cache->rmap);
+    return hmap_begin(&cache->rmap);
 }
 
 template<class T>
-robj_cache<T>::iterator cache_last(robj_cache<T> *cache)
+robj_cache<T>::iterator cache_rbegin(robj_cache<T> *cache)
 {
-    return hmap_last(&cache->rmap);
+    return hmap_rbegin(&cache->rmap);
 }
 
 template<class T>
-robj_cache<T>::const_iterator cache_last(const robj_cache<T> *cache)
+robj_cache<T>::const_iterator cache_rbegin(const robj_cache<T> *cache)
 {
-    return hmap_last(&cache->rmap);
+    return hmap_rbegin(&cache->rmap);
 }
 
 template<class T>

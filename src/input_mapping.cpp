@@ -116,7 +116,7 @@ input_keymap_entry *get_keymap_entry(const char *name, input_keymap *km)
 {
     assert(name);
     assert(km);
-    auto iter = hmap_first(&km->hm);
+    auto iter = hmap_begin(&km->hm);
     while (iter) {
         if (name == iter->val.name) {
             return &iter->val;
@@ -130,7 +130,7 @@ const input_keymap_entry *get_keymap_entry(const char *name, const input_keymap 
 {
     assert(name);
     assert(km);
-    auto iter = hmap_first(&km->hm);
+    auto iter = hmap_begin(&km->hm);
     while (iter) {
         if (name == iter->val.name) {
             return &iter->val;

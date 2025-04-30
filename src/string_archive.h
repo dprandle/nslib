@@ -145,7 +145,7 @@ void pack_unpack_end(string_archive *ar, hset<T> &, const pack_var_info &vinfo)
 template<class T>
 void pack_unpack(string_archive *ar, hset<T> &val, const pack_var_info &vinfo)
 {
-    auto iter = hset_first(&val);
+    auto iter = hset_begin(&val);
     while (iter) {
         // We are always packing in to the string from the set, so we can const cast here
         pup_var(ar, const_cast<T&>(iter->val), {});
@@ -157,7 +157,7 @@ void pack_unpack(string_archive *ar, hset<T> &val, const pack_var_info &vinfo)
 template<class T>
 void pack_unpack(string_archive *ar, hmap<string, T> &val, const pack_var_info &vinfo)
 {
-    auto iter = hmap_first(&val);
+    auto iter = hmap_begin(&val);
     while (iter) {
         pup_var(ar, iter->val, {str_cstr(iter->key)});
         iter = hmap_next(&val, iter);
@@ -168,7 +168,7 @@ void pack_unpack(string_archive *ar, hmap<string, T> &val, const pack_var_info &
 template<class T>
 void pack_unpack(string_archive *ar, hmap<rid, T> &val, const pack_var_info &vinfo)
 {
-    auto iter = hmap_first(&val);
+    auto iter = hmap_begin(&val);
     while (iter) {
         pup_var(ar, iter->val, {str_cstr(iter->key.str)});
         iter = hmap_next(&val, iter);
@@ -179,7 +179,7 @@ void pack_unpack(string_archive *ar, hmap<rid, T> &val, const pack_var_info &vin
 template<integral K, class T>
 void pack_unpack(string_archive *ar, hmap<K, T> &val, const pack_var_info &vinfo)
 {
-    auto iter = hmap_first(&val);
+    auto iter = hmap_begin(&val);
     while (iter) {
         pup_var(ar, iter->val, {to_cstr(iter->key)});
         iter = hmap_next(&val, iter);

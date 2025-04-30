@@ -752,7 +752,7 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
     vkCmdBindVertexBuffers(cmd_buf->hndl, 0, 1, vert_bufs, offsets);
     vkCmdBindIndexBuffer(cmd_buf->hndl, ind_buf->hndl, 0, VK_INDEX_TYPE_UINT16);
 
-    auto rpass_iter = hmap_first(&rndr->dcs.rpasses);
+    auto rpass_iter = hmap_begin(&rndr->dcs.rpasses);
     while (rpass_iter) {
         // Bind frame rpass descriptor set
         auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->val->fset].hndl;
@@ -760,7 +760,7 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
             cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, G_FRAME_PL_LAYOUT, DESCRIPTOR_SET_LAYOUT_FRAME, 1, &ds, 0, nullptr);
 
         // We could make our render pass have the vert/index buffer info.. ie
-        auto pl_iter = hmap_first(&rpass_iter->val->plines);
+        auto pl_iter = hmap_begin(&rpass_iter->val->plines);
         while (pl_iter) {
             // Grab the pipeline and set it, and set the viewport/scissor
             auto pipeline = &dev->pipelines[pl_iter->val->plinfo->plind];
@@ -784,7 +784,7 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
             scissor.extent = {fb->size.w, fb->size.h};
             vkCmdSetScissor(cmd_buf->hndl, 0, 1, &scissor);
 
-            auto mat_iter = hmap_first(&pl_iter->val->mats);
+            auto mat_iter = hmap_begin(&pl_iter->val->mats);
             while (mat_iter) {
                 // Bind the material set
                 auto ds = cur_frame->desc_pool.desc_sets[mat_iter->val->set_ind].hndl;
@@ -995,7 +995,7 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
         }
 
         // Go through all pipelines this material references
-        auto pl_iter = hset_first(&mat->pipelines);
+        auto pl_iter = hset_begin(&mat->pipelines);
         while (pl_iter) {
             auto pl_fiter = hmap_find(&rndr->pipelines, pl_iter->val);
             assert(pl_fiter);
@@ -1078,6 +1078,7 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
             pl_iter = hset_next(&mat->pipelines, pl_iter);
         }
     }
+
     return err_code::VKR_NO_ERROR;
 }
 
@@ -1118,7 +1119,7 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
     auto dev = &rndr->vk->inst.device;
     // Update all descriptor sets
     sizet total_dci{0};
-    auto rp_iter = hmap_first(&rndr->dcs.rpasses);
+    auto rp_iter = hmap_begin(&rndr->dcs.rpasses);
     while (rp_iter) {
         vkr_add_result desc_ind =
             vkr_add_descriptor_sets(&cur_frame->desc_pool, rndr->vk, rp_iter->val->sets_to_make.data, rp_iter->val->sets_to_make.size);
@@ -1151,7 +1152,7 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
 
         // Update material and pipeline UBOs and create the descriptor writes for them
         sizet pli{0};
-        auto pl_iter = hmap_first(&rp_iter->val->plines);
+        auto pl_iter = hmap_begin(&rp_iter->val->plines);
         while (pl_iter) {
             // Now update our pipeline ubo with this pipeline data
             pipeline_ubo_data pl_ubo{};
@@ -1174,7 +1175,7 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
                                   VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 
             sizet mati{0};
-            auto mat_iter = hmap_first(&pl_iter->val->mats);
+            auto mat_iter = hmap_begin(&pl_iter->val->mats);
             while (mat_iter) {
                 // Now update our material ubo with this mat data
                 material_ubo_data mat_ubo{};

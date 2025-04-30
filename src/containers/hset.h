@@ -446,7 +446,7 @@ template<typename Val>
 sizet hset_insert(hset<Val> *dest, const hset<Val> *src, array<Val> *not_inserted = nullptr)
 {
     sizet cnt{0};
-    auto iter = hset_first(src);
+    auto iter = hset_begin(src);
     while (iter) {
         auto ins = hset_insert(dest, iter->val);
         if (ins) {
@@ -472,7 +472,7 @@ hset<Val>::iterator hset_set(hset<Val> *hs, const Val &val)
 template<typename Val>
 void hset_set(hset<Val> *dest, const hset<Val> *src)
 {
-    auto iter = hset_first(src);
+    auto iter = hset_begin(src);
     while (iter) {
         assert(hset_set(dest, iter->key, iter->val));
         iter = hset_next(src, iter);
@@ -493,7 +493,7 @@ void hset_clear(hset<Val> *hs)
 }
 
 template<typename Val>
-hset<Val>::iterator hset_first(const hset<Val> *hs)
+hset<Val>::iterator hset_begin(const hset<Val> *hs)
 {
     if (is_valid(hs->head)) {
         return &hs->buckets[hs->head].item;
@@ -502,7 +502,7 @@ hset<Val>::iterator hset_first(const hset<Val> *hs)
 }
 
 template<typename Val>
-hset<Val>::iterator hset_last(const hset<Val> *hs)
+hset<Val>::iterator hset_rbegin(const hset<Val> *hs)
 {
     if (is_valid(hs->head)) {
         assert(is_valid(hs->buckets[hs->head].item.prev));
@@ -515,7 +515,7 @@ template<typename Val>
 hset<Val>::iterator hset_next(const hset<Val> *hs, typename hset<Val>::iterator item)
 {
     if (!item) {
-        item = hset_first(hs);
+        item = hset_begin(hs);
     }
     if (item && is_valid(item->next)) {
         return &hs->buckets[item->next].item;
@@ -527,7 +527,7 @@ template<typename Val>
 hset<Val>::iterator hset_prev(const hset<Val> *hs, typename hset<Val>::iterator item)
 {
     if (!item) {
-        item = hset_last(hs);
+        item = hset_rbegin(hs);
     }
     if (item && item != &hs->buckets[hs->head].item && is_valid(item->prev)) {
         return &hs->buckets[item->prev].item;
@@ -556,7 +556,7 @@ void pack_unpack(ArchiveT *ar, hset<T> &val, const pack_var_info &vinfo)
         }
     }
     else {        
-        auto iter = hset_first(&val);
+        auto iter = hset_begin(&val);
         while (iter) {
             // We know we are packing in to the archive so we can just remove the constness
             pup_var(ar, const_cast<T&>(iter->val), {to_cstr("{%d}", i)});
