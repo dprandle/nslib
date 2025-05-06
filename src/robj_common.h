@@ -65,7 +65,7 @@ void init_cache(robj_cache<T> *cache, sizet item_budget, sizet mem_alignment, me
 {
     cache->mem_alignment = mem_alignment;
     hmap_init(&cache->rmap, hash_type, upstream);
-    mem_init_pool_arena(&cache->arena, sizeof(T), item_budget, upstream);
+    mem_init_pool_arena(&cache->arena, sizeof(T), item_budget, upstream, T::type_str);
 }
 
 template<class T>
@@ -194,7 +194,7 @@ T *add_robj(const rid &id, robj_cache<T> *cache)
     ret->id = id;
     auto item = hmap_insert(&cache->rmap, id, ret);
     if (!item) {
-        mem_free(ret);
+        mem_free(ret, &cache->arena);
         ret = nullptr;
     }
     return ret;

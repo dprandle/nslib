@@ -6,8 +6,53 @@
 #include "vk_context.h"
 #include "renderer.h"
 
+#include "imgui/imgui.h"
+#include "imgui/imgui_impl_glfw.h"
+#include "imgui/imgui_impl_vulkan.h"
+
 namespace nslib
 {
+
+intern void imgui_mem_free(void *ptr, void *usr)
+{
+    mem_free(ptr, (mem_arena *)usr);
+}
+
+intern void *imgui_mem_alloc(sizet sz, void *usr)
+{
+    return mem_alloc(sz, (mem_arena *)usr, 8);
+}
+
+intern void init_imgui(renderer *rndr)
+{
+    mem_init_fl_arena(&rndr->imgui.fl, 10 * MB_SIZE, rndr->upstream_fl_arena, "imgui");
+    ImGui::SetAllocatorFunctions(imgui_mem_alloc, imgui_mem_free, &rndr->imgui.fl);
+    rndr->imgui.ctxt = ImGui::CreateContext();
+    ImGui::StyleColorsDark();
+
+    ImGui_ImplGlfw_InitForVulkan((GLFWwindow *)rndr->vk.cfg.window, true);
+
+    ImGui_ImplVulkan_InitInfo init_info = {};
+    init_info.Instance = rndr->vk.inst.hndl;
+    init_info.PhysicalDevice = rndr->vk.inst.pdev_info.hndl;
+    init_info.Device = rndr->vk.inst.device.hndl;
+    init_info.QueueFamily = rndr->vk.inst.device.qfams[VKR_QUEUE_FAM_TYPE_GFX].fam_ind;
+    // init_info.Queue = g_Queue;
+    // init_info.PipelineCache = VK_NULL_HANDLE;
+    // init_info.DescriptorPool = g_DescriptorPool;
+    // init_info.Allocator = &rndr->vk.alloc_cbs;
+    // init_info.MinImageCount = g_MinImageCount;
+    // init_info.ImageCount = wd->ImageCount;
+    // init_info.CheckVkResultFn = check_vk_result;
+    // ImGui_ImplVulkan_Init(&init_info, wd->RenderPass);
+}
+
+intern void terminate_imgui(renderer *rndr)
+{
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext(rndr->imgui.ctxt);
+    mem_terminate_arena(&rndr->imgui.fl);
+}
 
 #if defined(NDEBUG)
 intern const u32 VALIDATION_LAYER_COUNT = 0;
@@ -80,7 +125,7 @@ struct render_pass_draw_group
 
 intern int setup_render_pass(renderer *rndr)
 {
-    auto vk = rndr->vk;
+    auto vk = &rndr->vk;
     vkr_rpass_cfg rp_cfg{};
 
     VkAttachmentDescription att{};
@@ -138,7 +183,7 @@ intern int setup_render_pass(renderer *rndr)
 
 intern int setup_pipeline(renderer *rndr)
 {
-    auto vk = rndr->vk;
+    auto vk = &rndr->vk;
     vkr_pipeline_cfg info{};
 
     arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_VIEWPORT);
@@ -308,7 +353,7 @@ intern int setup_pipeline(renderer *rndr)
 
 intern int setup_rmesh_info(renderer *rndr)
 {
-    auto vk = rndr->vk;
+    auto vk = &rndr->vk;
     auto dev = &vk->inst.device;
 
     // Create vertex buffer on GPU
@@ -342,8 +387,8 @@ intern int setup_rmesh_info(renderer *rndr)
         return err;
     }
 
-    mem_init_pool_arena<sbuffer_entry_slnode>(&rndr->rmi.verts.node_pool, MAX_FREE_SBUFFER_NODE_COUNT, mem_global_stack_arena());
-    mem_init_pool_arena<sbuffer_entry_slnode>(&rndr->rmi.inds.node_pool, MAX_FREE_SBUFFER_NODE_COUNT, mem_global_stack_arena());
+    mem_init_pool_arena<sbuffer_entry_slnode>(&rndr->rmi.verts.node_pool, MAX_FREE_SBUFFER_NODE_COUNT, mem_global_stack_arena(), "mesh-verts");
+    mem_init_pool_arena<sbuffer_entry_slnode>(&rndr->rmi.inds.node_pool, MAX_FREE_SBUFFER_NODE_COUNT, mem_global_stack_arena(), "mesh-inds");
     hmap_init(&rndr->rmi.meshes, hash_type);
 
     // Create the head nodes of our vert and index buffer free list - indice 0 and full buffer size
@@ -409,7 +454,7 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
     if (fiter) {
         return false;
     }
-    auto dev = &rndr->vk->inst.device;
+    auto dev = &rndr->vk.inst.device;
     // Find the first available sbuffer entry in the free list
     rmesh_entry new_mentry{};
     // arr_init(&new_mentry.submesh_entrees, rndr->upstream_fl_arena);
@@ -446,7 +491,7 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
                                                    req_vert_byte_size,
                                                    &vert_region,
                                                    &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX],
-                                                   rndr->vk);
+                                                   &rndr->vk);
         assert(ret == err_code::VKR_NO_ERROR);
 
         // Upload our ind data to the GPU
@@ -455,7 +500,7 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
                                                req_inds_byte_size,
                                                &ind_region,
                                                &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX],
-                                               rndr->vk);
+                                               &rndr->vk);
         assert(ret == err_code::VKR_NO_ERROR);
     }
     dlog("Should be adding mesh id %s %d submeshes", str_cstr(msh->id.str), new_mentry.submesh_entrees.size);
@@ -506,8 +551,8 @@ bool remove_from_gpu(mesh *msh, renderer *rndr)
 
 intern int load_default_image_and_sampler(renderer *rndr)
 {
-    auto vk = rndr->vk;
-    auto dev = &rndr->vk->inst.device;
+    auto vk = &rndr->vk;
+    auto dev = &rndr->vk.inst.device;
 
     /////////////////////////////////
     // Load the image for sampling //
@@ -575,8 +620,8 @@ intern int load_default_image_and_sampler(renderer *rndr)
 
 intern int init_swapchain_framebuffers(renderer *rndr)
 {
-    auto vk = rndr->vk;
-    auto dev = &rndr->vk->inst.device;
+    auto vk = &rndr->vk;
+    auto dev = &rndr->vk.inst.device;
 
     vkr_image_cfg im_cfg{};
     im_cfg.dims = {dev->swapchain.extent.width, dev->swapchain.extent.height, 1};
@@ -620,8 +665,8 @@ intern int init_swapchain_framebuffers(renderer *rndr)
 intern int setup_rendering(renderer *rndr)
 {
     ilog("Setting up default rendering...");
-    auto vk = rndr->vk;
-    auto dev = &rndr->vk->inst.device;
+    auto vk = &rndr->vk;
+    auto dev = &rndr->vk.inst.device;
 
     int err = setup_render_pass(rndr);
     if (err != err_code::VKR_NO_ERROR) {
@@ -719,7 +764,7 @@ intern void add_desc_write_update(renderer *rndr,
     memset(buffer_info, 0, sizeof(VkDescriptorBufferInfo));
     buffer_info->offset = offset;
     buffer_info->range = range;
-    buffer_info->buffer = rndr->vk->inst.device.buffers[buf_ind].hndl;
+    buffer_info->buffer = rndr->vk.inst.device.buffers[buf_ind].hndl;
 
     VkWriteDescriptorSet desc_write{};
     desc_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -734,7 +779,7 @@ intern void add_desc_write_update(renderer *rndr,
 
 intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame *cur_frame, vkr_command_buffer *cmd_buf)
 {
-    auto dev = &rndr->vk->inst.device;
+    auto dev = &rndr->vk.inst.device;
     auto vert_buf = &dev->buffers[rndr->rmi.verts.buf_ind];
     auto ind_buf = &dev->buffers[rndr->rmi.inds.buf_ind];
 
@@ -795,7 +840,7 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
                     const draw_call *cur_dc = &mat_iter->val->dcs[dci];
 
                     auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->val->oset].hndl;
-                    sizet obj_ubo_item_size = vkr_uniform_buffer_offset_alignment(rndr->vk, sizeof(obj_ubo_data));
+                    sizet obj_ubo_item_size = vkr_uniform_buffer_offset_alignment(&rndr->vk, sizeof(obj_ubo_data));
                     u32 dyn_offset = dci * (u32)obj_ubo_item_size;
                     vkCmdBindDescriptorSets(cmd_buf->hndl,
                                             VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -830,26 +875,23 @@ intern vkr_frame *get_current_frame(renderer *rndr)
 {
     // Grab the current in flight frame and its command buffer
     int current_frame_ind = rndr->finished_frames % MAX_FRAMES_IN_FLIGHT;
-    return &rndr->vk->inst.device.rframes[current_frame_ind];
+    return &rndr->vk.inst.device.rframes[current_frame_ind];
 }
 
 intern vkr_frame *get_previous_frame(renderer *rndr)
 {
     // Grab the current in flight frame and its command buffer
-    int prev_frame_ind = (rndr->finished_frames-1) % MAX_FRAMES_IN_FLIGHT;
-    return &rndr->vk->inst.device.rframes[prev_frame_ind];
+    int prev_frame_ind = (rndr->finished_frames - 1) % MAX_FRAMES_IN_FLIGHT;
+    return &rndr->vk.inst.device.rframes[prev_frame_ind];
 }
 
 int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_arena *fl_arena)
 {
     assert(fl_arena->alloc_type == mem_alloc_type::FREE_LIST);
     rndr->upstream_fl_arena = fl_arena;
-    mem_init_fl_arena(&rndr->vk_free_list, 100 * MB_SIZE, fl_arena);
-    mem_init_lin_arena(&rndr->vk_frame_linear, 10 * MB_SIZE, mem_global_stack_arena());
-    mem_init_fl_arena(&rndr->frame_fl, 100 * MB_SIZE, fl_arena);
-
-    rndr->vk = mem_alloc<vkr_context>(&rndr->vk_free_list, 8);
-    memset(rndr->vk, 0, sizeof(vkr_context));
+    mem_init_fl_arena(&rndr->vk_free_list, 100 * MB_SIZE, fl_arena, "vk");
+    mem_init_fl_arena(&rndr->frame_fl, 100 * MB_SIZE, fl_arena, "frame");
+    mem_init_lin_arena(&rndr->vk_frame_linear, 10 * MB_SIZE, mem_global_stack_arena(), "vk-frame");
 
     hmap_init(&rndr->rpasses, hash_type, fl_arena);
     hmap_init(&rndr->pipelines, hash_type, fl_arena);
@@ -875,10 +917,12 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
                  DEVICE_EXTENSION_COUNT,
                  VALIDATION_LAYERS,
                  VALIDATION_LAYER_COUNT};
-    
-    if (vkr_init(&vkii, rndr->vk) != err_code::VKR_NO_ERROR) {
+
+    if (vkr_init(&vkii, &rndr->vk) != err_code::VKR_NO_ERROR) {
         return err_code::RENDER_INIT_FAIL;
     }
+
+    init_imgui(rndr);
 
     int err = setup_rendering(rndr);
     if (err != err_code::VKR_NO_ERROR) {
@@ -900,25 +944,28 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
 intern void recreate_swapchain(renderer *rndr)
 {
     // Recreating the swapchain will wait on all semaphores and fences before continuing
-    auto dev = &rndr->vk->inst.device;
-    vkr_recreate_swapchain(&rndr->vk->inst, rndr->vk);
-    vkr_terminate_image_view(&dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind], rndr->vk);
+    auto dev = &rndr->vk.inst.device;
+    vkDeviceWaitIdle(dev->hndl);    
+    //vkr_terminate_render_frames(&rndr->vk.inst.device, &rndr->vk);
+    vkr_terminate_image_view(&dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind], &rndr->vk);
     vkr_terminate_image(&dev->images[rndr->swapchain_fb_depth_stencil_im_ind]);
+    vkr_recreate_swapchain(&rndr->vk.inst, &rndr->vk);
     init_swapchain_framebuffers(rndr);
+    //vkr_init_render_frames(&rndr->vk.inst.device, &rndr->vk);
 }
 
 intern i32 acquire_swapchain_image(renderer *rndr, vkr_frame *cur_frame, u32 *im_ind)
 {
-    auto dev = &rndr->vk->inst.device;
+    auto dev = &rndr->vk.inst.device;
     auto prev_frame = get_previous_frame(rndr);
     // Acquire the image, signal the image_avail semaphore once the image has been acquired. We get the index back, but
     // that doesn't mean the image is ready. The image is only ready (on the GPU side) once the image avail semaphore is triggered
     VkResult result = vkAcquireNextImageKHR(dev->hndl, dev->swapchain.swapchain, UINT64_MAX, cur_frame->image_avail, VK_NULL_HANDLE, im_ind);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        recreate_swapchain(rndr);
-        return VK_ERROR_OUT_OF_DATE_KHR;
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+        //recreate_swapchain(rndr);
+        return err_code::RENDER_NO_ERROR;// result;
     }
-    else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+    else if (result != VK_SUCCESS) { // if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         elog("Failed to acquire swapchain image");
         return err_code::RENDER_ACQUIRE_IMAGE_FAIL;
     }
@@ -927,7 +974,7 @@ intern i32 acquire_swapchain_image(renderer *rndr, vkr_frame *cur_frame, u32 *im
 
 intern i32 submit_command_buffer(renderer *rndr, vkr_frame *cur_frame, vkr_command_buffer *cmd_buf)
 {
-    auto dev = &rndr->vk->inst.device;
+    auto dev = &rndr->vk.inst.device;
     // Get the info ready to submit our command buffer to the queue. We need to wait until the image avail semaphore has
     // signaled, and then we need to trigger the render finished signal once the the command buffer completes
     VkSubmitInfo submit_info{};
@@ -948,7 +995,7 @@ intern i32 submit_command_buffer(renderer *rndr, vkr_frame *cur_frame, vkr_comma
 
 intern i32 present_image(renderer *rndr, vkr_frame *cur_frame, u32 image_ind)
 {
-    auto dev = &rndr->vk->inst.device;
+    auto dev = &rndr->vk.inst.device;
     // Once the rendering signal has fired, present the image (show it on screen)
     VkPresentInfoKHR present_info{};
     present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -971,7 +1018,7 @@ intern i32 present_image(renderer *rndr, vkr_frame *cur_frame, u32 image_ind)
 
 int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const mesh_cache *msh_cache, const material_cache *mat_cache)
 {
-    auto dev = &rndr->vk->inst.device;
+    auto dev = &rndr->vk.inst.device;
     auto cur_frame = get_current_frame(rndr);
 
     auto rmesh = hmap_find(&rndr->rmi.meshes, sm->mesh_id);
@@ -1084,7 +1131,7 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
 
 int render_frame_begin(renderer *rndr, int finished_frame_count)
 {
-    auto dev = &rndr->vk->inst.device;
+    auto dev = &rndr->vk.inst.device;
 
     // Clear our frame rendering entries
     hmap_terminate(&rndr->dcs.rpasses);
@@ -1109,20 +1156,20 @@ int render_frame_begin(renderer *rndr, int finished_frame_count)
     }
 
     // Clear all prev desc sets
-    vkr_reset_descriptor_pool(&cur_frame->desc_pool, rndr->vk);
+    vkr_reset_descriptor_pool(&cur_frame->desc_pool, &rndr->vk);
 
     return err_code::VKR_NO_ERROR;
 }
 
 intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
 {
-    auto dev = &rndr->vk->inst.device;
+    auto dev = &rndr->vk.inst.device;
     // Update all descriptor sets
     sizet total_dci{0};
     auto rp_iter = hmap_begin(&rndr->dcs.rpasses);
     while (rp_iter) {
         vkr_add_result desc_ind =
-            vkr_add_descriptor_sets(&cur_frame->desc_pool, rndr->vk, rp_iter->val->sets_to_make.data, rp_iter->val->sets_to_make.size);
+            vkr_add_descriptor_sets(&cur_frame->desc_pool, &rndr->vk, rp_iter->val->sets_to_make.data, rp_iter->val->sets_to_make.size);
         if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
             return desc_ind.err_code;
         }
@@ -1130,9 +1177,9 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
         auto updates = &rp_iter->val->desc_updates;
         // Now update our pipeline ubo with this pipeline data
         frame_ubo_data frame_ubo{};
-        sizet frame_ubo_item_size = vkr_uniform_buffer_offset_alignment(rndr->vk, sizeof(frame_ubo_data));
+        sizet frame_ubo_item_size = vkr_uniform_buffer_offset_alignment(&rndr->vk, sizeof(frame_ubo_data));
         frame_ubo.frame_count = rndr->finished_frames;
-        char *addr = (char *)rndr->vk->inst.device.buffers[cur_frame->frame_ubo_ind].mem_info.pMappedData;
+        char *addr = (char *)rndr->vk.inst.device.buffers[cur_frame->frame_ubo_ind].mem_info.pMappedData;
         memcpy(addr, &frame_ubo, frame_ubo_item_size);
 
         // Add the frame rpass desc write update
@@ -1140,15 +1187,9 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
             rndr, cur_frame, 0, frame_ubo_item_size, cur_frame->frame_ubo_ind, rp_iter->val->fset, updates, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 
         // Add the dynamic per obj desc write update
-        sizet obj_ubo_item_size = vkr_uniform_buffer_offset_alignment(rndr->vk, sizeof(obj_ubo_data));
-        add_desc_write_update(rndr,
-                              cur_frame,
-                              0,
-                              obj_ubo_item_size,
-                              cur_frame->obj_ubo_ind,
-                              rp_iter->val->oset,
-                              updates,
-                              VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
+        sizet obj_ubo_item_size = vkr_uniform_buffer_offset_alignment(&rndr->vk, sizeof(obj_ubo_data));
+        add_desc_write_update(
+            rndr, cur_frame, 0, obj_ubo_item_size, cur_frame->obj_ubo_ind, rp_iter->val->oset, updates, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
 
         // Update material and pipeline UBOs and create the descriptor writes for them
         sizet pli{0};
@@ -1159,7 +1200,7 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
             pl_ubo.proj_view = pl_iter->val->plinfo->proj_view;
 
             // Update the actual buffer data memory
-            sizet pl_ubo_item_size = vkr_uniform_buffer_offset_alignment(rndr->vk, sizeof(pipeline_ubo_data));
+            sizet pl_ubo_item_size = vkr_uniform_buffer_offset_alignment(&rndr->vk, sizeof(pipeline_ubo_data));
             sizet byte_offset = pli * pl_ubo_item_size;
             char *adjusted_addr = (char *)dev->buffers[cur_frame->pl_ubo_ind].mem_info.pMappedData + byte_offset;
             memcpy(adjusted_addr, &pl_ubo, pl_ubo_item_size);
@@ -1180,7 +1221,7 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
                 // Now update our material ubo with this mat data
                 material_ubo_data mat_ubo{};
                 mat_ubo.color = mat_iter->val->mat->col;
-                sizet mat_ubo_item_size = vkr_uniform_buffer_offset_alignment(rndr->vk, sizeof(material_ubo_data));
+                sizet mat_ubo_item_size = vkr_uniform_buffer_offset_alignment(&rndr->vk, sizeof(material_ubo_data));
                 sizet byte_offset = mati * mat_ubo_item_size;
                 char *adjusted_addr = (char *)dev->buffers[cur_frame->mat_ubo_ind].mem_info.pMappedData + byte_offset;
                 memcpy(adjusted_addr, &mat_ubo, mat_ubo_item_size);
@@ -1219,14 +1260,14 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
 
 int render_frame_end(renderer *rndr, camera *cam)
 {
-    auto dev = &rndr->vk->inst.device;
+    auto dev = &rndr->vk.inst.device;
     auto cur_frame = get_current_frame(rndr);
 
-    // Get the next available swapchain image index
+    // Get the next available swapchain image index or return if the
     u32 im_ind{};
     i32 err = acquire_swapchain_image(rndr, cur_frame, &im_ind);
     if (err != err_code::RENDER_NO_ERROR) {
-        if (err == VK_ERROR_OUT_OF_DATE_KHR) {
+        if (err != err_code::RENDER_ACQUIRE_IMAGE_FAIL) {
             return err_code::RENDER_NO_ERROR;
         }
         return err;
@@ -1235,19 +1276,21 @@ int render_frame_end(renderer *rndr, camera *cam)
     // Recreating the swapchain here before even acquiring images gives us the smoothest resizing, but we still need to
     // handle recreation for other things that might happen so keep the acquire image and present image recreations
     // based on return value
-    if (platform_framebuffer_resized(rndr->vk->cfg.window)) {
-        ivec2 sz = get_framebuffer_size(rndr->vk->cfg.window);
+    if (platform_framebuffer_resized(rndr->vk.cfg.window)) {
+        ivec2 sz = get_framebuffer_size(rndr->vk.cfg.window);
         if (cam) {
             cam->proj = (math::perspective(60.0f, (f32)sz.w / (f32)sz.h, 0.1f, 1000.0f));
         }
     }
 
+    // Here we reset the fence for the current frame.. we wait for it to be signaled in render_frame_begin before
+    // clearing the frame's descriptor pool (so we don't clear any that are in use). Without resetting the fence,
+    // vkWaitForFences call just immediately returns as the fence is still triggered.
     int vk_err = vkResetFences(dev->hndl, 1, &cur_frame->in_flight);
     if (vk_err != VK_SUCCESS) {
         elog("Failed to reset fence");
         return err_code::RENDER_RESET_FENCE_FAIL;
     }
-
 
     // Update our main pipeline view_proj with the cam transform update
     if (cam) {
@@ -1296,9 +1339,9 @@ void terminate_renderer(renderer *rndr)
     mem_terminate_arena(&rndr->rmi.inds.node_pool);
     mem_terminate_arena(&rndr->rmi.verts.node_pool);
 
-    vkr_terminate(rndr->vk);
-    mem_free(rndr->vk, &rndr->vk_free_list);
+    terminate_imgui(rndr);
 
+    vkr_terminate(&rndr->vk);
     mem_terminate_arena(&rndr->vk_free_list);
     mem_terminate_arena(&rndr->vk_frame_linear);
     mem_terminate_arena(&rndr->frame_fl);

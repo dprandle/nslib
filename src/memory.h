@@ -80,6 +80,9 @@ struct mem_arena
     /// don't change this to something different as it will likely crash (cant free from an allocator different than allocated from)
     mem_arena *upstream_allocator{nullptr};
 
+    // Name to use in debug/etc applications
+    const char *name{"default"};
+
     sizet used{0};
     sizet peak{0};
     void *start{nullptr};
@@ -147,21 +150,21 @@ void mem_delete(T *item, mem_arena *arena)
 
 // Reset the store without actually freeing the memory so it can be reused
 void mem_reset_arena(mem_arena *arena);
-void mem_init_arena(mem_arena *arena, sizet total_size, mem_alloc_type atype, mem_arena *upstream);
+void mem_init_arena(mem_arena *arena, sizet total_size, mem_alloc_type atype, mem_arena *upstream, const char *name);
 
-void mem_init_pool_arena(mem_arena *arena, sizet chunk_size, sizet chunk_count, mem_arena *upstream);
+void mem_init_pool_arena(mem_arena *arena, sizet chunk_size, sizet chunk_count, mem_arena *upstream, const char *name);
 
 template<class T>
-void mem_init_pool_arena(mem_arena *arena, sizet chunk_count, mem_arena *upstream)
+void mem_init_pool_arena(mem_arena *arena, sizet chunk_count, mem_arena *upstream, const char *name)
 {
-    mem_init_pool_arena(arena, sizeof(T), chunk_count, upstream);
+    mem_init_pool_arena(arena, sizeof(T), chunk_count, upstream, name);
 }
 
-void mem_init_pool_arena(mem_arena *arena, sizet chunk_size, sizet chunk_count, mem_arena *upstream);
+void mem_init_pool_arena(mem_arena *arena, sizet chunk_size, sizet chunk_count, mem_arena *upstream, const char *name);
 
-void mem_init_fl_arena(mem_arena *arena, sizet total_size, mem_arena *upstream);
-void mem_init_stack_arena(mem_arena *arena, sizet total_size, mem_arena *upstream);
-void mem_init_lin_arena(mem_arena *arena, sizet total_size, mem_arena *upstream);
+void mem_init_fl_arena(mem_arena *arena, sizet total_size, mem_arena *upstream, const char *name);
+void mem_init_stack_arena(mem_arena *arena, sizet total_size, mem_arena *upstream, const char *name);
+void mem_init_lin_arena(mem_arena *arena, sizet total_size, mem_arena *upstream, const char *name);
 
 void mem_terminate_arena(mem_arena *arena);
 const char *mem_arena_type_str(mem_alloc_type atype);

@@ -4,6 +4,9 @@
 #include "math/matrix4.h"
 #include "containers/array.h"
 #include "containers/hmap.h"
+#include "vk_context.h"
+
+struct ImGuiContext;
 
 namespace nslib
 {
@@ -120,6 +123,8 @@ struct rmesh_info
     sbuffer_info inds;
 };
 struct render_pass_draw_group;
+struct imgui_ctxt;
+
 struct frame_draw_info
 {
     hmap<rid, render_pass_draw_group *> rpasses;
@@ -140,14 +145,24 @@ struct rpass_info
     rid id;
 };
 
+struct imgui_ctxt
+{
+    ImGuiContext *ctxt;
+    vkr_descriptor_pool pool;
+    sizet queue_family;
+    vkr_queue queue;
+    mem_arena fl;
+};
+
 struct renderer
 {
     // Passed in
     mem_arena *upstream_fl_arena;
 
     // Owned vulkan context and mem arenas used only for vulkan stuff
-    vkr_context *vk;
+    vkr_context vk{};
     mem_arena vk_free_list;
+
     mem_arena vk_frame_linear;
     mem_arena frame_fl;
 
@@ -158,7 +173,10 @@ struct renderer
     hmap<rid, rpass_info> rpasses{};
 
     // A mapping between framebuffers and render passes
-    //hmap<sizet, array<rid> *> fb_rpasses;
+    // hmap<sizet, array<rid> *> fb_rpasses;
+
+    // ImGUI context
+    imgui_ctxt imgui{};
 
     // All frame draw call info
     frame_draw_info dcs;

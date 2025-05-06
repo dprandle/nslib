@@ -896,7 +896,6 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
 
 void vkr_recreate_swapchain(vkr_instance *inst, const vkr_context *vk)
 {
-    vkDeviceWaitIdle(inst->device.hndl);
     vkr_terminate_swapchain_framebuffers(&inst->device, vk);
     vkr_terminate_swapchain(&inst->device.swapchain, vk);
     vkr_terminate_surface(vk, inst->surface);

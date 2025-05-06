@@ -245,9 +245,9 @@ intern void set_glfw_callbacks(platform_ctxt *ctxt)
 intern void init_mem_arenas(const platform_memory_init_info *info, platform_memory *mem)
 {
     // Null to indicate these get platform_alloc'd
-    mem_init_fl_arena(&mem->free_list, info->free_list_size, nullptr);
-    mem_init_stack_arena(&mem->stack, info->stack_size, nullptr);
-    mem_init_lin_arena(&mem->frame_linear, info->frame_linear_size, nullptr);
+    mem_init_fl_arena(&mem->free_list, info->free_list_size, nullptr, "global");
+    mem_init_stack_arena(&mem->stack, info->stack_size, nullptr, "global");
+    mem_init_lin_arena(&mem->frame_linear, info->frame_linear_size, nullptr, "global");
 
     // Then these become our global mem arenas
     mem_set_global_arena(&mem->free_list);
@@ -256,8 +256,11 @@ intern void init_mem_arenas(const platform_memory_init_info *info, platform_memo
 
     // Set up our json alloc and free funcs
     json_hooks hooks;
-    hooks.malloc_fn = mem_alloc;
-    hooks.free_fn = mem_free;
+    auto mem_glob_alloc = [](sizet sz) -> void * { return mem_alloc(sz, mem_global_arena()); };
+    auto mem_glob_free = [](void *ptr) -> void { mem_free(ptr, mem_global_arena()); };
+
+    hooks.malloc_fn = mem_glob_alloc;
+    hooks.free_fn = mem_glob_free;
     json_init_hooks(&hooks);
 }
 
