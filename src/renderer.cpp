@@ -939,7 +939,8 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
     return err_code::RENDER_NO_ERROR;
 }
 
-intern void terminate_swapchain_images_and_framebuffer(renderer *rndr) {
+intern void terminate_swapchain_images_and_framebuffer(renderer *rndr)
+{
     auto dev = &rndr->vk.inst.device;
     vkr_terminate_image_view(&dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind], &rndr->vk);
     vkr_terminate_image(&dev->images[rndr->swapchain_fb_depth_stencil_im_ind]);
@@ -973,11 +974,11 @@ intern i32 acquire_swapchain_image(renderer *rndr, vkr_frame *cur_frame, u32 *im
     // associated with it will never get triggered. So if we were to continue and just resize at the end of frame it
     // wouldn't work because the queue submit would never fire as it depends on this image available semaphore.
     // At least.. i think?
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR){
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         recreate_swapchain(rndr);
         return result;
     }
-    else if (result != VK_SUCCESS) { // if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+    else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         elog("Failed to acquire swapchain image");
         return err_code::RENDER_ACQUIRE_IMAGE_FAIL;
     }
@@ -1018,7 +1019,7 @@ intern i32 present_image(renderer *rndr, vkr_frame *cur_frame, u32 image_ind)
     present_info.pImageIndices = &image_ind;
     present_info.pResults = nullptr; // Optional - check for individual swaps
     VkResult result = vkQueuePresentKHR(dev->qfams[VKR_QUEUE_FAM_TYPE_PRESENT].qs[0].hndl, &present_info);
-    
+
     // This purely helps with smoothness - it works fine without recreating the swapchain here and instead doing it on
     // the next frame, but it seems to resize more smoothly doing it here
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
