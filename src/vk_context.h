@@ -663,7 +663,6 @@ void vkr_terminate_swapchain_framebuffers(vkr_device *device, const vkr_context 
 
 // The device should be created before calling this
 int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk);
-void vkr_recreate_swapchain(vkr_instance *inst, const vkr_context *vk);
 void vkr_terminate_swapchain(vkr_swapchain *sw_info, const vkr_context *vk);
 
 int vkr_init_render_frames(vkr_device *dev, const vkr_context *vk);

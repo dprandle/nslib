@@ -618,7 +618,7 @@ intern int load_default_image_and_sampler(renderer *rndr)
     return err;
 }
 
-intern int init_swapchain_framebuffers(renderer *rndr)
+intern int init_swapchain_images_and_framebuffer(renderer *rndr)
 {
     auto vk = &rndr->vk;
     auto dev = &rndr->vk.inst.device;
@@ -649,16 +649,14 @@ intern int init_swapchain_framebuffers(renderer *rndr)
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
-
     // We need the render pass associated with our main framebuffer
     auto rp_fiter = hmap_find(&rndr->rpasses, FWD_RPASS);
     assert(rp_fiter);
-    if (rp_fiter) {
-        vkr_init_swapchain_framebuffers(dev,
-                                        vk,
-                                        &dev->render_passes[rp_fiter->val.rpind],
-                                        vkr_framebuffer_attachment{dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind]});
-    }
+    vkr_init_swapchain_framebuffers(dev,
+                                    vk,
+                                    &dev->render_passes[rp_fiter->val.rpind],
+                                    vkr_framebuffer_attachment{dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind]});
+
     return err;
 }
 
@@ -678,7 +676,7 @@ intern int setup_rendering(renderer *rndr)
         return err;
     }
 
-    err = init_swapchain_framebuffers(rndr);
+    err = init_swapchain_images_and_framebuffer(rndr);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
@@ -941,17 +939,25 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
     return err_code::RENDER_NO_ERROR;
 }
 
-intern void recreate_swapchain(renderer *rndr)
-{
-    // Recreating the swapchain will wait on all semaphores and fences before continuing
+intern void terminate_swapchain_images_and_framebuffer(renderer *rndr) {
     auto dev = &rndr->vk.inst.device;
-    vkDeviceWaitIdle(dev->hndl);    
-    //vkr_terminate_render_frames(&rndr->vk.inst.device, &rndr->vk);
     vkr_terminate_image_view(&dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind], &rndr->vk);
     vkr_terminate_image(&dev->images[rndr->swapchain_fb_depth_stencil_im_ind]);
-    vkr_recreate_swapchain(&rndr->vk.inst, &rndr->vk);
-    init_swapchain_framebuffers(rndr);
-    //vkr_init_render_frames(&rndr->vk.inst.device, &rndr->vk);
+    vkr_terminate_swapchain_framebuffers(dev, &rndr->vk);
+}
+
+intern void recreate_swapchain(renderer *rndr)
+{
+    ilog("Recreating swapchain");
+    // Recreating the swapchain will wait on all semaphores and fences before continuing
+    auto dev = &rndr->vk.inst.device;
+    vkDeviceWaitIdle(dev->hndl);
+    terminate_swapchain_images_and_framebuffer(rndr);
+    vkr_terminate_swapchain(&dev->swapchain, &rndr->vk);
+    vkr_terminate_surface(&rndr->vk, rndr->vk.inst.surface);
+    vkr_init_surface(&rndr->vk, &rndr->vk.inst.surface);
+    vkr_init_swapchain(&dev->swapchain, &rndr->vk);
+    init_swapchain_images_and_framebuffer(rndr);
 }
 
 intern i32 acquire_swapchain_image(renderer *rndr, vkr_frame *cur_frame, u32 *im_ind)
@@ -961,9 +967,15 @@ intern i32 acquire_swapchain_image(renderer *rndr, vkr_frame *cur_frame, u32 *im
     // Acquire the image, signal the image_avail semaphore once the image has been acquired. We get the index back, but
     // that doesn't mean the image is ready. The image is only ready (on the GPU side) once the image avail semaphore is triggered
     VkResult result = vkAcquireNextImageKHR(dev->hndl, dev->swapchain.swapchain, UINT64_MAX, cur_frame->image_avail, VK_NULL_HANDLE, im_ind);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
-        //recreate_swapchain(rndr);
-        return err_code::RENDER_NO_ERROR;// result;
+
+    // If the image is out of date/suboptimal we need to recreate the swapchain and our caller needs to exit early as
+    // well. It seems that on some platforms, if the result from above is out of date or suboptimal, the semaphore
+    // associated with it will never get triggered. So if we were to continue and just resize at the end of frame it
+    // wouldn't work because the queue submit would never fire as it depends on this image available semaphore.
+    // At least.. i think?
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR){
+        recreate_swapchain(rndr);
+        return result;
     }
     else if (result != VK_SUCCESS) { // if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         elog("Failed to acquire swapchain image");
@@ -1006,6 +1018,9 @@ intern i32 present_image(renderer *rndr, vkr_frame *cur_frame, u32 image_ind)
     present_info.pImageIndices = &image_ind;
     present_info.pResults = nullptr; // Optional - check for individual swaps
     VkResult result = vkQueuePresentKHR(dev->qfams[VKR_QUEUE_FAM_TYPE_PRESENT].qs[0].hndl, &present_info);
+    
+    // This purely helps with smoothness - it works fine without recreating the swapchain here and instead doing it on
+    // the next frame, but it seems to resize more smoothly doing it here
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
         recreate_swapchain(rndr);
     }

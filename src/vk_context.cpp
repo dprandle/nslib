@@ -894,15 +894,6 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
     return err_code::VKR_NO_ERROR;
 }
 
-void vkr_recreate_swapchain(vkr_instance *inst, const vkr_context *vk)
-{
-    vkr_terminate_swapchain_framebuffers(&inst->device, vk);
-    vkr_terminate_swapchain(&inst->device.swapchain, vk);
-    vkr_terminate_surface(vk, inst->surface);
-    vkr_init_surface(vk, &inst->surface);
-    vkr_init_swapchain(&inst->device.swapchain, vk);
-}
-
 vkr_add_result vkr_add_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, sizet count)
 {
     ilog("Adding %lu command buffer/s", count);
