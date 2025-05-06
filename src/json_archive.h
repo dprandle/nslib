@@ -48,7 +48,7 @@ void pack_unpack(json_archive *ar, string &val, const pack_var_info &vinfo);
 
 // Special packing/unpacking for 64bit
 void pack_unpack(json_archive *ar, u64 &val, const pack_var_info &vinfo);
-void pack_unpack(json_archive *ar, i64 &val, const pack_var_info &vinfo);
+void pack_unpack(json_archive *ar, s64 &val, const pack_var_info &vinfo);
 
 
 // All types default to appear as objects

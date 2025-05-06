@@ -97,10 +97,10 @@ vector2<T> cartesian_to_polar(const vector2<T> &cartesian)
 } // namespace math
 
 // Math typedefs
-using i8vec2 = vector2<i8>;
-using i16vec2 = vector2<i16>;
-using ivec2 = vector2<i32>;
-using i64vec2 = vector2<i64>;
+using i8vec2 = vector2<s8>;
+using i16vec2 = vector2<s16>;
+using ivec2 = vector2<s32>;
+using i64vec2 = vector2<s64>;
 using u8vec2 = vector2<u8>;
 using u16vec2 = vector2<u16>;
 using uvec2 = vector2<u32>;

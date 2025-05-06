@@ -961,7 +961,7 @@ intern void recreate_swapchain(renderer *rndr)
     init_swapchain_images_and_framebuffer(rndr);
 }
 
-intern i32 acquire_swapchain_image(renderer *rndr, vkr_frame *cur_frame, u32 *im_ind)
+intern s32 acquire_swapchain_image(renderer *rndr, vkr_frame *cur_frame, u32 *im_ind)
 {
     auto dev = &rndr->vk.inst.device;
     auto prev_frame = get_previous_frame(rndr);
@@ -985,7 +985,7 @@ intern i32 acquire_swapchain_image(renderer *rndr, vkr_frame *cur_frame, u32 *im
     return err_code::RENDER_NO_ERROR;
 }
 
-intern i32 submit_command_buffer(renderer *rndr, vkr_frame *cur_frame, vkr_command_buffer *cmd_buf)
+intern s32 submit_command_buffer(renderer *rndr, vkr_frame *cur_frame, vkr_command_buffer *cmd_buf)
 {
     auto dev = &rndr->vk.inst.device;
     // Get the info ready to submit our command buffer to the queue. We need to wait until the image avail semaphore has
@@ -1006,7 +1006,7 @@ intern i32 submit_command_buffer(renderer *rndr, vkr_frame *cur_frame, vkr_comma
     return err_code::RENDER_NO_ERROR;
 }
 
-intern i32 present_image(renderer *rndr, vkr_frame *cur_frame, u32 image_ind)
+intern s32 present_image(renderer *rndr, vkr_frame *cur_frame, u32 image_ind)
 {
     auto dev = &rndr->vk.inst.device;
     // Once the rendering signal has fired, present the image (show it on screen)
@@ -1281,7 +1281,7 @@ int render_frame_end(renderer *rndr, camera *cam)
 
     // Get the next available swapchain image index or return if the
     u32 im_ind{};
-    i32 err = acquire_swapchain_image(rndr, cur_frame, &im_ind);
+    s32 err = acquire_swapchain_image(rndr, cur_frame, &im_ind);
     if (err != err_code::RENDER_NO_ERROR) {
         if (err != err_code::RENDER_ACQUIRE_IMAGE_FAIL) {
             return err_code::RENDER_NO_ERROR;

@@ -46,7 +46,7 @@ struct matrix3
 
     COMMON_OPERATORS(matrix3, 3, vector3<T>)
 
-    vector3<T> operator()(i8 ind) const
+    vector3<T> operator()(s8 ind) const
     {
         return {data[0][ind], data[1][ind], data[2][ind]};
     }
@@ -567,10 +567,10 @@ inline vector3<float> operator*(const vector3<float> &lhs, const matrix3<float> 
 }
 #endif
 
-using i8mat3 = matrix3<i8>;
-using i16mat3 = matrix3<i16>;
-using imat3 = matrix3<i32>;
-using i64mat3 = matrix3<i64>;
+using i8mat3 = matrix3<s8>;
+using i16mat3 = matrix3<s16>;
+using imat3 = matrix3<s32>;
+using i64mat3 = matrix3<s64>;
 using u8mat3 = matrix3<u8>;
 using u16mat3 = matrix3<u16>;
 using umat3 = matrix3<u32>;

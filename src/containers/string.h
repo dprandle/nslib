@@ -204,25 +204,25 @@ inline const string &to_str(const string &str)
 }
 
 string to_str(void *i);
-string to_str(i64 i);
+string to_str(s64 i);
 string to_str(u64 i);
 string to_str(char c);
 
 void from_str(void **i, const string &str);
-void from_str(i64 *i, const string &str);
+void from_str(s64 *i, const string &str);
 void from_str(u64 *i, const string &str);
-void from_str(i16 *i, const string &str);
+void from_str(s16 *i, const string &str);
 void from_str(u16 *i, const string &str);
-void from_str(i8 *i, const string &str);
+void from_str(s8 *i, const string &str);
 void from_str(u8 *i, const string &str);
 void from_str(char *c, const string &str);
 
 void from_str(void **i, const char *str);
-void from_str(i64 *i, const char *str);
+void from_str(s64 *i, const char *str);
 void from_str(u64 *i, const char *str);
-void from_str(i16 *i, const char *str);
+void from_str(s16 *i, const char *str);
 void from_str(u16 *i, const char *str);
-void from_str(i8 *i, const char *str);
+void from_str(s8 *i, const char *str);
 void from_str(u8 *i, const char *str);
 void from_str(char *c, const char *str);
 

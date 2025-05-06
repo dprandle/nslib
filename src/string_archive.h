@@ -16,7 +16,7 @@ struct string_archive
     
     string txt;
     string cur_indent;
-    i8 indent_per_level{4};
+    s8 indent_per_level{4};
 };
 
 void handle_varname(string *txt, const char *vname);

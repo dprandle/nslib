@@ -14,12 +14,12 @@ inline constexpr char PRINT_MAT_END = '\n';
 inline constexpr char PRINT_VEC_DELIMITER = ' ';
 inline constexpr char PRINT_START_VEC = '[';
 inline constexpr char PRINT_END_VEC = ']';
-inline constexpr i8 ROUND_TO_DEC = 4;
+inline constexpr s8 ROUND_TO_DEC = 4;
 
 inline constexpr float TO_DEGREES = (180.0f / PI);
 inline constexpr float TO_RADS = (PI / 180.0f);
 
-i8 count_digits(i32 number);
+s8 count_digits(s32 number);
 
 template<floating_pt T>
 T sin(T val)
@@ -84,7 +84,7 @@ inline float rsqrt(float val)
 
 float random_float(float high_ = 1.0f, float low_ = 0.0f);
 
-double round_decimal(double to_round, i8 decimal_places);
+double round_decimal(double to_round, s8 decimal_places);
 
 template<class T>
 auto sum_elements(const T &veca)
@@ -109,7 +109,7 @@ template<class T>
 inline typename T::value_type dot(const T &veca, const T &vecb)
 {
     auto ret = decltype(veca.data[0]){0};
-    for (i8 i{0}; i < veca.size(); ++i)
+    for (s8 i{0}; i < veca.size(); ++i)
         ret += veca[i] * vecb[i];
     return ret;
 }
@@ -251,7 +251,7 @@ auto max_element(const T &cont)
 template<class T>
 T minimums(T lhs_, const T &rhs_)
 {
-    for (i8 i{0}; i < lhs_.size(); ++i)
+    for (s8 i{0}; i < lhs_.size(); ++i)
     {
         if (rhs_[i] < lhs_[i])
             lhs_[i] = rhs_[i];
@@ -262,7 +262,7 @@ T minimums(T lhs_, const T &rhs_)
 template<class T>
 T maximums(T lhs_, const T &rhs_)
 {
-    for (i8 i{0}; i < lhs_.size(); ++i)
+    for (s8 i{0}; i < lhs_.size(); ++i)
     {
         if (rhs_[i] > lhs_[i])
             lhs_[i] = rhs_[i];
@@ -386,20 +386,20 @@ T round(T item)
 }
 
 template<floating_pt T>
-T round(T item, i8 decimal_places)
+T round(T item, s8 decimal_places)
 {
     return round_decimal(item, decimal_places);
 }
 
 template<floating_pt T>
-void round(T *item, i8 decimal_places)
+void round(T *item, s8 decimal_places)
 {
     *item = round_decimal(*item, decimal_places);
 }
 
 // This changes in place
 template<holds_floating_pt T>
-void round(T *item, i8 decimal_places)
+void round(T *item, s8 decimal_places)
 {
     for (auto &&element : *item)
         round(&element, decimal_places);
@@ -408,7 +408,7 @@ void round(T *item, i8 decimal_places)
 // This just returns a copy instead of changing in place - this will work
 // for any container type passed in that has a value_type that is signed
 template<holds_floating_pt T>
-T round(T item, i8 decimal_places)
+T round(T item, s8 decimal_places)
 {
     round(&item, decimal_places);
     return item;
@@ -418,14 +418,14 @@ template<mat_type T, vec_type V>
 void set_mat_column(T *mat, sizet ind, const V &col)
 {
     static_assert(V::size_ <= T::size_);
-    for (i8 i{0}; i < V::size_; ++i)
+    for (s8 i{0}; i < V::size_; ++i)
         (*mat)[i][ind] = col[i];
 }
 
 template<mat_type T>
 void compwise_mult(T *lhs, const T &rhs)
 {
-    for (i8 i{0}; i < T::size_; ++i)
+    for (s8 i{0}; i < T::size_; ++i)
         (*lhs)[i] *= rhs[i];
 }
 
@@ -439,7 +439,7 @@ T compwise_mult(T lhs, const T &rhs)
 template<mat_type T>
 void compwise_div(T *lhs, const T &rhs)
 {
-    for (i8 i{0}; i < T::size_; ++i)
+    for (s8 i{0}; i < T::size_; ++i)
         (*lhs)[i] /= rhs[i];
 }
 
@@ -454,7 +454,7 @@ template<mat_type T, vec_type V>
 void compwise_mult_rows(T *lhs, const V &row_vec)
 {
     static_assert(T::size_ == V::size_);
-    for (i8 i{0}; i < T::size_; ++i)
+    for (s8 i{0}; i < T::size_; ++i)
         (*lhs)[i] *= row_vec;
 }
 
@@ -481,7 +481,7 @@ template<mat_type T, vec_type V>
 void compwise_div_rows(T *lhs, const V &row_vec)
 {
     static_assert(T::size_ == V::size_);
-    for (i8 i{0}; i < T::size_; ++i)
+    for (s8 i{0}; i < T::size_; ++i)
         (*lhs)[i] /= row_vec;
 }
 
@@ -489,7 +489,7 @@ template<vec_type V, mat_type T>
 void compwise_div_rows(const V &row_vec, T *rhs)
 {
     static_assert(T::size_ == V::size_);
-    for (i8 i{0}; i < T::size_; ++i)
+    for (s8 i{0}; i < T::size_; ++i)
         (*rhs)[i] = row_vec / (*rhs)[i];
 }
 
@@ -511,9 +511,9 @@ template<mat_type T, vec_type V>
 void compwise_mult_columns(T *lhs, const V &column_vec)
 {
     static_assert(T::size_ == V::size_);
-    for (i8 rowi{0}; rowi < T::size_; ++rowi)
+    for (s8 rowi{0}; rowi < T::size_; ++rowi)
     {
-        for (i8 coli{0}; coli < T::size_; ++coli)
+        for (s8 coli{0}; coli < T::size_; ++coli)
             (*lhs)[rowi][coli] *= column_vec[rowi];
     }
 }
@@ -535,9 +535,9 @@ template<mat_type T, vec_type V>
 void compwise_div_columns(T *lhs, const V &column_vec)
 {
     static_assert(T::size_ == V::size_);
-    for (i8 rowi{0}; rowi < T::size_; ++rowi)
+    for (s8 rowi{0}; rowi < T::size_; ++rowi)
     {
-        for (i8 coli{0}; coli < T::size_; ++coli)
+        for (s8 coli{0}; coli < T::size_; ++coli)
             (*lhs)[rowi][coli] /= column_vec[rowi];
     }
 }
@@ -546,9 +546,9 @@ template<vec_type V, mat_type T>
 void compwise_div_columns(const V &column_vec, T *rhs)
 {
     static_assert(T::size_ == V::size_);
-    for (i8 rowi{0}; rowi < T::size_; ++rowi)
+    for (s8 rowi{0}; rowi < T::size_; ++rowi)
     {
-        for (i8 coli{0}; coli < T::size_; ++coli)
+        for (s8 coli{0}; coli < T::size_; ++coli)
             (*rhs)[rowi][coli] = column_vec[rowi] / (*rhs)[rowi][coli];
     }
 }

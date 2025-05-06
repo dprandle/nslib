@@ -323,7 +323,7 @@ void from_str(void **i, const string &str)
     str_scanf(str, "%p", i);
 }
 
-void from_str(i64 *i, const string &str)
+void from_str(s64 *i, const string &str)
 {
     str_scanf(str, "%ld", i);
 }
@@ -333,7 +333,7 @@ void from_str(u64 *i, const string &str)
     str_scanf(str, "%lu", i);
 }
 
-void from_str(i16 *i, const string &str)
+void from_str(s16 *i, const string &str)
 {
     str_scanf(str, "%hd", i);
 }
@@ -343,7 +343,7 @@ void from_str(u16 *i, const string &str)
     str_scanf(str, "%hu", i);
 }
 
-void from_str(i8 *i, const string &str)
+void from_str(s8 *i, const string &str)
 {
     str_scanf(str, "%hhi", i);
 }
@@ -363,7 +363,7 @@ void from_str(void **i, const char *str)
     str_scanf(str, "%p", i);
 }
 
-void from_str(i64 *i, const char *str)
+void from_str(s64 *i, const char *str)
 {
     str_scanf(str, "%ld", i);
 }
@@ -373,7 +373,7 @@ void from_str(u64 *i, const char *str)
     str_scanf(str, "%lu", i);
 }
 
-void from_str(i16 *i, const char *str)
+void from_str(s16 *i, const char *str)
 {
     str_scanf(str, "%hd", i);
 }
@@ -383,7 +383,7 @@ void from_str(u16 *i, const char *str)
     str_scanf(str, "%hu", i);
 }
 
-void from_str(i8 *i, const char *str)
+void from_str(s8 *i, const char *str)
 {
     str_scanf(str, "%hhi", i);
 }
@@ -412,7 +412,7 @@ string to_str(u64 i)
     return ret;
 }
 
-string to_str(i64 i)
+string to_str(s64 i)
 {
     string ret;
     str_printf(&ret, "%ld", i);

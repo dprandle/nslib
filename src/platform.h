@@ -70,10 +70,10 @@ enum struct platform_window_event_type
 struct platform_input_event
 {
     platform_input_event_type type{platform_input_event_type::INVALID};
-    i32 key_or_button{};
-    i32 scancode{};
-    i32 action{};
-    i32 mods{};
+    s32 key_or_button{};
+    s32 scancode{};
+    s32 action{};
+    s32 mods{};
     vec2 offset;
     vec2 pos;
     void *win_hndl;
@@ -143,7 +143,7 @@ struct platform_file_err_desc
 
 struct platform_window_init_info
 {
-    i16 win_flags{platform_window_flags::VISIBLE | platform_window_flags::DECORATED | platform_window_flags::INTIALLY_FOCUSED};
+    s16 win_flags{platform_window_flags::VISIBLE | platform_window_flags::DECORATED | platform_window_flags::INTIALLY_FOCUSED};
     ivec2 resolution;
     const char *title;
 };

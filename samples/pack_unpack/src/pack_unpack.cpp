@@ -51,24 +51,24 @@ struct data_to_pup
 
     hmap<string, int> hm;
     hmap<u64, int> hm_u64;
-    hmap<i64, int> hm_i64;
+    hmap<s64, int> hm_i64;
     hmap<u32, int> hm_u32;
-    hmap<i32, int> hm_i32;
+    hmap<s32, int> hm_i32;
     hmap<u16, int> hm_u16;
-    hmap<i16, int> hm_i16;
+    hmap<s16, int> hm_i16;
     hmap<u8, int> hm_u8;
-    hmap<i8, int> hm_i8;
+    hmap<s8, int> hm_i8;
     hmap<rid, int> hm_no_simp;
 
     hset<string> hs;
     hset<u64> hs_u64;
-    hset<i64> hs_i64;
+    hset<s64> hs_i64;
     hset<u32> hs_u32;
-    hset<i32> hs_i32;
+    hset<s32> hs_i32;
     hset<u16> hs_u16;
-    hset<i16> hs_i16;
+    hset<s16> hs_i16;
     hset<u8> hs_u8;
-    hset<i8> hs_i8;
+    hset<s8> hs_i8;
     hset<rid> hs_no_simp;
 };
 
@@ -122,13 +122,13 @@ void seed_data(data_to_pup *data)
     hmap_insert(&data->hm, string("key2"), 2);
     hmap_insert(&data->hm, string("key3"), 3);
 
-    hmap_insert(&data->hm_u64, 12000000000000000000u, 1);
-    hmap_insert(&data->hm_u64, 13000000000000000000u, 2);
-    hmap_insert(&data->hm_u64, 14000000000000000000u, 3);
+    hmap_insert(&data->hm_u64, (u64)12000000000000000000u, 1);
+    hmap_insert(&data->hm_u64, (u64)13000000000000000000u, 2);
+    hmap_insert(&data->hm_u64, (u64)14000000000000000000u, 3);
 
-    hmap_insert(&data->hm_i64, 2000000000000000000, 1);
-    hmap_insert(&data->hm_i64, 3000000000000000000, 2);
-    hmap_insert(&data->hm_i64, 4000000000000000000, 3);
+    hmap_insert(&data->hm_i64, (s64)2000000000000000000, 1);
+    hmap_insert(&data->hm_i64, (s64)3000000000000000000, 2);
+    hmap_insert(&data->hm_i64, (s64)4000000000000000000, 3);
 
     hmap_insert(&data->hm_u32, 2000000000u, 1);
     hmap_insert(&data->hm_u32, 3000000000u, 2);
@@ -142,17 +142,17 @@ void seed_data(data_to_pup *data)
     hmap_insert(&data->hm_u16, (u16)30000u, 2);
     hmap_insert(&data->hm_u16, (u16)40000u, 3);
 
-    hmap_insert(&data->hm_i16, (i16)2000, 1);
-    hmap_insert(&data->hm_i16, (i16)3000, 2);
-    hmap_insert(&data->hm_i16, (i16)4000, 3);
+    hmap_insert(&data->hm_i16, (s16)2000, 1);
+    hmap_insert(&data->hm_i16, (s16)3000, 2);
+    hmap_insert(&data->hm_i16, (s16)4000, 3);
 
     hmap_insert(&data->hm_u8, (u8)20, 1);
     hmap_insert(&data->hm_u8, (u8)30, 2);
     hmap_insert(&data->hm_u8, (u8)40, 3);
 
-    hmap_insert(&data->hm_i8, (i8)2, 1);
-    hmap_insert(&data->hm_i8, (i8)3, 2);
-    hmap_insert(&data->hm_i8, (i8)4, 3);
+    hmap_insert(&data->hm_i8, (s8)2, 1);
+    hmap_insert(&data->hm_i8, (s8)3, 2);
+    hmap_insert(&data->hm_i8, (s8)4, 3);
 
     hmap_insert(&data->hm_no_simp, rid("key1"), 1);
     hmap_insert(&data->hm_no_simp, rid("key2"), 2);
@@ -166,9 +166,9 @@ void seed_data(data_to_pup *data)
     hset_insert(&data->hs_u64, (u64)13000000000000000000u);
     hset_insert(&data->hs_u64, (u64)14000000000000000000u);
 
-    hset_insert(&data->hs_i64, (i64)2000000000000000000);
-    hset_insert(&data->hs_i64, (i64)3000000000000000000);
-    hset_insert(&data->hs_i64, (i64)4000000000000000000);
+    hset_insert(&data->hs_i64, (s64)2000000000000000000);
+    hset_insert(&data->hs_i64, (s64)3000000000000000000);
+    hset_insert(&data->hs_i64, (s64)4000000000000000000);
 
     hset_insert(&data->hs_u32, 2000000000u);
     hset_insert(&data->hs_u32, 3000000000u);
@@ -182,17 +182,17 @@ void seed_data(data_to_pup *data)
     hset_insert(&data->hs_u16, (u16)30000u);
     hset_insert(&data->hs_u16, (u16)40000u);
 
-    hset_insert(&data->hs_i16, (i16)2000);
-    hset_insert(&data->hs_i16, (i16)3000);
-    hset_insert(&data->hs_i16, (i16)4000);
+    hset_insert(&data->hs_i16, (s16)2000);
+    hset_insert(&data->hs_i16, (s16)3000);
+    hset_insert(&data->hs_i16, (s16)4000);
 
     hset_insert(&data->hs_u8, (u8)20u);
     hset_insert(&data->hs_u8, (u8)30u);
     hset_insert(&data->hs_u8, (u8)40u);
 
-    hset_insert(&data->hs_i8, (i8)2);
-    hset_insert(&data->hs_i8, (i8)3);
-    hset_insert(&data->hs_i8, (i8)4);
+    hset_insert(&data->hs_i8, (s8)2);
+    hset_insert(&data->hs_i8, (s8)3);
+    hset_insert(&data->hs_i8, (s8)4);
 
     hset_insert(&data->hs_no_simp, rid("key1"));
     hset_insert(&data->hs_no_simp, rid("key2"));

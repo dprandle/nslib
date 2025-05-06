@@ -45,13 +45,13 @@ struct profile_timepoints
     ptimespec restart;
 
     // Time, in us, between current split point and previous split (updated with ptimer_split)
-    i64 dt_ns;
+    s64 dt_ns;
 
     // Time, in s, between current split point and previous split (updated with ptimer_split)
     double dt;
 };
 
-inline double nanos_to_sec(i64 ns) {
+inline double nanos_to_sec(s64 ns) {
     return (double)ns / 1000000000.0;
 }
 
@@ -59,7 +59,7 @@ ptimespec ptimer_cur(int ptype);
 
 ptimespec ptimer_diff(const ptimespec *start, const ptimespec *end);
 
-i64 ptimer_nsec(const ptimespec *spec);
+s64 ptimer_nsec(const ptimespec *spec);
 
 // Restart the timer setting all timepoints to current time
 void ptimer_restart(profile_timepoints *ptimer);
@@ -68,8 +68,8 @@ void ptimer_restart(profile_timepoints *ptimer);
 void ptimer_split(profile_timepoints *ptimer);
 
 // Return elapsed nanoseconds between now and last split
-i64 ptimer_split_dt(const profile_timepoints *ptimer);
+s64 ptimer_split_dt(const profile_timepoints *ptimer);
 
 // Return elapsed nanoseconds between now and last restart
-i64 ptimer_elapsed_dt(const profile_timepoints *ptimer);
+s64 ptimer_elapsed_dt(const profile_timepoints *ptimer);
 } // namespace nslib

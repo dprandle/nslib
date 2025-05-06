@@ -45,10 +45,10 @@ struct cube_base
     };
 };
 
-using i8cube = cube_base<i8>;
-using i16cube = cube_base<i16>;
-using icube = cube_base<i32>;
-using i64cube = cube_base<i64>;
+using i8cube = cube_base<s8>;
+using i16cube = cube_base<s16>;
+using icube = cube_base<s32>;
+using i64cube = cube_base<s64>;
 using ui8cube = cube_base<u8>;
 using ui16cube = cube_base<u16>;
 using uicube = cube_base<u32>;

@@ -21,7 +21,7 @@ namespace nslib
 {
 
 #define platform_ptr(win) (platform_ctxt *)glfwGetWindowUserPointer(win)
-intern void glfw_error_callback(i32 error, const char *description)
+intern void glfw_error_callback(s32 error, const char *description)
 {
     elog("Error %d: %s", error, description);
 }
@@ -55,9 +55,9 @@ bool frame_has_event_type(platform_window_event_type type, const platform_frame_
     return false;
 }
 
-intern i32 get_cursor_scroll_mod_mask(GLFWwindow *window)
+intern s32 get_cursor_scroll_mod_mask(GLFWwindow *window)
 {
-    i32 ret{0};
+    s32 ret{0};
     if (glfwGetKey(window, KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, KEY_RIGHT_SHIFT) == GLFW_PRESS) {
         ret |= KEY_MOD_SHIFT;
     }
@@ -88,7 +88,7 @@ intern i32 get_cursor_scroll_mod_mask(GLFWwindow *window)
     return ret;
 }
 
-intern void glfw_key_press_callback(GLFWwindow *window, i32 key, i32 scancode, i32 action, i32 mods)
+intern void glfw_key_press_callback(GLFWwindow *window, s32 key, s32 scancode, s32 action, s32 mods)
 {
     platform_ctxt *pf = platform_ptr(window);
     if (pf->finp.events.size == pf->finp.events.capacity) {
@@ -97,7 +97,7 @@ intern void glfw_key_press_callback(GLFWwindow *window, i32 key, i32 scancode, i
     arr_push_back(&pf->finp.events, {platform_input_event_type::KEY_PRESS, key, scancode, action, mods, {}, {}, window});
 }
 
-intern void glfw_mouse_button_callback(GLFWwindow *window, i32 button, i32 action, i32 mods)
+intern void glfw_mouse_button_callback(GLFWwindow *window, s32 button, s32 action, s32 mods)
 {
     platform_ctxt *pf = platform_ptr(window);
     if (pf->finp.events.size == pf->finp.events.capacity) {
@@ -128,7 +128,7 @@ intern void glfw_cursor_pos_callback(GLFWwindow *window, double x_pos, double y_
                   {platform_input_event_type::CURSOR_POS, CURSOR_POS_CHANGE, {}, {}, get_cursor_scroll_mod_mask(window), {}, fpos, window});
 }
 
-intern void glfw_focus_change_callback(GLFWwindow *window, i32 focused)
+intern void glfw_focus_change_callback(GLFWwindow *window, s32 focused)
 {
     platform_ctxt *pf = platform_ptr(window);
     if (pf->fwind.events.size == pf->fwind.events.capacity) {
@@ -146,7 +146,7 @@ intern void glfw_close_window_callback(GLFWwindow *window)
     tlog("Closing window...");
 }
 
-intern void glfw_iconify_window_callback(GLFWwindow *window, i32 iconified)
+intern void glfw_iconify_window_callback(GLFWwindow *window, s32 iconified)
 {
     platform_ctxt *pf = platform_ptr(window);
     if (pf->fwind.events.size == pf->fwind.events.capacity) {
@@ -159,7 +159,7 @@ intern void glfw_iconify_window_callback(GLFWwindow *window, i32 iconified)
     tlog("Window %s", (iconified) ? "iconified" : "restored");
 }
 
-intern void glfw_maximize_window_callback(GLFWwindow *window, i32 maximized)
+intern void glfw_maximize_window_callback(GLFWwindow *window, s32 maximized)
 {
     platform_ctxt *pf = platform_ptr(window);
     if (pf->fwind.events.size == pf->fwind.events.capacity) {
@@ -172,7 +172,7 @@ intern void glfw_maximize_window_callback(GLFWwindow *window, i32 maximized)
     tlog("Window %s", (maximized) ? "maximized" : "restored");
 }
 
-intern void glfw_window_position_callback(GLFWwindow *window, i32 x_pos, i32 y_pos)
+intern void glfw_window_position_callback(GLFWwindow *window, s32 x_pos, s32 y_pos)
 {
     platform_ctxt *pf = platform_ptr(window);
     if (pf->fwind.events.size == pf->fwind.events.capacity) {
@@ -186,7 +186,7 @@ intern void glfw_window_position_callback(GLFWwindow *window, i32 x_pos, i32 y_p
     arr_push_back(&pf->fwind.events, we);
 }
 
-intern void glfw_resize_window_callback(GLFWwindow *window, i32 width, i32 height)
+intern void glfw_resize_window_callback(GLFWwindow *window, s32 width, s32 height)
 {
     platform_ctxt *pf = platform_ptr(window);
     platform_window_event *ev_ptr = get_latest_window_event(platform_window_event_type::WIN_RESIZE, &pf->fwind);
@@ -204,7 +204,7 @@ intern void glfw_resize_window_callback(GLFWwindow *window, i32 width, i32 heigh
     tlog("Resized window from {%d %d} to {%d %d}", ev_ptr->resize.second.w, ev_ptr->resize.second.h, width, height);
 }
 
-intern void glfw_framebuffer_resized_callback(GLFWwindow *window, i32 width, i32 height)
+intern void glfw_framebuffer_resized_callback(GLFWwindow *window, s32 width, s32 height)
 {
     platform_ctxt *pf = platform_ptr(window);
     platform_window_event *ev_ptr = get_latest_window_event(platform_window_event_type::FB_RESIZE, &pf->fwind);

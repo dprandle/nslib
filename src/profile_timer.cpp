@@ -50,9 +50,9 @@ ptimespec ptimer_diff(const ptimespec *start, const ptimespec *end)
     return temp;
 }
 
-i64 ptimer_nsec(const ptimespec *spec)
+s64 ptimer_nsec(const ptimespec *spec)
 {
-    i64 ret{};
+    s64 ret{};
 #if defined(PLATFORM_UNIX)
     ret = spec->t.tv_sec * 1000000000 + spec->t.tv_nsec;
 #elif defined(PLATFORM_WIN32)
@@ -77,14 +77,14 @@ void ptimer_split(profile_timepoints * ptimer)
     ptimer->split = cur;
 }
 
-i64 ptimer_split_dt(const profile_timepoints *ptimer)
+s64 ptimer_split_dt(const profile_timepoints *ptimer)
 {
     ptimespec cur = ptimer_cur(ptimer->ctype);
     ptimespec split_dt = ptimer_diff(&ptimer->split, &cur);
     return ptimer_nsec(&split_dt);
 }
 
-i64 ptimer_elapsed_dt(const profile_timepoints *ptimer)
+s64 ptimer_elapsed_dt(const profile_timepoints *ptimer)
 {
     ptimespec cur = ptimer_cur(ptimer->ctype);
     ptimespec split_dt = ptimer_diff(&ptimer->restart, &cur);

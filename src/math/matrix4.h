@@ -50,7 +50,7 @@ struct matrix4
     using _simd_type = typename simd_traits<T, size_>::_simd_type;
 #endif
 
-    vector4<T> operator()(i8 ind) const
+    vector4<T> operator()(s8 ind) const
     {
         return {data[0][ind], data[1][ind], data[2][ind], data[3][ind]};
     }
@@ -681,10 +681,10 @@ inline matrix3<float> operator-(const matrix3<float> &lhs, const matrix3<float> 
 
 #endif
 
-using i8mat4 = matrix4<i8>;
-using i16mat4 = matrix4<i16>;
-using imat4 = matrix4<i32>;
-using i64mat4 = matrix4<i64>;
+using i8mat4 = matrix4<s8>;
+using i16mat4 = matrix4<s16>;
+using imat4 = matrix4<s32>;
+using i64mat4 = matrix4<s64>;
 using u8mat4 = matrix4<u8>;
 using u16mat4 = matrix4<u16>;
 using umat4 = matrix4<u32>;

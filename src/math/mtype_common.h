@@ -29,7 +29,7 @@
 #include <immintrin.h>
 namespace nslib
 {
-template<typename T, i8 SZ>
+template<typename T, s8 SZ>
 struct simd_traits
 {
     using _simd_type = T[SZ];

@@ -113,7 +113,7 @@ void pack_unpack(json_archive *ar, u64 &val, const pack_var_info &vinfo)
     }
 }
 
-void pack_unpack(json_archive *ar, i64 &val, const pack_var_info &vinfo)
+void pack_unpack(json_archive *ar, s64 &val, const pack_var_info &vinfo)
 {
     string s{};
     if (ar->opmode == archive_opmode::PACK) {
