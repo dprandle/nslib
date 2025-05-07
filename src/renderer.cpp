@@ -23,12 +23,24 @@ intern void *imgui_mem_alloc(sizet sz, void *usr)
     return mem_alloc(sz, (mem_arena *)usr, 8);
 }
 
+intern void check_vk_result(VkResult err)
+{
+    if (err != VK_SUCCESS) {
+        wlog("vulkan err: %d", err);
+    }
+    assert(err >= 0);
+}
+
 intern void init_imgui(renderer *rndr)
 {
     mem_init_fl_arena(&rndr->imgui.fl, 10 * MB_SIZE, rndr->upstream_fl_arena, "imgui");
     ImGui::SetAllocatorFunctions(imgui_mem_alloc, imgui_mem_free, &rndr->imgui.fl);
     rndr->imgui.ctxt = ImGui::CreateContext();
     ImGui::StyleColorsDark();
+
+    vkr_descriptor_cfg cfg{};
+    cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE;
+    vkr_init_descriptor_pool(&rndr->imgui.pool, &rndr->vk, &cfg);
 
     ImGui_ImplGlfw_InitForVulkan((GLFWwindow *)rndr->vk.cfg.window, true);
 
@@ -37,13 +49,13 @@ intern void init_imgui(renderer *rndr)
     init_info.PhysicalDevice = rndr->vk.inst.pdev_info.hndl;
     init_info.Device = rndr->vk.inst.device.hndl;
     init_info.QueueFamily = rndr->vk.inst.device.qfams[VKR_QUEUE_FAM_TYPE_GFX].fam_ind;
-    // init_info.Queue = g_Queue;
-    // init_info.PipelineCache = VK_NULL_HANDLE;
-    // init_info.DescriptorPool = g_DescriptorPool;
-    // init_info.Allocator = &rndr->vk.alloc_cbs;
+    init_info.Queue = rndr->vk.inst.device.qfams[VKR_QUEUE_FAM_TYPE_GFX].qs[VKR_RENDER_QUEUE].hndl;
+    init_info.PipelineCache = VK_NULL_HANDLE;
+    init_info.DescriptorPool = rndr->imgui.pool.hndl;
+    init_info.Allocator = &rndr->vk.alloc_cbs;
     // init_info.MinImageCount = g_MinImageCount;
-    // init_info.ImageCount = wd->ImageCount;
-    // init_info.CheckVkResultFn = check_vk_result;
+    init_info.ImageCount = wd->ImageCount;
+    init_info.CheckVkResultFn = check_vk_result;
     // ImGui_ImplVulkan_Init(&init_info, wd->RenderPass);
 }
 
@@ -491,6 +503,7 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
                                                    req_vert_byte_size,
                                                    &vert_region,
                                                    &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX],
+                                                   VKR_RENDER_QUEUE,
                                                    &rndr->vk);
         assert(ret == err_code::VKR_NO_ERROR);
 
@@ -500,6 +513,7 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
                                                req_inds_byte_size,
                                                &ind_region,
                                                &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX],
+                                               VKR_RENDER_QUEUE,
                                                &rndr->vk);
         assert(ret == err_code::VKR_NO_ERROR);
     }
@@ -584,7 +598,7 @@ intern int load_default_image_and_sampler(renderer *rndr)
     }
 
     sizet imsize = cfg.dims.x * cfg.dims.y * cfg.dims.z * 4;
-    vkr_stage_and_upload_image_data(dest_image, pixels, imsize, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], vk);
+    vkr_stage_and_upload_image_data(dest_image, pixels, imsize, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], VKR_RENDER_QUEUE, vk);
 
     stbi_image_free(pixels);
 
@@ -897,11 +911,10 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
     // Set up our draw call list render pass hashmap with frame linear memory
     vkr_descriptor_cfg desc_cfg{};
     // Frame + pl + mat + obj uob
-    desc_cfg.max_sets = MAX_FRAMES_IN_FLIGHT * (MAX_RENDERPASS_COUNT * 2 + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT);
-    desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER] =
-        MAX_FRAMES_IN_FLIGHT * (MAX_RENDERPASS_COUNT + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT);
-    desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC] = MAX_FRAMES_IN_FLIGHT * MAX_RENDERPASS_COUNT;
-    desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = MAX_FRAMES_IN_FLIGHT * MAX_MATERIAL_COUNT * TEXTURE_SLOT_COUNT;
+    desc_cfg.max_sets = (MAX_RENDERPASS_COUNT * 2 + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT);
+    desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER] = (MAX_RENDERPASS_COUNT + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT);
+    desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC] = MAX_RENDERPASS_COUNT;
+    desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = MAX_MATERIAL_COUNT * TEXTURE_SLOT_COUNT;
     vkr_cfg vkii{"rdev",
                  {1, 0, 0},
                  {.persistent_arena = &rndr->vk_free_list, .command_arena = &rndr->vk_frame_linear},
@@ -1000,7 +1013,7 @@ intern s32 submit_command_buffer(renderer *rndr, vkr_frame *cur_frame, vkr_comma
     submit_info.pCommandBuffers = &cmd_buf->hndl;
     submit_info.signalSemaphoreCount = 1;
     submit_info.pSignalSemaphores = &cur_frame->render_finished;
-    if (vkQueueSubmit(dev->qfams[VKR_QUEUE_FAM_TYPE_GFX].qs[0].hndl, 1, &submit_info, cur_frame->in_flight) != VK_SUCCESS) {
+    if (vkQueueSubmit(dev->qfams[VKR_QUEUE_FAM_TYPE_GFX].qs[VKR_RENDER_QUEUE].hndl, 1, &submit_info, cur_frame->in_flight) != VK_SUCCESS) {
         return err_code::RENDER_SUBMIT_QUEUE_FAIL;
     }
     return err_code::RENDER_NO_ERROR;
@@ -1018,7 +1031,7 @@ intern s32 present_image(renderer *rndr, vkr_frame *cur_frame, u32 image_ind)
     present_info.pSwapchains = &dev->swapchain.swapchain;
     present_info.pImageIndices = &image_ind;
     present_info.pResults = nullptr; // Optional - check for individual swaps
-    VkResult result = vkQueuePresentKHR(dev->qfams[VKR_QUEUE_FAM_TYPE_PRESENT].qs[0].hndl, &present_info);
+    VkResult result = vkQueuePresentKHR(dev->qfams[VKR_QUEUE_FAM_TYPE_PRESENT].qs[VKR_RENDER_QUEUE].hndl, &present_info);
 
     // This purely helps with smoothness - it works fine without recreating the swapchain here and instead doing it on
     // the next frame, but it seems to resize more smoothly doing it here

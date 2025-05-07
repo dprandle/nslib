@@ -61,15 +61,14 @@ enum vkr_queue_fam_type
     VKR_QUEUE_FAM_TYPE_COUNT
 };
 
-const u32 VKR_DESCRIPTOR_TYPE_COUNT = 11;
-
-inline constexpr const u32 MAX_QUEUE_REQUEST_COUNT = 32;
-inline constexpr const u32 VKR_MAX_EXTENSION_STR_LEN = 128;
-
-inline constexpr const sizet MAX_FRAMES_IN_FLIGHT = 2;
-
-const u32 VKR_INVALID = (u32)-1;
-inline constexpr const u32 MEM_ALLOC_TYPE_COUNT = VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE + 1;
+// For now, we will just use a single queue since some cards only have one
+inline constexpr sizet VKR_RENDER_QUEUE = 0;
+inline constexpr u32 VKR_DESCRIPTOR_TYPE_COUNT = 11;
+inline constexpr u32 MAX_QUEUE_REQUEST_COUNT = 32;
+inline constexpr u32 VKR_MAX_EXTENSION_STR_LEN = 128;
+inline constexpr sizet MAX_FRAMES_IN_FLIGHT = 2;
+inline constexpr u32 VKR_INVALID = (u32)-1;
+inline constexpr u32 MEM_ALLOC_TYPE_COUNT = VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE + 1;
 
 struct vk_mem_alloc_stats
 {
@@ -498,7 +497,8 @@ struct vkr_instance
 struct vkr_descriptor_cfg
 {
     u32 max_desc_per_type[VKR_DESCRIPTOR_TYPE_COUNT] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    u32 max_sets{};
+    // If this is left as invalid, then it will be set to the sum of all descriptors in max_desc_per_type
+    u32 max_sets{INVALID_ID};
 };
 
 struct vkr_cfg
@@ -510,7 +510,7 @@ struct vkr_cfg
     void *window;
     VkInstanceCreateFlags inst_create_flags;
     vkr_descriptor_cfg desc_cfg{};
-    
+
     // Array of additional instance extension names - besides defaults determined by window
     const char *const *extra_instance_extension_names;
     u32 extra_instance_extension_count;
@@ -601,11 +601,13 @@ int vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
                                      sizet src_data_size,
                                      const VkBufferCopy *region,
                                      vkr_device_queue_fam_info *cmd_q,
+                                     sizet qind,
                                      const vkr_context *vk);
 int vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
                                      const void *src_data,
                                      sizet src_data_size,
                                      vkr_device_queue_fam_info *cmd_q,
+                                     sizet qind,
                                      const vkr_context *vk);
 
 // Images
@@ -616,12 +618,14 @@ int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
                                     const void *src_data,
                                     sizet src_data_size,
                                     vkr_device_queue_fam_info *cmd_q,
+                                    sizet qind,
                                     const vkr_context *vk);
 int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
                                     const void *src_data,
                                     sizet src_data_size,
                                     const VkBufferImageCopy *region,
                                     vkr_device_queue_fam_info *cmd_q,
+                                    sizet qind,
                                     const vkr_context *vk);
 sizet vkr_add_image_view(vkr_device *device, const vkr_image_view &copy = {});
 int vkr_init_image_view(vkr_image_view *iview, const vkr_image_view_cfg *cfg, const vkr_context *vk);
@@ -708,16 +712,23 @@ struct vkr_image_transition_cfg
     VkImageSubresourceRange srange;
 };
 
-int vkr_copy_buffer(vkr_buffer *dest, const vkr_buffer *src, const VkBufferCopy *region, vkr_device_queue_fam_info *cmd_q, const vkr_context *vk);
+int vkr_copy_buffer(vkr_buffer *dest,
+                    const vkr_buffer *src,
+                    const VkBufferCopy *region,
+                    vkr_device_queue_fam_info *cmd_q,
+                    sizet qind,
+                    const vkr_context *vk);
 int vkr_copy_buffer_to_image(vkr_image *dest,
                              const vkr_buffer *src,
                              const VkBufferImageCopy *region,
                              vkr_device_queue_fam_info *cmd_q,
+                             sizet qind,
                              const vkr_context *vk);
 
 int vkr_transition_image_layout(const vkr_image *image,
                                 const vkr_image_transition_cfg *cfg,
                                 vkr_device_queue_fam_info *cmd_q,
+                                sizet qind,
                                 const vkr_context *vk);
 
 } // namespace nslib
