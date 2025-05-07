@@ -5,6 +5,7 @@
 #include "sim_region.h"
 #include "vk_context.h"
 #include "basic_types.h"
+#include "imgui/imgui.h"
 using namespace nslib;
 
 struct app_data
@@ -219,7 +220,7 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
     profile_timepoints pt;
     map_input_frame(&ctxt->finp, &app->stack);
 
-    int res = render_frame_begin(&app->rndr, ctxt->finished_frames);
+    int res = begin_render_frame(&app->rndr, ctxt->finished_frames);
     if (res != err_code::VKR_NO_ERROR) {
         return res;
     }
@@ -265,7 +266,10 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
     ptimer_split(&pt);
     update_tm += pt.dt;
 
-    res = render_frame_end(&app->rndr, cam);
+    // Draw some imgui stuff
+    ImGui::ShowDemoWindow();
+
+    res = end_render_frame(&app->rndr, cam);
     ptimer_split(&pt);
     render_tm += pt.dt;
 

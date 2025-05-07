@@ -354,7 +354,7 @@ int vkr_init_instance(const vkr_context *vk, vkr_instance *inst)
     app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
 
     app_info.pEngineName = "Noble Steed";
-    app_info.apiVersion = VK_API_VERSION_1_3;
+    app_info.apiVersion = VKR_API_VERSION;
 
     VkInstanceCreateInfo create_inf{};
     create_inf.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -582,7 +582,7 @@ int vkr_init_device(vkr_device *dev,
     cr_info.instance = vk->inst.hndl;
     cr_info.pDeviceMemoryCallbacks = &cb;
     cr_info.pAllocationCallbacks = &vk->alloc_cbs;
-    cr_info.vulkanApiVersion = VK_API_VERSION_1_3;
+    cr_info.vulkanApiVersion = VKR_API_VERSION;
     cr_info.preferredLargeHeapBlockSize = 0; // This defaults to 256 MB
     int err = vmaCreateAllocator(&cr_info, &dev->vma_alloc.hndl);
     if (err != VK_SUCCESS) {

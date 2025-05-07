@@ -212,9 +212,9 @@ bool remove_from_gpu(mesh *msh, renderer *rndr);
 
 int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_arena *fl_arena);
 
-int render_frame_begin(renderer *rndr, int finished_frames);
+int begin_render_frame(renderer *rndr, int finished_frames);
 
-int render_frame_end(renderer *rndr, camera *cam);
+int end_render_frame(renderer *rndr, camera *cam);
 
 void terminate_renderer(renderer *rndr);
 

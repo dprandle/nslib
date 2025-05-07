@@ -13,59 +13,6 @@
 namespace nslib
 {
 
-intern void imgui_mem_free(void *ptr, void *usr)
-{
-    mem_free(ptr, (mem_arena *)usr);
-}
-
-intern void *imgui_mem_alloc(sizet sz, void *usr)
-{
-    return mem_alloc(sz, (mem_arena *)usr, 8);
-}
-
-intern void check_vk_result(VkResult err)
-{
-    if (err != VK_SUCCESS) {
-        wlog("vulkan err: %d", err);
-    }
-    assert(err >= 0);
-}
-
-intern void init_imgui(renderer *rndr)
-{
-    mem_init_fl_arena(&rndr->imgui.fl, 10 * MB_SIZE, rndr->upstream_fl_arena, "imgui");
-    ImGui::SetAllocatorFunctions(imgui_mem_alloc, imgui_mem_free, &rndr->imgui.fl);
-    rndr->imgui.ctxt = ImGui::CreateContext();
-    ImGui::StyleColorsDark();
-
-    vkr_descriptor_cfg cfg{};
-    cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE;
-    vkr_init_descriptor_pool(&rndr->imgui.pool, &rndr->vk, &cfg);
-
-    ImGui_ImplGlfw_InitForVulkan((GLFWwindow *)rndr->vk.cfg.window, true);
-
-    ImGui_ImplVulkan_InitInfo init_info = {};
-    init_info.Instance = rndr->vk.inst.hndl;
-    init_info.PhysicalDevice = rndr->vk.inst.pdev_info.hndl;
-    init_info.Device = rndr->vk.inst.device.hndl;
-    init_info.QueueFamily = rndr->vk.inst.device.qfams[VKR_QUEUE_FAM_TYPE_GFX].fam_ind;
-    init_info.Queue = rndr->vk.inst.device.qfams[VKR_QUEUE_FAM_TYPE_GFX].qs[VKR_RENDER_QUEUE].hndl;
-    init_info.PipelineCache = VK_NULL_HANDLE;
-    init_info.DescriptorPool = rndr->imgui.pool.hndl;
-    init_info.Allocator = &rndr->vk.alloc_cbs;
-    // init_info.MinImageCount = g_MinImageCount;
-    init_info.ImageCount = wd->ImageCount;
-    init_info.CheckVkResultFn = check_vk_result;
-    // ImGui_ImplVulkan_Init(&init_info, wd->RenderPass);
-}
-
-intern void terminate_imgui(renderer *rndr)
-{
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext(rndr->imgui.ctxt);
-    mem_terminate_arena(&rndr->imgui.fl);
-}
-
 #if defined(NDEBUG)
 intern const u32 VALIDATION_LAYER_COUNT = 0;
 intern const char **VALIDATION_LAYERS = nullptr;
@@ -134,6 +81,78 @@ struct render_pass_draw_group
     array<VkWriteDescriptorSet> desc_updates;
     hmap<rid, pipeline_draw_group *> plines;
 };
+
+
+intern void imgui_mem_free(void *ptr, void *usr)
+{
+    mem_free(ptr, (mem_arena *)usr);
+}
+
+intern void *imgui_mem_alloc(sizet sz, void *usr)
+{
+    return mem_alloc(sz, (mem_arena *)usr, 8);
+}
+
+intern void check_vk_result(VkResult err)
+{
+    if (err != VK_SUCCESS) {
+        wlog("vulkan err: %d", err);
+    }
+    assert(err >= 0);
+}
+
+intern void init_imgui(renderer *rndr)
+{
+    mem_init_fl_arena(&rndr->imgui.fl, 10 * MB_SIZE, rndr->upstream_fl_arena, "imgui");
+    auto rpass = hmap_find(&rndr->rpasses, FWD_RPASS);
+    assert(rpass);
+    auto rpass_hndl = rndr->vk.inst.device.render_passes[rpass->val.rpind].hndl;
+    
+    ImGui::SetAllocatorFunctions(imgui_mem_alloc, imgui_mem_free, &rndr->imgui.fl);
+    rndr->imgui.ctxt = ImGui::CreateContext();
+    ImGui::StyleColorsDark();
+    auto &io = ImGui::GetIO();
+    io.FontGlobalScale = 2.0f;
+    
+
+    vkr_descriptor_cfg cfg{};
+    cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE;
+    vkr_init_descriptor_pool(&rndr->imgui.pool, &rndr->vk, &cfg);
+
+    ImGui_ImplGlfw_InitForVulkan((GLFWwindow *)rndr->vk.cfg.window, true);
+
+    ImGui_ImplVulkan_InitInfo init_info = {};
+    init_info.ApiVersion = VKR_API_VERSION;
+    
+    init_info.Instance = rndr->vk.inst.hndl;
+    init_info.PhysicalDevice = rndr->vk.inst.pdev_info.hndl;
+    init_info.Device = rndr->vk.inst.device.hndl;
+    init_info.QueueFamily = rndr->vk.inst.device.qfams[VKR_QUEUE_FAM_TYPE_GFX].fam_ind;
+    init_info.Queue = rndr->vk.inst.device.qfams[VKR_QUEUE_FAM_TYPE_GFX].qs[VKR_RENDER_QUEUE].hndl;
+    init_info.PipelineCache = VK_NULL_HANDLE;
+    init_info.DescriptorPool = rndr->imgui.pool.hndl;
+    init_info.Allocator = &rndr->vk.alloc_cbs;
+    init_info.MinImageCount = MAX_FRAMES_IN_FLIGHT;
+    init_info.ImageCount = rndr->vk.inst.device.swapchain.images.size;
+    init_info.RenderPass = rpass_hndl;
+    init_info.Subpass = 0;
+    init_info.CheckVkResultFn = check_vk_result;
+    ImGui_ImplVulkan_Init(&init_info);
+
+    if (!ImGui_ImplVulkan_CreateFontsTexture()) {
+        wlog("Could not create imgui vulkan font texture");
+    }
+
+}
+
+intern void terminate_imgui(renderer *rndr)
+{
+    vkr_terminate_descriptor_pool(&rndr->imgui.pool, &rndr->vk);
+    ImGui_ImplGlfw_Shutdown();
+    ImGui_ImplVulkan_Shutdown();    
+    ImGui::DestroyContext(rndr->imgui.ctxt);
+    mem_terminate_arena(&rndr->imgui.fl);
+}
 
 intern int setup_render_pass(renderer *rndr)
 {
@@ -794,6 +813,7 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
     auto dev = &rndr->vk.inst.device;
     auto vert_buf = &dev->buffers[rndr->rmi.verts.buf_ind];
     auto ind_buf = &dev->buffers[rndr->rmi.inds.buf_ind];
+    auto img_data = ImGui::GetDrawData();
 
     int err = vkr_begin_cmd_buf(cmd_buf);
     if (err != err_code::VKR_NO_ERROR) {
@@ -879,6 +899,9 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
         rpass_iter = hmap_next(&rndr->dcs.rpasses, rpass_iter);
     }
 
+    // See if this scoobys
+    ImGui_ImplVulkan_RenderDrawData(img_data, cmd_buf->hndl);
+
     vkr_cmd_end_rpass(cmd_buf);
     return vkr_end_cmd_buf(cmd_buf);
 }
@@ -933,13 +956,15 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
         return err_code::RENDER_INIT_FAIL;
     }
 
-    init_imgui(rndr);
-
     int err = setup_rendering(rndr);
     if (err != err_code::VKR_NO_ERROR) {
         elog("Failed to initialize renderer with code %d", err);
         return err;
     }
+
+    // 
+    init_imgui(rndr);
+    dlog("HERE");
 
     // Create a default material for submeshes without materials
     auto mat_cache = get_cache<material>(cg);
@@ -1158,7 +1183,7 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
     return err_code::VKR_NO_ERROR;
 }
 
-int render_frame_begin(renderer *rndr, int finished_frame_count)
+int begin_render_frame(renderer *rndr, int finished_frame_count)
 {
     auto dev = &rndr->vk.inst.device;
 
@@ -1186,6 +1211,10 @@ int render_frame_begin(renderer *rndr, int finished_frame_count)
 
     // Clear all prev desc sets
     vkr_reset_descriptor_pool(&cur_frame->desc_pool, &rndr->vk);
+
+    ImGui_ImplVulkan_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();    
 
     return err_code::VKR_NO_ERROR;
 }
@@ -1287,7 +1316,7 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
     return err_code::VKR_NO_ERROR;
 }
 
-int render_frame_end(renderer *rndr, camera *cam)
+int end_render_frame(renderer *rndr, camera *cam)
 {
     auto dev = &rndr->vk.inst.device;
     auto cur_frame = get_current_frame(rndr);
@@ -1333,6 +1362,9 @@ int render_frame_end(renderer *rndr, camera *cam)
     if (err != err_code::RENDER_NO_ERROR) {
         return err;
     }
+
+    // Get IM GUI data
+    ImGui::Render();
 
     // The command buf index struct has an ind struct into the pool the cmd buf comes from, and then an ind into the buffer
     // The ind into the pool has an ind into the queue family (as that contains our array of command pools) and then and

@@ -69,6 +69,7 @@ inline constexpr u32 VKR_MAX_EXTENSION_STR_LEN = 128;
 inline constexpr sizet MAX_FRAMES_IN_FLIGHT = 2;
 inline constexpr u32 VKR_INVALID = (u32)-1;
 inline constexpr u32 MEM_ALLOC_TYPE_COUNT = VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE + 1;
+inline constexpr u32 VKR_API_VERSION = VK_API_VERSION_1_3;
 
 struct vk_mem_alloc_stats
 {
