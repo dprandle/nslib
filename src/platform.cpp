@@ -15,6 +15,7 @@
 #include "logging.h"
 #include "containers/cjson.h"
 
+#include "SDL3/SDL.h"
 #include "GLFW/glfw3.h"
 
 namespace nslib
@@ -24,6 +25,63 @@ namespace nslib
 intern void glfw_error_callback(s32 error, const char *description)
 {
     elog("Error %d: %s", error, description);
+}
+
+intern const char *sdl_cat_str(int cat)
+{
+    switch (cat) {
+    case SDL_LOG_CATEGORY_APPLICATION:
+        return "app";
+    case SDL_LOG_CATEGORY_ERROR:
+        return "error";
+    case SDL_LOG_CATEGORY_ASSERT:
+        return "assert";
+    case SDL_LOG_CATEGORY_SYSTEM:
+        return "system";
+    case SDL_LOG_CATEGORY_AUDIO:
+        return "audio";
+    case SDL_LOG_CATEGORY_VIDEO:
+        return "video";
+    case SDL_LOG_CATEGORY_RENDER:
+        return "render";
+    case SDL_LOG_CATEGORY_INPUT:
+        return "input";
+    case SDL_LOG_CATEGORY_TEST:
+        return "test";
+    case SDL_LOG_CATEGORY_GPU:
+        return "gpu";
+    default:
+        return "unknown";
+    }
+}
+
+intern void sdl_log_callback(void *userdata, int category, SDL_LogPriority priority, const char *message)
+{
+    switch (priority) {
+    case SDL_LOG_PRIORITY_TRACE:
+        tlog("SDL %s: %s", sdl_cat_str(category), message);
+        break;
+    case SDL_LOG_PRIORITY_VERBOSE:
+        tlog("SDL %s: %s", sdl_cat_str(category), message);
+        break;
+    case SDL_LOG_PRIORITY_DEBUG:
+        dlog("SDL %s: %s", sdl_cat_str(category), message);
+        break;
+    case SDL_LOG_PRIORITY_INFO:
+        ilog("SDL %s: %s", sdl_cat_str(category), message);
+        break;
+    case SDL_LOG_PRIORITY_WARN:
+        wlog("SDL %s: %s", sdl_cat_str(category), message);
+        break;
+    case SDL_LOG_PRIORITY_ERROR:
+        elog("SDL %s: %s", sdl_cat_str(category), message);
+        break;
+    case SDL_LOG_PRIORITY_CRITICAL:
+        clog("SDL %s: %s", sdl_cat_str(category), message);
+        break;
+    default:
+        elog("SDL? %s: %s", sdl_cat_str(category), message);
+    }
 }
 
 platform_window_event *get_latest_window_event(platform_window_event_type type, platform_frame_window_events *fwind)
@@ -292,6 +350,14 @@ void *platform_realloc(void *ptr, sizet byte_size)
 int init_platform(const platform_init_info *settings, platform_ctxt *ctxt)
 {
     ilog("Platform init version %d.%d.%d", NSLIB_VERSION_MAJOR, NSLIB_VERSION_MINOR, NSLIB_VERSION_PATCH);
+    SDL_SetLogOutputFunction(sdl_log_callback, nullptr);
+    if (!SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO)) {
+        elog("Could not initialize SDL");
+        return err_code::PLATFORM_INIT_FAIL;
+    }
+    ilog("Initialized SDL");
+    
+
     glfwSetErrorCallback(glfw_error_callback);
 
     if (!glfwInit()) {
@@ -327,14 +393,45 @@ int init_platform(const platform_init_info *settings, platform_ctxt *ctxt)
 int terminate_platform(platform_ctxt *ctxt)
 {
     ilog("Platform terminate");
+    SDL_Quit();
+    ilog("Terminated SDL");
     terminate_mem_arenas(&ctxt->arenas);
     return err_code::PLATFORM_NO_ERROR;
+}
+
+intern void log_display_info() {
+    int count;
+    auto ids = SDL_GetDisplays(&count);
+    ilog("Got %d displays", count);
+    for (int i = 0; i < count; ++i) {
+        SDL_Rect r;
+        auto props = SDL_GetDisplayBounds(ids[i], &r);
+        ilog("Display %s - rect x:%d y:%d w:%d h:%d", SDL_GetDisplayName(ids[i]), r.x, r.y, r.w, r.h);
+    }
 }
 
 void *create_platform_window(const platform_window_init_info *settings)
 {
     assert(settings);
 
+    log_display_info();
+    
+    
+    ivec2 sz = settings->resolution;    
+    auto sdl_flags = SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_ALWAYS_ON_TOP;
+    if (test_flags(settings->win_flags, platform_window_flags::SCALE_TO_MONITOR)) {
+        auto primary = SDL_GetPrimaryDisplay();
+        float scale = SDL_GetDisplayContentScale(primary);
+        sz = sz * scale;
+    }
+    
+    SDL_CreateWindow(settings->title, sz.w, sz.h,sdl_flags);
+
+    if (test_flags(settings->win_flags, platform_window_flags::FULLSCREEN)) {
+        sdl_flags |= SDL_WINDOW_FULLSCREEN;
+    }
+    
+    
     GLFWmonitor *monitor = glfwGetPrimaryMonitor();
     const GLFWvidmode *mode = glfwGetVideoMode(monitor);
 
@@ -343,8 +440,8 @@ void *create_platform_window(const platform_window_init_info *settings)
     glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
     glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
     glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
-    ivec2 sz = settings->resolution;
 
+    sz = settings->resolution;    
     if (test_flags(settings->win_flags, platform_window_flags::SCALE_TO_MONITOR)) {
         vec2 scale;
         glfwGetMonitorContentScale(monitor, &scale.x, &scale.y);

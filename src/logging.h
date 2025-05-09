@@ -9,7 +9,7 @@
 #define ilog(...) nslib::lprint(nslib::GLOBAL_LOGGER, nslib::LOG_INFO, __FILE__, __func__, __LINE__, __VA_ARGS__)
 #define wlog(...) nslib::lprint(nslib::GLOBAL_LOGGER, nslib::LOG_WARN, __FILE__, __func__, __LINE__, __VA_ARGS__)
 #define elog(...) nslib::lprint(nslib::GLOBAL_LOGGER, nslib::LOG_ERROR, __FILE__, __func__, __LINE__, __VA_ARGS__)
-#define flog(...) nslib::lprint(nslib::GLOBAL_LOGGER, nslib::LOG_FATAL, __FILE__, __func__, __LINE__, __VA_ARGS__)
+#define clog(...) nslib::lprint(nslib::GLOBAL_LOGGER, nslib::LOG_CRITICAL, __FILE__, __func__, __LINE__, __VA_ARGS__)
 
 struct tm;
 namespace nslib {
@@ -53,7 +53,7 @@ enum
     LOG_INFO,
     LOG_WARN,
     LOG_ERROR,
-    LOG_FATAL
+    LOG_CRITICAL
 };
 
 logging_ctxt *create_logger(const char *name, int level, bool quiet);
