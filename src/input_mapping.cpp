@@ -11,22 +11,23 @@ namespace nslib
 intern void fill_event_from_platform_event(const platform_input_event *raw, input_event *ev)
 {
     ev->modifiers = raw->mods;
+    ev->pos = raw->pos;
     if (raw->type == platform_input_event_type::CURSOR_POS) {
         ev->type = IEVENT_TYPE_CURSOR;
         ev->pos = raw->pos;
     }
     else if (raw->type == platform_input_event_type::SCROLL) {
-        ev->pos = get_cursor_pos(raw->win_hndl);
+        // ev->pos = get_cursor_pos(raw->win_hndl);
         ev->type = IEVENT_TYPE_SCROLL;
         ev->scroll_data.offset = raw->offset;
     }
     else {
-        ev->pos = get_cursor_pos(raw->win_hndl);
+        // ev->pos = get_cursor_pos(raw->win_hndl);
         ev->type = IEVENT_TYPE_BTN;
         ev->btn_data.action = raw->action;
         ev->btn_data.key_or_button = raw->key_or_button;
     }
-    ev->norm_pos = ev->pos / vec2(get_framebuffer_size(raw->win_hndl));
+    ev->norm_pos = ev->pos / vec2(get_window_pixel_size(get_window_from_id(raw->win_id)));
 }
 
 bool operator==(const input_keymap_entry &lhs, const input_keymap_entry &rhs)
@@ -70,7 +71,7 @@ void init_keymap(const char *name, input_keymap *km, mem_arena *arena)
     assert(name);
     int seed0 = rand();
     int seed1 = rand();
-    strncpy(km->name, name, SMALL_STR_LEN);
+    km->name = name;
     hmap_init(&km->hm, hash_type, arena);
 }
 

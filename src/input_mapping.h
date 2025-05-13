@@ -76,7 +76,7 @@ inline bool operator!=(const input_keymap_entry &lhs, const input_keymap_entry &
 
 struct input_keymap
 {
-    small_str name{};
+    string name{};
     hmap<u32, input_keymap_entry> hm{};
 };
 

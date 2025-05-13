@@ -1,9 +1,10 @@
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-#include <GLFW/glfw3native.h>
+//#define GLFW_INCLUDE_VULKAN
+//#include <GLFW/glfw3.h>
+//#include <GLFW/glfw3native.h>
 #include <cstring>
 
 #include "vk_context.h"
+#include "SDL3/SDL_vulkan.h"
 #include "logging.h"
 #include "memory.h"
 
@@ -362,7 +363,7 @@ int vkr_init_instance(const vkr_context *vk, vkr_instance *inst)
 
     // This is for clarity.. we could just directly pass the enabled extension count
     u32 ext_count{0};
-    const char **glfw_ext = glfwGetRequiredInstanceExtensions(&ext_count);
+    const char * const *glfw_ext = SDL_Vulkan_GetInstanceExtensions(&ext_count);
     auto ext = (char **)mem_alloc((ext_count + vk->cfg.extra_instance_extension_count) * sizeof(char *), vk->cfg.arenas.command_arena);
 
     u32 copy_ind = 0;
@@ -821,8 +822,6 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
     swap_create.imageColorSpace = (*formats)[desired_format_ind].colorSpace;
 
     // If mailbox is available then use it, otherwise use fifo
-    // TODO: This is arbitray - investigate these different modes to actually chose which one we want based off of
-    // something other than this tutorial
     swap_create.presentMode = VK_PRESENT_MODE_FIFO_KHR;
     for (int i = 0; i < pmodes->size; ++i) {
         if ((*pmodes)[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
@@ -836,7 +835,7 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
     // swap_create.imageExtent = caps->currentExtent;
     // if (caps->currentExtent.width == VKR_INVALID) {
     int width, height;
-    glfwGetFramebufferSize((GLFWwindow *)vk->cfg.window, &width, &height);
+    SDL_GetWindowSizeInPixels((SDL_Window *)vk->cfg.window, &width, &height);
     swap_create.imageExtent = {(u32)width, (u32)height};
     // swap_create.imageExtent.width = std::clamp(swap_create.imageExtent.width, caps->minImageExtent.width, caps->maxImageExtent.width);
     // swap_create.imageExtent.height = std::clamp(swap_create.imageExtent.height, caps->minImageExtent.height,
@@ -1828,8 +1827,8 @@ int vkr_init_surface(const vkr_context *vk, VkSurfaceKHR *surface)
     ilog("Initializing window surface");
     assert(vk->cfg.window);
     // Create surface
-    int ret = glfwCreateWindowSurface(vk->inst.hndl, (GLFWwindow *)vk->cfg.window, &vk->alloc_cbs, surface);
-    if (ret != VK_SUCCESS) {
+    bool ret = SDL_Vulkan_CreateSurface((SDL_Window*)vk->cfg.window, vk->inst.hndl, &vk->alloc_cbs, surface);
+    if (!ret) {
         elog("Failed to create surface with err code %d", ret);
         return err_code::VKR_CREATE_SURFACE_FAIL;
     }

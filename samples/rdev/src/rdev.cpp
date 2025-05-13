@@ -28,7 +28,7 @@ struct app_data
 intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_keymap *kmap)
 {
     // Create camera
-    auto sz = get_framebuffer_size(ctxt->win_hndl);
+    auto sz = get_window_pixel_size(ctxt->win_hndl);
     auto cam = add_entity("Editor_Cam", &app->rgn);
     auto cam_comp = add_comp<camera>(cam);
     auto cam_tcomp = add_comp<transform>(cam);

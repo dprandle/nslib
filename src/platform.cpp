@@ -16,12 +16,16 @@
 #include "containers/cjson.h"
 
 #include "SDL3/SDL.h"
-#include "GLFW/glfw3.h"
 
 namespace nslib
 {
 
-#define platform_ptr(win) (platform_ctxt *)glfwGetWindowUserPointer(win)
+intern platform_ctxt *platform_window_ptr(void *win)
+{
+    auto props = SDL_GetWindowProperties((SDL_Window *)win);
+    return (platform_ctxt *)SDL_GetPointerProperty(props, "platform", nullptr);
+}
+
 intern void glfw_error_callback(s32 error, const char *description)
 {
     elog("Error %d: %s", error, description);
@@ -84,6 +88,15 @@ intern void sdl_log_callback(void *userdata, int category, SDL_LogPriority prior
     }
 }
 
+intern bool log_any_sdl_error(const char *prefix = "SDL err")
+{
+    auto err = SDL_GetError();
+    elog("%s: %s", prefix, (err) ? err : "none");
+    bool ret = (err);
+    SDL_ClearError();
+    return ret;
+}
+
 platform_window_event *get_latest_window_event(platform_window_event_type type, platform_frame_window_events *fwind)
 {
     for (sizet i = fwind->events.size; i > 0; --i) {
@@ -113,192 +126,173 @@ bool frame_has_event_type(platform_window_event_type type, const platform_frame_
     return false;
 }
 
-intern s32 get_cursor_scroll_mod_mask(GLFWwindow *window)
-{
-    s32 ret{0};
-    if (glfwGetKey(window, KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, KEY_RIGHT_SHIFT) == GLFW_PRESS) {
-        ret |= KEY_MOD_SHIFT;
-    }
-    if (glfwGetKey(window, KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(window, KEY_RIGHT_CONTROL) == GLFW_PRESS) {
-        ret |= KEY_MOD_CONTROL;
-    }
-    if (glfwGetKey(window, KEY_LEFT_ALT) == GLFW_PRESS || glfwGetKey(window, KEY_RIGHT_ALT) == GLFW_PRESS) {
-        ret |= KEY_MOD_ALT;
-    }
-    if (glfwGetKey(window, KEY_LEFT_SUPER) == GLFW_PRESS || glfwGetKey(window, KEY_RIGHT_SUPER) == GLFW_PRESS) {
-        ret |= KEY_MOD_SUPER;
-    }
-    if (glfwGetKey(window, KEY_CAPS_LOCK) == GLFW_PRESS) {
-        ret |= KEY_MOD_CAPS_LOCK;
-    }
-    if (glfwGetKey(window, KEY_NUM_LOCK) == GLFW_PRESS) {
-        ret |= KEY_MOD_NUM_LOCK;
-    }
-    if (glfwGetMouseButton(window, MOUSE_BTN_LEFT)) {
-        ret |= CURSOR_SCROLL_MOD_MOUSE_LEFT;
-    }
-    if (glfwGetMouseButton(window, MOUSE_BTN_RIGHT)) {
-        ret |= CURSOR_SCROLL_MOD_MOUSE_RIGHT;
-    }
-    if (glfwGetMouseButton(window, MOUSE_BTN_MIDDLE)) {
-        ret |= CURSOR_SCROLL_MOD_MOUSE_MIDDLE;
-    }
-    return ret;
-}
+// intern s32 get_cursor_scroll_mod_mask(GLFWwindow *window)
+// {
+//     s32 ret{0};
+//     if (glfwGetKey(window, KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, KEY_RIGHT_SHIFT) == GLFW_PRESS) {
+//         ret |= KEY_MOD_SHIFT;
+//     }
+//     if (glfwGetKey(window, KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(window, KEY_RIGHT_CONTROL) == GLFW_PRESS) {
+//         ret |= KEY_MOD_CONTROL;
+//     }
+//     if (glfwGetKey(window, KEY_LEFT_ALT) == GLFW_PRESS || glfwGetKey(window, KEY_RIGHT_ALT) == GLFW_PRESS) {
+//         ret |= KEY_MOD_ALT;
+//     }
+//     if (glfwGetKey(window, KEY_LEFT_SUPER) == GLFW_PRESS || glfwGetKey(window, KEY_RIGHT_SUPER) == GLFW_PRESS) {
+//         ret |= KEY_MOD_SUPER;
+//     }
+//     if (glfwGetKey(window, KEY_CAPS_LOCK) == GLFW_PRESS) {
+//         ret |= KEY_MOD_CAPS_LOCK;
+//     }
+//     if (glfwGetKey(window, KEY_NUM_LOCK) == GLFW_PRESS) {
+//         ret |= KEY_MOD_NUM_LOCK;
+//     }
+//     if (glfwGetMouseButton(window, MOUSE_BTN_LEFT)) {
+//         ret |= CURSOR_SCROLL_MOD_MOUSE_LEFT;
+//     }
+//     if (glfwGetMouseButton(window, MOUSE_BTN_RIGHT)) {
+//         ret |= CURSOR_SCROLL_MOD_MOUSE_RIGHT;
+//     }
+//     if (glfwGetMouseButton(window, MOUSE_BTN_MIDDLE)) {
+//         ret |= CURSOR_SCROLL_MOD_MOUSE_MIDDLE;
+//     }
+//     return ret;
+// }
 
-intern void glfw_key_press_callback(GLFWwindow *window, s32 key, s32 scancode, s32 action, s32 mods)
-{
-    platform_ctxt *pf = platform_ptr(window);
-    if (pf->finp.events.size == pf->finp.events.capacity) {
-        pf->finp.events.size = 0;
-    }
-    arr_push_back(&pf->finp.events, {platform_input_event_type::KEY_PRESS, key, scancode, action, mods, {}, {}, window});
-}
+// intern void glfw_key_press_callback(GLFWwindow *window, s32 key, s32 scancode, s32 action, s32 mods)
+// {
+//     platform_ctxt *pf = platform_ptr(window);
+//     if (pf->finp.events.size == pf->finp.events.capacity) {
+//         pf->finp.events.size = 0;
+//     }
+//     arr_push_back(&pf->finp.events, {platform_input_event_type::KEY_PRESS, key, scancode, action, mods, {}, {}, window});
+// }
 
-intern void glfw_mouse_button_callback(GLFWwindow *window, s32 button, s32 action, s32 mods)
-{
-    platform_ctxt *pf = platform_ptr(window);
-    if (pf->finp.events.size == pf->finp.events.capacity) {
-        pf->finp.events.size = 0;
-    }
-    arr_push_back(&pf->finp.events, {platform_input_event_type::MOUSE_BTN, button, {}, action, mods, {}, {}, window});
-}
+// intern void glfw_mouse_button_callback(GLFWwindow *window, s32 button, s32 action, s32 mods)
+// {
+//     platform_ctxt *pf = platform_ptr(window);
+//     if (pf->finp.events.size == pf->finp.events.capacity) {
+//         pf->finp.events.size = 0;
+//     }
+//     arr_push_back(&pf->finp.events, {platform_input_event_type::MOUSE_BTN, button, {}, action, mods, {}, {}, window});
+// }
 
-intern void glfw_scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
-{
-    vec2 foffset{(float)x_offset, (float)y_offset};
-    platform_ctxt *pf = platform_ptr(window);
-    if (pf->finp.events.size == pf->finp.events.capacity) {
-        pf->finp.events.size = 0;
-    }
-    arr_push_back(&pf->finp.events,
-                  {platform_input_event_type::SCROLL, SCROLL_CHANGE, {}, {}, get_cursor_scroll_mod_mask(window), foffset, {}, window});
-}
+// intern void glfw_scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
+// {
+//     vec2 foffset{(float)x_offset, (float)y_offset};
+//     platform_ctxt *pf = platform_ptr(window);
+//     if (pf->finp.events.size == pf->finp.events.capacity) {
+//         pf->finp.events.size = 0;
+//     }
+//     arr_push_back(&pf->finp.events,
+//                   {platform_input_event_type::SCROLL, SCROLL_CHANGE, {}, {}, get_cursor_scroll_mod_mask(window), foffset, {}, window});
+// }
 
-intern void glfw_cursor_pos_callback(GLFWwindow *window, double x_pos, double y_pos)
-{
-    vec2 fpos{(float)x_pos, (float)y_pos};
-    platform_ctxt *pf = platform_ptr(window);
-    if (pf->finp.events.size == pf->finp.events.capacity) {
-        pf->finp.events.size = 0;
-    }
-    arr_push_back(&pf->finp.events,
-                  {platform_input_event_type::CURSOR_POS, CURSOR_POS_CHANGE, {}, {}, get_cursor_scroll_mod_mask(window), {}, fpos, window});
-}
+// intern void glfw_cursor_pos_callback(GLFWwindow *window, double x_pos, double y_pos)
+// {
+//     vec2 fpos{(float)x_pos, (float)y_pos};
+//     platform_ctxt *pf = platform_ptr(window);
+//     if (pf->finp.events.size == pf->finp.events.capacity) {
+//         pf->finp.events.size = 0;
+//     }
+//     arr_push_back(&pf->finp.events,
+//                   {platform_input_event_type::CURSOR_POS, CURSOR_POS_CHANGE, {}, {}, get_cursor_scroll_mod_mask(window), {}, fpos,
+//                   window});
+// }
 
-intern void glfw_focus_change_callback(GLFWwindow *window, s32 focused)
-{
-    platform_ctxt *pf = platform_ptr(window);
-    if (pf->fwind.events.size == pf->fwind.events.capacity) {
-        pf->fwind.events.size = 0;
-    }
-    platform_window_event we{platform_window_event_type::FOCUS};
-    we.window = window;
-    we.focus = focused;
-    arr_push_back(&pf->fwind.events, we);
-    tlog("Focus Change");
-}
+// intern void glfw_focus_change_callback(GLFWwindow *window, s32 focused)
+// {
+//     platform_ctxt *pf = platform_ptr(window);
+//     if (pf->fwind.events.size == pf->fwind.events.capacity) {
+//         pf->fwind.events.size = 0;
+//     }
+//     platform_window_event we{platform_window_event_type::FOCUS};
+//     we.window = window;
+//     we.focus = focused;
+//     arr_push_back(&pf->fwind.events, we);
+//     tlog("Focus Change");
+// }
 
-intern void glfw_close_window_callback(GLFWwindow *window)
-{
-    tlog("Closing window...");
-}
+// intern void glfw_close_window_callback(GLFWwindow *window)
+// {
+//     tlog("Closing window...");
+// }
 
-intern void glfw_iconify_window_callback(GLFWwindow *window, s32 iconified)
-{
-    platform_ctxt *pf = platform_ptr(window);
-    if (pf->fwind.events.size == pf->fwind.events.capacity) {
-        pf->fwind.events.size = 0;
-    }
-    platform_window_event we{platform_window_event_type::ICONIFIED};
-    we.window = window;
-    we.iconified = iconified;
-    arr_push_back(&pf->fwind.events, we);
-    tlog("Window %s", (iconified) ? "iconified" : "restored");
-}
+// intern void glfw_iconify_window_callback(GLFWwindow *window, s32 iconified)
+// {
+//     platform_ctxt *pf = platform_ptr(window);
+//     if (pf->fwind.events.size == pf->fwind.events.capacity) {
+//         pf->fwind.events.size = 0;
+//     }
+//     platform_window_event we{platform_window_event_type::ICONIFIED};
+//     we.window = window;
+//     we.iconified = iconified;
+//     arr_push_back(&pf->fwind.events, we);
+//     tlog("Window %s", (iconified) ? "iconified" : "restored");
+// }
 
-intern void glfw_maximize_window_callback(GLFWwindow *window, s32 maximized)
-{
-    platform_ctxt *pf = platform_ptr(window);
-    if (pf->fwind.events.size == pf->fwind.events.capacity) {
-        pf->fwind.events.size = 0;
-    }
-    platform_window_event we{platform_window_event_type::MAXIMIZED};
-    we.window = window;
-    we.iconified = maximized;
-    arr_push_back(&pf->fwind.events, we);
-    tlog("Window %s", (maximized) ? "maximized" : "restored");
-}
+// intern void glfw_maximize_window_callback(GLFWwindow *window, s32 maximized)
+// {
+//     platform_ctxt *pf = platform_ptr(window);
+//     if (pf->fwind.events.size == pf->fwind.events.capacity) {
+//         pf->fwind.events.size = 0;
+//     }
+//     platform_window_event we{platform_window_event_type::MAXIMIZED};
+//     we.window = window;
+//     we.iconified = maximized;
+//     arr_push_back(&pf->fwind.events, we);
+//     tlog("Window %s", (maximized) ? "maximized" : "restored");
+// }
 
-intern void glfw_window_position_callback(GLFWwindow *window, s32 x_pos, s32 y_pos)
-{
-    platform_ctxt *pf = platform_ptr(window);
-    if (pf->fwind.events.size == pf->fwind.events.capacity) {
-        pf->fwind.events.size = 0;
-    }
-    platform_window_event we{platform_window_event_type::MOVE};
-    we.window = window;
-    we.move.first = {x_pos, y_pos};
-    we.resize.second = pf->fwind.pos;
-    pf->fwind.pos = we.resize.first;
-    arr_push_back(&pf->fwind.events, we);
-}
+// intern void glfw_window_position_callback(GLFWwindow *window, s32 x_pos, s32 y_pos)
+// {
+//     platform_ctxt *pf = platform_ptr(window);
+//     if (pf->fwind.events.size == pf->fwind.events.capacity) {
+//         pf->fwind.events.size = 0;
+//     }
+//     platform_window_event we{platform_window_event_type::MOVE};
+//     we.window = window;
+//     we.move.first = {x_pos, y_pos};
+//     we.resize.second = pf->fwind.pos;
+//     pf->fwind.pos = we.resize.first;
+//     arr_push_back(&pf->fwind.events, we);
+// }
 
-intern void glfw_resize_window_callback(GLFWwindow *window, s32 width, s32 height)
-{
-    platform_ctxt *pf = platform_ptr(window);
-    platform_window_event *ev_ptr = get_latest_window_event(platform_window_event_type::WIN_RESIZE, &pf->fwind);
-    if (!ev_ptr) {
-        if (pf->fwind.events.size == pf->fwind.events.capacity) {
-            pf->fwind.events.size = 0;
-        }
-        platform_window_event we{platform_window_event_type::WIN_RESIZE};
-        we.window = window;
-        ev_ptr = arr_push_back(&pf->fwind.events, we);
-    }
-    ev_ptr->resize.first = {width, height};
-    ev_ptr->resize.second = pf->fwind.win_size;
-    pf->fwind.win_size = ev_ptr->resize.first;
-    tlog("Resized window from {%d %d} to {%d %d}", ev_ptr->resize.second.w, ev_ptr->resize.second.h, width, height);
-}
+// intern void glfw_resize_window_callback(GLFWwindow *window, s32 width, s32 height)
+// {
+//     platform_ctxt *pf = platform_ptr(window);
+//     platform_window_event *ev_ptr = get_latest_window_event(platform_window_event_type::WIN_RESIZE, &pf->fwind);
+//     if (!ev_ptr) {
+//         if (pf->fwind.events.size == pf->fwind.events.capacity) {
+//             pf->fwind.events.size = 0;
+//         }
+//         platform_window_event we{platform_window_event_type::WIN_RESIZE};
+//         we.window = window;
+//         ev_ptr = arr_push_back(&pf->fwind.events, we);
+//     }
+//     ev_ptr->resize.first = {width, height};
+//     ev_ptr->resize.second = pf->fwind.win_size;
+//     pf->fwind.win_size = ev_ptr->resize.first;
+//     tlog("Resized window from {%d %d} to {%d %d}", ev_ptr->resize.second.w, ev_ptr->resize.second.h, width, height);
+// }
 
-intern void glfw_framebuffer_resized_callback(GLFWwindow *window, s32 width, s32 height)
-{
-    platform_ctxt *pf = platform_ptr(window);
-    platform_window_event *ev_ptr = get_latest_window_event(platform_window_event_type::FB_RESIZE, &pf->fwind);
-    if (!ev_ptr) {
-        if (pf->fwind.events.size == pf->fwind.events.capacity) {
-            pf->fwind.events.size = 0;
-        }
-        platform_window_event we{platform_window_event_type::FB_RESIZE};
-        we.window = window;
-        ev_ptr = arr_push_back(&pf->fwind.events, we);
-    }
-    ev_ptr->resize.first = {width, height};
-    ev_ptr->resize.second = pf->fwind.fb_size;
-    pf->fwind.fb_size = ev_ptr->resize.first;
-    tlog("Resized framebuffer from {%d %d} to {%d %d}", ev_ptr->resize.second.w, ev_ptr->resize.second.h, width, height);
-}
-
-intern void set_glfw_callbacks(platform_ctxt *ctxt)
-{
-    auto glfw_win = (GLFWwindow *)ctxt->win_hndl;
-    glfwSetWindowUserPointer(glfw_win, ctxt);
-
-    glfwSetWindowSizeCallback(glfw_win, glfw_resize_window_callback);
-    glfwSetWindowCloseCallback(glfw_win, glfw_close_window_callback);
-    glfwSetWindowMaximizeCallback(glfw_win, glfw_maximize_window_callback);
-    glfwSetWindowIconifyCallback(glfw_win, glfw_iconify_window_callback);
-    glfwSetWindowPosCallback(glfw_win, glfw_window_position_callback);
-    glfwSetWindowFocusCallback(glfw_win, glfw_focus_change_callback);
-    glfwSetFramebufferSizeCallback(glfw_win, glfw_framebuffer_resized_callback);
-    glfwSetKeyCallback(glfw_win, glfw_key_press_callback);
-    glfwSetMouseButtonCallback(glfw_win, glfw_mouse_button_callback);
-    glfwSetScrollCallback(glfw_win, glfw_scroll_callback);
-    glfwSetCursorPosCallback(glfw_win, glfw_cursor_pos_callback);
-
-    glfwSetInputMode(glfw_win, GLFW_LOCK_KEY_MODS, GLFW_FALSE);
-}
+// intern void glfw_framebuffer_resized_callback(GLFWwindow *window, s32 width, s32 height)
+// {
+//     platform_ctxt *pf = platform_ptr(window);
+//     platform_window_event *ev_ptr = get_latest_window_event(platform_window_event_type::FB_RESIZE, &pf->fwind);
+//     if (!ev_ptr) {
+//         if (pf->fwind.events.size == pf->fwind.events.capacity) {
+//             pf->fwind.events.size = 0;
+//         }
+//         platform_window_event we{platform_window_event_type::FB_RESIZE};
+//         we.window = window;
+//         ev_ptr = arr_push_back(&pf->fwind.events, we);
+//     }
+//     ev_ptr->resize.first = {width, height};
+//     ev_ptr->resize.second = pf->fwind.fb_size;
+//     pf->fwind.fb_size = ev_ptr->resize.first;
+//     tlog("Resized framebuffer from {%d %d} to {%d %d}", ev_ptr->resize.second.w, ev_ptr->resize.second.h, width, height);
+// }
 
 intern void init_mem_arenas(const platform_memory_init_info *info, platform_memory *mem)
 {
@@ -356,34 +350,33 @@ int init_platform(const platform_init_info *settings, platform_ctxt *ctxt)
         return err_code::PLATFORM_INIT_FAIL;
     }
     ilog("Initialized SDL");
-    
-
-    glfwSetErrorCallback(glfw_error_callback);
-
-    if (!glfwInit()) {
-        elog("GLFW init failed - closing");
-        return err_code::PLATFORM_INIT_FAIL;
-    }
 
     ctxt->win_hndl = create_platform_window(&settings->wind);
     if (!ctxt->win_hndl) {
-        elog("Failed to create window");
+        log_any_sdl_error("Failed to create window");
         return err_code::PLATFORM_INIT_FAIL;
     }
-
-    glfwGetFramebufferSize((GLFWwindow *)ctxt->win_hndl, &ctxt->fwind.fb_size.x, &ctxt->fwind.fb_size.y);
-    glfwGetWindowSize((GLFWwindow *)ctxt->win_hndl, &ctxt->fwind.win_size.x, &ctxt->fwind.win_size.y);
-    glfwGetWindowPos((GLFWwindow *)ctxt->win_hndl, &ctxt->fwind.pos.x, &ctxt->fwind.pos.y);
-
-    set_glfw_callbacks(ctxt);
+    auto props = SDL_GetWindowProperties((SDL_Window *)ctxt->win_hndl);
+    if (props == 0) {
+        log_any_sdl_error("Failed to get window props");
+    }
+    else {
+        if (!SDL_SetPointerProperty(props, "platform", ctxt->win_hndl)) {
+            log_any_sdl_error("Failed to set platform ptr in window props");
+        }
+    }
+    SDL_SetWindowPosition((SDL_Window *)ctxt->win_hndl, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+    // glfwGetFramebufferSize((GLFWwindow *)ctxt->win_hndl, &ctxt->fwind.fb_size.x, &ctxt->fwind.fb_size.y);
+    // glfwGetWindowSize((GLFWwindow *)ctxt->win_hndl, &ctxt->fwind.win_size.x, &ctxt->fwind.win_size.y);
+    // glfwGetWindowPos((GLFWwindow *)ctxt->win_hndl, &ctxt->fwind.pos.x, &ctxt->fwind.pos.y);
 
     // Seed random number generator
     srand((u32)time(NULL));
 
-    auto mon = glfwGetPrimaryMonitor();
-    vec2 scale;
-    glfwGetMonitorContentScale(mon, &scale.x, &scale.y);
-    ilog("Monitor scale is {%f %f}", scale.x, scale.y);
+    // auto mon = glfwGetPrimaryMonitor();
+    // vec2 scale;
+    // glfwGetMonitorContentScale(mon, &scale.x, &scale.y);
+    // ilog("Monitor scale is {%f %f}", scale.x, scale.y);
 
     set_logging_level(GLOBAL_LOGGER, settings->default_log_level);
     init_mem_arenas(&settings->mem, &ctxt->arenas);
@@ -399,7 +392,8 @@ int terminate_platform(platform_ctxt *ctxt)
     return err_code::PLATFORM_NO_ERROR;
 }
 
-intern void log_display_info() {
+intern void log_display_info()
+{
     int count;
     auto ids = SDL_GetDisplays(&count);
     ilog("Got %d displays", count);
@@ -410,81 +404,171 @@ intern void log_display_info() {
     }
 }
 
+intern u32 get_sdl_window_flags(u32 platform_win_flags)
+{
+    return platform_win_flags;
+}
+
 void *create_platform_window(const platform_window_init_info *settings)
 {
     assert(settings);
 
     log_display_info();
-    
-    
-    ivec2 sz = settings->resolution;    
-    auto sdl_flags = SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_ALWAYS_ON_TOP;
-    if (test_flags(settings->win_flags, platform_window_flags::SCALE_TO_MONITOR)) {
-        auto primary = SDL_GetPrimaryDisplay();
-        float scale = SDL_GetDisplayContentScale(primary);
-        sz = sz * scale;
+
+    ivec2 sz = settings->resolution;
+    auto sdl_flags = get_sdl_window_flags(settings->win_flags);
+
+    auto primary = SDL_GetPrimaryDisplay();
+    float scale = SDL_GetDisplayContentScale(primary);
+    sz = sz * scale;
+
+    return SDL_CreateWindow(settings->title, sz.w, sz.h, sdl_flags);
+
+    // GLFWmonitor *monitor = glfwGetPrimaryMonitor();
+    // const GLFWvidmode *mode = glfwGetVideoMode(monitor);
+
+    // glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    // glfwWindowHint(GLFW_RED_BITS, mode->redBits);
+    // glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
+    // glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
+    // glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
+
+    // sz = settings->resolution;
+    // if (test_flags(settings->win_flags, platform_window_flags::SCALE_TO_MONITOR)) {
+    //     vec2 scale;
+    //     glfwGetMonitorContentScale(monitor, &scale.x, &scale.y);
+    //     sz = vec2(sz) * scale;
+    // }
+
+    // bool fullsreen = false;
+    // if (test_flags(settings->win_flags, platform_window_flags::FULLSCREEN)) {
+    //     glfwWindowHint(GLFW_AUTO_ICONIFY, (int)test_flags(settings->win_flags, platform_window_flags::FULLSCREEN_AUTO_ICONIFTY));
+    //     glfwWindowHint(GLFW_CENTER_CURSOR, (int)test_flags(settings->win_flags, platform_window_flags::FULLSCREEN_CENTER_CURSOR));
+    // }
+    // else {
+    //     glfwWindowHint(GLFW_VISIBLE, (int)test_flags(settings->win_flags, platform_window_flags::VISIBLE));
+    //     glfwWindowHint(GLFW_DECORATED, (int)test_flags(settings->win_flags, platform_window_flags::DECORATED));
+    //     glfwWindowHint(GLFW_MAXIMIZED, (int)test_flags(settings->win_flags, platform_window_flags::MAXIMIZE));
+    //     glfwWindowHint(GLFW_FLOATING, (int)test_flags(settings->win_flags, platform_window_flags::ALWAYS_ON_TOP));
+    //     monitor = nullptr;
+    // }
+    // return glfwCreateWindow(sz.x, sz.y, settings->title, monitor, nullptr);
+}
+
+intern int map_sdl_key(int sdl_key)
+{
+    if (sdl_key <= SDLK_PLUSMINUS) {
+        return sdl_key;
     }
-    
-    SDL_CreateWindow(settings->title, sz.w, sz.h,sdl_flags);
-
-    if (test_flags(settings->win_flags, platform_window_flags::FULLSCREEN)) {
-        sdl_flags |= SDL_WINDOW_FULLSCREEN;
+    else if (sdl_key <= SDLK_RHYPER) {
+        int offset = sdl - SDLK_LEFT_TAB;
+        return KEY_LEFT_TAB + offset;
     }
-    
-    
-    GLFWmonitor *monitor = glfwGetPrimaryMonitor();
-    const GLFWvidmode *mode = glfwGetVideoMode(monitor);
-
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RED_BITS, mode->redBits);
-    glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
-    glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
-    glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
-
-    sz = settings->resolution;    
-    if (test_flags(settings->win_flags, platform_window_flags::SCALE_TO_MONITOR)) {
-        vec2 scale;
-        glfwGetMonitorContentScale(monitor, &scale.x, &scale.y);
-        sz = vec2(sz) * scale;
+    else if (sdl_key <= SDLK_PAGEUP) {
+        int offset = sdl - SDLK_CAPSLOCK;
+        return KEY_CAPSLOCK + offset;
     }
-
-    bool fullsreen = false;
-    if (test_flags(settings->win_flags, platform_window_flags::FULLSCREEN)) {
-        glfwWindowHint(GLFW_AUTO_ICONIFY, (int)test_flags(settings->win_flags, platform_window_flags::FULLSCREEN_AUTO_ICONIFTY));
-        glfwWindowHint(GLFW_CENTER_CURSOR, (int)test_flags(settings->win_flags, platform_window_flags::FULLSCREEN_CENTER_CURSOR));
+    else if (sdl_key <= SDLK_VOLUMEDOWN) {
+        int offset = sdl - SDLK_END;
+        return KEY_END + offset;
+    }
+    else if (sdl_key <= SDLK_KP_EQUALSAS400) {
+        int offset = sdl - SDLK_KP_COMMA;
+        return KEY_KP_COMMA + offset;
+    }
+    else if (sdl_key <= SDLK_EXSEL) {
+        int offset = sdl - SDLK_ALTERASE;
+        return KEY_ALTERASE + offset;
+    }
+    else if (sdl_key <= SDLK_KP_HEXADECIMAL) {
+        int offset = sdl - SDLK_KP_00;
+        return KEY_KP_00 + offset;
+    }
+    else if (sdl_key <= SDLK_RGUI) {
+        int offset = sdl - SDLK_LCTRL;
+        return KEY_LCTRL + offset;
+    }
+    else if (sdl_key <= SDLK_ENDCALL) {
+        int offset = sdl - SDLK_MODE;
+        return KEY_MODE + offset;
     }
     else {
-        glfwWindowHint(GLFW_VISIBLE, (int)test_flags(settings->win_flags, platform_window_flags::VISIBLE));
-        glfwWindowHint(GLFW_DECORATED, (int)test_flags(settings->win_flags, platform_window_flags::DECORATED));
-        glfwWindowHint(GLFW_MAXIMIZED, (int)test_flags(settings->win_flags, platform_window_flags::MAXIMIZE));
-        glfwWindowHint(GLFW_FLOATING, (int)test_flags(settings->win_flags, platform_window_flags::ALWAYS_ON_TOP));
-        monitor = nullptr;
+        wlog("Unhandled SDL key code %u", sdl_key);
+        return -1;
     }
-    return glfwCreateWindow(sz.x, sz.y, settings->title, monitor, nullptr);
 }
+
+intern u16 map_sdl_mod_mast(u16 mod_mask)
+{
+    // Nothing needs to be done to map these
+    return mod_mask;
+}
+
+intern void handle_sdl_key_event(platform_ctxt *ctxt, const SDL_KeyboardEvent &ev)
+{
+    platform_input_event ievent{};
+    ievent.type = platform_input_event_type::KEY_PRESS;
+    ievent.action = (ev.repeat) ? INPUT_ACTION_REPEAT : ((ev.down) ? INPUT_ACTION_PRESS : INPUT_ACTION_RELEASE);
+    ievent.key_or_button = map_sdl_key(ev.key);
+    ievent.mods = ev.mod;
+    ievent.win_id = ev.windowID;
+    ievent.scancode = ev.scancode;
+    ievent.timestamp = ev.timestamp;
+    arr_push_back(&ctxt->finp.events, ievent);
+}
+
+intern void handle_sdl_mousebutton_event(platform_ctxt *ctxt, SDL_MouseButtonEvent *ev)
+{}
 
 void process_platform_window_input(platform_ctxt *pf)
 {
     arr_clear(&pf->finp.events);
     arr_clear(&pf->fwind.events);
-    glfwPollEvents();
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        switch (event.type) {
+        case SDL_EVENT_QUIT:
+            SDL_DestroyWindow((SDL_Window *)pf->win_hndl);
+            pf->win_hndl = nullptr;
+            break;
+        case SDL_EVENT_KEY_DOWN:
+            handle_sdl_key_event(pf, event.key);
+            break;
+        case SDL_EVENT_KEY_UP:
+            handle_sdl_key_event(pf, event.key);
+            break;
+        default:
+            // do nothing yet
+            break;
+        }
+
+        if (pf->finp.events.size == pf->finp.events.capacity) {
+            pf->finp.events.size = 0;
+        }
+    }
 }
 
-bool platform_window_should_close(void *window_hndl)
+void *get_window_from_id(u32 id)
 {
-    return glfwWindowShouldClose((GLFWwindow *)window_hndl);
+    return SDL_GetWindowFromID(id);
 }
 
 ivec2 get_window_size(void *win)
 {
-    platform_ctxt *pf = platform_ptr((GLFWwindow *)win);
-    return pf->fwind.win_size;
+    ivec2 ret;
+    if (!SDL_GetWindowSize((SDL_Window *)win, &ret.w, &ret.h)) {
+        log_any_sdl_error();
+    }
+    return ret;
 }
 
-ivec2 get_framebuffer_size(void *win)
+ivec2 get_window_pixel_size(void *win)
 {
-    platform_ctxt *pf = platform_ptr((GLFWwindow *)win);
-    return pf->fwind.fb_size;
+    ivec2 ret;
+    if (!SDL_GetWindowSizeInPixels((SDL_Window *)win, &ret.w, &ret.h)) {
+        log_any_sdl_error();
+    }
+    return ret;
 }
 
 u64 get_thread_id()
@@ -496,28 +580,31 @@ u64 get_thread_id()
 #endif
 }
 
-vec2 get_cursor_pos(void *window_hndl)
-{
-    GLFWwindow *glfw_win = (GLFWwindow *)(window_hndl);
-    dvec2 ret;
-    glfwGetCursorPos(glfw_win, &ret.x, &ret.y);
-    return ret;
-}
+// vec2 get_cursor_pos(void *window_hndl)
+// {
+//     SDL_GetMouse
+//     GLFWwindow *glfw_win = (GLFWwindow *)(window_hndl);
+//     dvec2 ret;
 
-vec2 get_normalized_cursor_pos(void *window_hndl)
-{
-    return get_cursor_pos(window_hndl) / vec2(get_framebuffer_size(window_hndl));
-}
+//     glfwGetCursorPos(glfw_win, &ret.x, &ret.y);
+//     return ret;
+// }
+
+// vec2 get_normalized_cursor_pos(void *window_hndl)
+// {
+//     return get_cursor_pos(window_hndl) / vec2(get_window_pixel_size(window_hndl));
+// }
 
 bool platform_framebuffer_resized(void *win_hndl)
 {
-    platform_ctxt *pf = platform_ptr((GLFWwindow *)win_hndl);
+    platform_ctxt *pf = platform_window_ptr(win_hndl);
     return frame_has_event_type(platform_window_event_type::FB_RESIZE, &pf->fwind);
+    SDL_SetWindow
 }
 
 bool platform_window_resized(void *win_hndl)
 {
-    platform_ctxt *pf = platform_ptr((GLFWwindow *)win_hndl);
+    platform_ctxt *pf = platform_window_ptr(win_hndl);
     return frame_has_event_type(platform_window_event_type::WIN_RESIZE, &pf->fwind);
 }
 

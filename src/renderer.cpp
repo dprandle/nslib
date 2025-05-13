@@ -1335,7 +1335,7 @@ int end_render_frame(renderer *rndr, camera *cam)
     // handle recreation for other things that might happen so keep the acquire image and present image recreations
     // based on return value
     if (platform_framebuffer_resized(rndr->vk.cfg.window)) {
-        ivec2 sz = get_framebuffer_size(rndr->vk.cfg.window);
+        ivec2 sz = get_window_pixel_size(rndr->vk.cfg.window);
         if (cam) {
             cam->proj = (math::perspective(60.0f, (f32)sz.w / (f32)sz.h, 0.1f, 1000.0f));
         }

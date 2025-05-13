@@ -31,20 +31,35 @@ enum file
 
 } // namespace err_code
 
-struct platform_window_flags
+enum platform_window_flags
 {
-    enum
-    {
-        VISIBLE = 1,          // Ignored for full screen windows
-        INTIALLY_FOCUSED = 2, // Ignored for full screen and initially hidden windows
-        DECORATED = 4,        // Ignored for full screen windows
-        MAXIMIZE = 8,         // Ignored for full screen
-        ALWAYS_ON_TOP = 16,   // Ignored for full screen
-        FULLSCREEN = 32,
-        FULLSCREEN_AUTO_ICONIFTY = 64,  // Ignored for non full screen windows
-        FULLSCREEN_CENTER_CURSOR = 128, // Ignored for non full screen windows
-        SCALE_TO_MONITOR = 256
-    };
+    WINDOW_FULLSCREEN = 1 << 0,
+    WINDOW_OPENGL = 1 << 1,
+    WINDOW_SHOWN = 1 << 2,
+    WINDOW_HIDDEN = 1 << 3,
+    WINDOW_BORDERLESS = 1 << 4,
+    WINDOW_RESIZABLE = 1 << 5,
+    WINDOW_MINIMIZED = 1 << 6,
+    WINDOW_MAXIMIZED = 1 << 7,
+    WINDOW_MOUSE_GRABBED = 1 << 8,
+    WINDOW_INPUT_FOCUS = 1 << 9,
+    WINDOW_MOUSE_FOCUS = 1 << 10,
+    WINDOW_FOREIGN = 1 << 11,
+    WINDOW_FULLSCREEN_DESKTOP = (WINDOW_FULLSCREEN | (1 << 12)),
+    // On macOS NSHighResolutionCapable must be set true in the application's Info.plist for this to have any effect.
+    WINDOW_ALLOW_HIGHDPI = 1 << 13,
+    // Has mouse captured (unrelated to MOUSE_GRABBED)
+    WINDOW_MOUSE_CAPTURE = 1 << 14,
+    WINDOW_ALWAYS_ON_TOP = 1 << 15,
+    WINDOW_SKIP_TASKBAR = 1 << 16,
+    WINDOW_UTILITY = 1 << 17,
+    WINDOW_TOOLTIP = 1 << 18,
+    WINDOW_POPUP_MENU = 1 << 19,
+    WINDOW_KEYBOARD_GRABBED = 1 << 20,
+    // Usable for Vulkan surface
+    WINDOW_VULKAN = 1 << 21,
+    // Usable for Metal view
+    WINDOW_METAL = 1 << 22
 };
 
 enum struct platform_input_event_type
@@ -70,13 +85,14 @@ enum struct platform_window_event_type
 struct platform_input_event
 {
     platform_input_event_type type{platform_input_event_type::INVALID};
-    s32 key_or_button{};
-    s32 scancode{};
-    s32 action{};
-    s32 mods{};
+    u64 timestamp{};
+    u32 key_or_button{};
+    u32 scancode{};
+    u32 action{};
+    u16 mods{};
     vec2 offset;
     vec2 pos;
-    void *win_hndl;
+    u32 win_id;
 };
 
 struct platform_window_event
@@ -124,7 +140,6 @@ struct platform_memory
 
 struct platform_ctxt
 {
-
     void *win_hndl{};
     profile_timepoints time_pts{};
     platform_frame_input_events finp;
@@ -143,7 +158,7 @@ struct platform_file_err_desc
 
 struct platform_window_init_info
 {
-    s16 win_flags{platform_window_flags::VISIBLE | platform_window_flags::DECORATED | platform_window_flags::INTIALLY_FOCUSED};
+    u32 win_flags{};
     ivec2 resolution;
     const char *title;
 };
@@ -186,19 +201,29 @@ void end_platform_frame(platform_ctxt *ctxt);
 
 void *create_platform_window(const platform_window_init_info *pf_config);
 
+// Get the window size in screen coords
 ivec2 get_window_size(void *window_hndl);
-ivec2 get_framebuffer_size(void *window_hndl);
+
+// Get the window size in pixels - could be different than screen coords for HighDPI displays
+ivec2 get_window_pixel_size(void *window_hndl);
+
+// Get a pointer to the window from the id
+void *get_window_from_id(u32 id);
+
+// Get the OS specific thread id
 u64 get_thread_id();
 
-vec2 get_cursor_pos(void *window_hndl);
-vec2 get_normalized_cursor_pos(void *window_hndl);
+// // Get the cursor 
+// vec2 get_cursor_pos(void *window_hndl);
+// vec2 get_normalized_cursor_pos(void *window_hndl);
 
 platform_window_event *get_latest_window_event(platform_window_event_type type, platform_frame_window_events *fwind);
 bool frame_has_event_type(platform_window_event_type type, const platform_frame_window_events *fwind);
 void process_platform_window_input(platform_ctxt *pf);
 bool platform_framebuffer_resized(void *win_hndl);
 bool platform_window_resized(void *win_hndl);
-bool platform_window_should_close(void *window_hndl);
+
+void *get_window_from_id(u32 id);
 
 const char *path_basename(const char *path);
 
