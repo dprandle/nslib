@@ -467,9 +467,9 @@ sizet hmap_insert(hmap<Key, Val> *dest, const hmap<Key, Val> *src, array<Key> *n
 // Insert a new item into the map. If the key already exists, set the value and return the item. If the key does not
 // exist, create it. This may increase the hmap capacity and rehash if the new size is greater
 template<typename Key, typename Val>
-hmap<Key, Val>::iterator hmap_set(hmap<Key, Val> *hm, const Key &k, const Val &val)
+void hmap_set(hmap<Key, Val> *hm, const Key &k, const Val &val)
 {
-    return hmap_insert_or_set(hm, k, val, true);
+    assert(hmap_insert_or_set(hm, k, val, true));
 }
 
 // Call hmap_set for all items in src on dest.

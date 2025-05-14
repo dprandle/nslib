@@ -8,61 +8,32 @@
 namespace nslib
 {
 
-intern void fill_event_from_platform_event(const platform_input_event *raw, input_event *ev)
-{
-    ev->modifiers = raw->mods;
-    ev->pos = raw->pos;
-    if (raw->type == platform_input_event_type::CURSOR_POS) {
-        ev->type = IEVENT_TYPE_CURSOR;
-        ev->pos = raw->pos;
-    }
-    else if (raw->type == platform_input_event_type::SCROLL) {
-        // ev->pos = get_cursor_pos(raw->win_hndl);
-        ev->type = IEVENT_TYPE_SCROLL;
-        ev->scroll_data.offset = raw->offset;
-    }
-    else {
-        // ev->pos = get_cursor_pos(raw->win_hndl);
-        ev->type = IEVENT_TYPE_BTN;
-        ev->btn_data.action = raw->action;
-        ev->btn_data.key_or_button = raw->key_or_button;
-    }
-    ev->norm_pos = ev->pos / vec2(get_window_pixel_size(get_window_from_id(raw->win_id)));
-}
-
 bool operator==(const input_keymap_entry &lhs, const input_keymap_entry &rhs)
 {
     return (lhs.name == rhs.name);
 }
 
-u32 keymap_button_key(int key_or_button, int modifiers, int action)
+u32 generate_keymap_id(input_kmcode code, u16 keymods, u8 mbutton_mask)
 {
-    return (key_or_button << 18) | (modifiers << 8) | action;
+    // | ---- kmcode (10 bits) --- | ---- keymods (14 bits) ---- | ---- mbutton_mask (8 bits) ---- |
+    // Kmcode is fine because its type safe, need to make sure keymods and mbutton_mask don't have anything in upper
+    // bits so that's why they are anded with 0x3FFF (0011111111111111b) and 0x3F (00111111b)
+    return (code << 22) | ((keymods & 0x3FFF) << 8) | mbutton_mask;
 }
 
-u32 keymap_cursor_key(int modifiers)
+input_kmcode get_kmcode_from_keymap_id(u32 key)
 {
-    return keymap_button_key(CURSOR_POS_CHANGE, modifiers, 0);
+    return (input_kmcode)(key >> 22);
 }
 
-u32 keymap_scroll_key(int modifiers)
+u16 get_keymods_from_keymap_id(u32 key)
 {
-    return keymap_button_key(SCROLL_CHANGE, modifiers, 0);
+    return (((u16)(key >> 8)) & 0x3FFF);
 }
 
-int button_from_key(u32 key)
+u8 get_mbutton_mask_from_keymap_id(u32 key)
 {
-    return (key >> 18);
-}
-
-int mods_from_key(u32 key)
-{
-    return ((key >> 8) & 0x000003FF);
-}
-
-int action_from_key(u32 key)
-{
-    return (key & 0x000000FF);
+    return (u8)key;
 }
 
 void init_keymap(const char *name, input_keymap *km, mem_arena *arena)
@@ -82,38 +53,46 @@ void terminate_keymap(input_keymap *km)
     memset(km, 0, sizeof(input_keymap));
 }
 
-input_keymap_entry *set_keymap_entry(u32 key, const input_keymap_entry *entry, input_keymap *km)
+void set_keymap_entry(u32 id, const input_keymap_entry *entry, input_keymap *km)
 {
     assert(entry);
     assert(km);
-    auto iter = hmap_set(&km->hm, key, *entry);
-    if (iter) {
-        return &iter->val;
-    }
-    return nullptr;
+    hmap_set(&km->hm, id, *entry);
 }
 
-input_keymap_entry *get_keymap_entry(u32 key, input_keymap *km)
+// Insert keymap entry - if it exists return null otherwise return the inserted entry
+input_keymap_entry *insert_keymap_entry(u32 id, const input_keymap_entry *entry, input_keymap *km)
 {
+    assert(entry);
     assert(km);
-    auto item = hmap_find(&km->hm, key);
+    auto item = hmap_insert(&km->hm, id, *entry);
     if (item) {
         return &item->val;
     }
     return nullptr;
 }
 
-const input_keymap_entry *get_keymap_entry(u32 key, const input_keymap *km)
+input_keymap_entry *find_keymap_entry(u32 id, input_keymap *km)
 {
     assert(km);
-    auto item = hmap_find(&km->hm, key);
+    auto item = hmap_find(&km->hm, id);
     if (item) {
         return &item->val;
     }
     return nullptr;
 }
 
-input_keymap_entry *get_keymap_entry(const char *name, input_keymap *km)
+const input_keymap_entry *find_keymap_entry(u32 id, const input_keymap *km)
+{
+    assert(km);
+    auto item = hmap_find(&km->hm, id);
+    if (item) {
+        return &item->val;
+    }
+    return nullptr;
+}
+
+input_keymap_entry *find_keymap_entry(const char *name, input_keymap *km)
 {
     assert(name);
     assert(km);
@@ -127,7 +106,7 @@ input_keymap_entry *get_keymap_entry(const char *name, input_keymap *km)
     return nullptr;
 }
 
-const input_keymap_entry *get_keymap_entry(const char *name, const input_keymap *km)
+const input_keymap_entry *find_keymap_entry(const char *name, const input_keymap *km)
 {
     assert(name);
     assert(km);
@@ -182,38 +161,38 @@ input_keymap *pop_keymap(input_keymap_stack *stack)
 
 void map_input_event(const platform_input_event *raw, const input_keymap_stack *stack)
 {
-    assert(raw);
-    assert(stack);
-    input_event ev{};
-    u32 key = keymap_button_key(raw->key_or_button, raw->mods, raw->action);
-    u32 key_any = keymap_button_key(raw->key_or_button, MOD_ANY, raw->action);
+    // assert(raw);
+    // assert(stack);
+    // input_event ev{};
+    // u32 key = generate_keymap_kmcode_id(raw->key_or_button, raw->mods, raw->action);
+    // u32 key_any = generate_keymap_kmcode_id(raw->key_or_button, MOD_ANY, raw->action);
 
-    for (u8 i = stack->count; i != 0; --i) {
-        const input_keymap *cur_map = stack->kmaps[i - 1];
-        const input_keymap_entry *kentry = get_keymap_entry(key, cur_map);
-        const input_keymap_entry *kanymod = get_keymap_entry(key_any, cur_map);
+    // for (u8 i = stack->count; i != 0; --i) {
+    //     const input_keymap *cur_map = stack->kmaps[i - 1];
+    //     const input_keymap_entry *kentry = find_keymap_entry(key, cur_map);
+    //     const input_keymap_entry *kanymod = find_keymap_entry(key_any, cur_map);
 
-        bool should_return = false;
-        if (kentry) {
-            ev.name = str_cstr(kentry->name);
-            fill_event_from_platform_event(raw, &ev);
-            if (kentry->cb) {
-                kentry->cb(&ev, kentry->cb_user_param);
-            }
-            should_return = !test_flags(kentry->flags, IEVENT_FLAG_DONT_CONSUME);
-        }
-        if (kanymod && kanymod != kentry) {
-            ev.name = str_cstr(kanymod->name);
-            fill_event_from_platform_event(raw, &ev);
-            if (kanymod->cb) {
-                kanymod->cb(&ev, kanymod->cb_user_param);
-            }
-            should_return = should_return || !test_flags(kanymod->flags, IEVENT_FLAG_DONT_CONSUME);
-        }
-        if (should_return) {
-            return;
-        }
-    }
+    //     bool should_return = false;
+    //     if (kentry) {
+    //         ev.name = str_cstr(kentry->name);
+    //         fill_event_from_platform_event(raw, &ev);
+    //         if (kentry->cb) {
+    //             kentry->cb(&ev, kentry->cb_user_param);
+    //         }
+    //         should_return = !test_flags(kentry->flags, IEVENT_FLAG_DONT_CONSUME);
+    //     }
+    //     if (kanymod && kanymod != kentry) {
+    //         ev.name = str_cstr(kanymod->name);
+    //         fill_event_from_platform_event(raw, &ev);
+    //         if (kanymod->cb) {
+    //             kanymod->cb(&ev, kanymod->cb_user_param);
+    //         }
+    //         should_return = should_return || !test_flags(kanymod->flags, IEVENT_FLAG_DONT_CONSUME);
+    //     }
+    //     if (should_return) {
+    //         return;
+    //     }
+    // }
 }
 
 void map_input_frame(const platform_frame_input_events *frame, const input_keymap_stack *stack)

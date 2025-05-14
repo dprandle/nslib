@@ -33,42 +33,44 @@ enum file
 
 enum platform_window_flags
 {
-    WINDOW_FULLSCREEN = 1 << 0,
-    WINDOW_OPENGL = 1 << 1,
-    WINDOW_SHOWN = 1 << 2,
-    WINDOW_HIDDEN = 1 << 3,
-    WINDOW_BORDERLESS = 1 << 4,
-    WINDOW_RESIZABLE = 1 << 5,
-    WINDOW_MINIMIZED = 1 << 6,
-    WINDOW_MAXIMIZED = 1 << 7,
-    WINDOW_MOUSE_GRABBED = 1 << 8,
-    WINDOW_INPUT_FOCUS = 1 << 9,
-    WINDOW_MOUSE_FOCUS = 1 << 10,
-    WINDOW_FOREIGN = 1 << 11,
-    WINDOW_FULLSCREEN_DESKTOP = (WINDOW_FULLSCREEN | (1 << 12)),
+    WINDOW_FULLSCREEN = 1u << 0,
+    WINDOW_OPENGL = 1u << 1,
+    WINDOW_SHOWN = 1u << 2,
+    WINDOW_HIDDEN = 1u << 3,
+    WINDOW_BORDERLESS = 1u << 4,
+    WINDOW_RESIZABLE = 1u << 5,
+    WINDOW_MINIMIZED = 1u << 6,
+    WINDOW_MAXIMIZED = 1u << 7,
+    WINDOW_MOUSE_GRABBED = 1u << 8,
+    WINDOW_INPUT_FOCUS = 1u << 9,
+    WINDOW_MOUSE_FOCUS = 1u << 10,
+    WINDOW_FOREIGN = 1u << 11,
+    WINDOW_FULLSCREEN_DESKTOP = (WINDOW_FULLSCREEN | (1u << 12)),
     // On macOS NSHighResolutionCapable must be set true in the application's Info.plist for this to have any effect.
-    WINDOW_ALLOW_HIGHDPI = 1 << 13,
+    WINDOW_ALLOW_HIGHDPI = 1u << 13,
     // Has mouse captured (unrelated to MOUSE_GRABBED)
-    WINDOW_MOUSE_CAPTURE = 1 << 14,
-    WINDOW_ALWAYS_ON_TOP = 1 << 15,
-    WINDOW_SKIP_TASKBAR = 1 << 16,
-    WINDOW_UTILITY = 1 << 17,
-    WINDOW_TOOLTIP = 1 << 18,
-    WINDOW_POPUP_MENU = 1 << 19,
-    WINDOW_KEYBOARD_GRABBED = 1 << 20,
+    WINDOW_MOUSE_CAPTURE = 1u << 14,
+    WINDOW_ALWAYS_ON_TOP = 1u << 15,
+    WINDOW_SKIP_TASKBAR = 1u << 16,
+    WINDOW_UTILITY = 1u << 17,
+    WINDOW_TOOLTIP = 1u << 18,
+    WINDOW_POPUP_MENU = 1u << 19,
+    WINDOW_KEYBOARD_GRABBED = 1u << 20,
     // Usable for Vulkan surface
-    WINDOW_VULKAN = 1 << 21,
+    WINDOW_VULKAN = 1u << 28,
     // Usable for Metal view
-    WINDOW_METAL = 1 << 22
+    WINDOW_METAL = 1u << 29,
+    WINDOW_TRANSPARENT = 1u << 30,
+    WINDOW_NOT_FOCUSABLE = 1u << 31
 };
 
-enum struct platform_input_event_type
+enum platform_input_event_type
 {
-    INVALID = -1,
-    KEY_PRESS,
-    MOUSE_BTN,
-    SCROLL,
-    CURSOR_POS
+    INPUT_EVENT_TYPE_INVALID = -1,
+    INPUT_EVENT_TYPE_KEY,
+    INPUT_EVENT_TYPE_MBUTTON,
+    INPUT_EVENT_TYPE_MSCROLL,
+    INPUT_EVENT_TYPE_MMOVE
 };
 
 enum struct platform_window_event_type
@@ -82,17 +84,73 @@ enum struct platform_window_event_type
     MAXIMIZED,
 };
 
+struct platform_key_event
+{
+    // Press, release, repeat
+    u8 action;
+    // Physical scancode
+    u32 scancode;
+    // Platform dependent scancode
+    u16 raw_scancode;
+    // Which keyboard
+    u32 keyboard_id;
+};
+
+struct platform_mbutton_event
+{
+    // Press, release
+    u8 action;
+    // Mouse position pixel coordinates
+    vec2 mpos;
+    // Mouse position normalized to screen size
+    vec2 norm_mpos;
+    // Which mouse
+    u32 mouse_id;
+};
+
+struct platform_mmotion_event
+{
+    // Mouse position pixel coordinates
+    vec2 mpos;
+    // Mouse position normalized to screen size
+    vec2 norm_mpos;
+    // Motion, in pixels, since last frame
+    vec2 delta;
+    // Motion since last frame normalzied to screen size
+    vec2 norm_delta;
+    // Which mouse
+    u32 mouse_id;
+};
+
+struct platform_mwheel_event
+{
+    // Mouse position pixel coordinates
+    vec2 mpos;
+    // Mouse position normalized to screen size
+    vec2 norm_mpos;
+    // Amount scrolled - left neg x, right pos x, y positive away from user (ie up/increase) and y neg towards the user (down/decrease)
+    vec2 delta;
+    // Amount scrolled - same as above but accumulated in to ticks
+    ivec2 idelta;
+    // Which mouse
+    u32 mouse_id;
+};
+
 struct platform_input_event
 {
-    platform_input_event_type type{platform_input_event_type::INVALID};
-    u64 timestamp{};
-    u32 key_or_button{};
-    u32 scancode{};
-    u32 action{};
-    u16 mods{};
-    vec2 offset;
-    vec2 pos;
+    platform_input_event_type type{INPUT_EVENT_TYPE_INVALID};
+    u64 timestamp;
+    u16 kmcode;
+    u16 keymods;
+    u8 mbutton_mask;
     u32 win_id;
+    union
+    {
+        platform_key_event key;
+        platform_mbutton_event mbutton;
+        platform_mwheel_event mwheel;
+        platform_mmotion_event mmotion;
+    };
 };
 
 struct platform_window_event
@@ -202,32 +260,32 @@ void end_platform_frame(platform_ctxt *ctxt);
 void *create_platform_window(const platform_window_init_info *pf_config);
 
 // Get the window size in screen coords
-ivec2 get_window_size(void *window_hndl);
+ivec2 get_platform_window_size(void *window_hndl);
 
 // Get the window size in pixels - could be different than screen coords for HighDPI displays
-ivec2 get_window_pixel_size(void *window_hndl);
+ivec2 get_platform_window_pixel_size(void *window_hndl);
 
 // Get a pointer to the window from the id
-void *get_window_from_id(u32 id);
+void *get_platform_window(u32 id);
 
 // Get the OS specific thread id
 u64 get_thread_id();
 
-// // Get the cursor 
+// // Get the cursor
 // vec2 get_cursor_pos(void *window_hndl);
 // vec2 get_normalized_cursor_pos(void *window_hndl);
 
 platform_window_event *get_latest_window_event(platform_window_event_type type, platform_frame_window_events *fwind);
 bool frame_has_event_type(platform_window_event_type type, const platform_frame_window_events *fwind);
-void process_platform_window_input(platform_ctxt *pf);
+void process_platform_events(platform_ctxt *pf);
 bool platform_framebuffer_resized(void *win_hndl);
 bool platform_window_resized(void *win_hndl);
 
-void *get_window_from_id(u32 id);
+void *get_platform_window(u32 id);
 
-const char *path_basename(const char *path);
+const char *get_path_basename(const char *path);
 
-sizet file_size(const char *fname, platform_file_err_desc *err);
+sizet get_file_size(const char *fname, platform_file_err_desc *err);
 
 sizet read_file(const char *fname,
                 const char *mode,
@@ -286,7 +344,7 @@ sizet write_file(const char *fname, const byte_array *data, sizet byte_offset = 
         }                                                                                                                                  \
     }                                                                                                                                      \
     ptimer_restart(&ctxt.time_pts);                                                                                                        \
-    while (run_loop && !platform_window_should_close(ctxt.win_hndl)) {                                                                     \
+    while (run_loop && ctxt.win_hndl) {                                                                                                    \
         start_platform_frame(&ctxt);                                                                                                       \
         if (pf_config.user_cb.run_frame && pf_config.user_cb.run_frame(&ctxt, &user_data) != err_code::PLATFORM_NO_ERROR) {                \
             run_loop = false;                                                                                                              \

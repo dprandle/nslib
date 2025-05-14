@@ -1,6 +1,3 @@
-//#define GLFW_INCLUDE_VULKAN
-//#include <GLFW/glfw3.h>
-//#include <GLFW/glfw3native.h>
 #include <cstring>
 
 #include "vk_context.h"
@@ -40,6 +37,15 @@ intern const char *alloc_scope_str(int scope)
     default:
         return "unknown";
     }
+}
+
+intern bool log_any_sdl_error(const char *prefix = "SDL err")
+{
+    auto err = SDL_GetError();
+    elog("%s: %s", prefix, (err) ? err : "none");
+    bool ret = (err);
+    SDL_ClearError();
+    return ret;
 }
 
 intern void vk_gpu_alloc_cb(VmaAllocator allocator, uint32_t memory_type, VkDeviceMemory memory, VkDeviceSize size, void *devp)
@@ -1829,7 +1835,7 @@ int vkr_init_surface(const vkr_context *vk, VkSurfaceKHR *surface)
     // Create surface
     bool ret = SDL_Vulkan_CreateSurface((SDL_Window*)vk->cfg.window, vk->inst.hndl, &vk->alloc_cbs, surface);
     if (!ret) {
-        elog("Failed to create surface with err code %d", ret);
+        log_any_sdl_error("Failed to create surface");
         return err_code::VKR_CREATE_SURFACE_FAIL;
     }
     else {
@@ -2060,7 +2066,9 @@ intern void log_mem_stats(const char *type, const vk_mem_alloc_stats *stats)
 void vkr_terminate_instance(const vkr_context *vk, vkr_instance *inst)
 {
     ilog("Terminating vkr instance");
-    vkr_terminate_device(&inst->device, vk);
+    if (inst->device.hndl != VK_NULL_HANDLE) {
+        vkr_terminate_device(&inst->device, vk);
+    }
     vkr_terminate_pdevice_swapchain_support(&inst->pdev_info.swap_support);
     vkr_terminate_surface(vk, inst->surface);
     inst->ext_funcs.destroy_debug_utils_messenger(inst->hndl, inst->dbg_messenger, &vk->alloc_cbs);

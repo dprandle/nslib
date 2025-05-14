@@ -13,55 +13,16 @@ struct mem_arena;
 struct platform_input_event;
 struct platform_frame_input_events;
 
-enum input_event_type
-{
-    IEVENT_TYPE_BTN,
-    IEVENT_TYPE_CURSOR,
-    IEVENT_TYPE_SCROLL
-};
-
-enum input_event_flags
-{
-    // If this flag is set, then input_keymap_entries that have the same key but are lower in the stack will also be
-    // called back
-    IEVENT_FLAG_DONT_CONSUME = 1
-};
-
-struct input_button_event
-{
-    int key_or_button{};
-    int action{};
-};
-
-struct input_cursor_event
-{
-};
-
-struct input_scroll_event
-{
-    dvec2 offset{};
-};
-
-struct input_event
+struct input_trigger
 {
     const char *name{};
-    int type{-1};
-    int modifiers{};
-    vec2 pos{};
-    vec2 norm_pos{};
-    union
-    {
-        input_button_event btn_data;
-        input_cursor_event cursor_data;
-        input_scroll_event scroll_data;
-    };
+    const platform_input_event *ev;
 };
 
-using input_event_func = void(const input_event *ev, void *user);
+using input_event_func = void(const input_trigger *ev, void *user);
 
 struct input_keymap_entry
 {
-    // First 14 bits are key/button, next 10 bits are modifiers, and last 8 bits are action
     string name{};
     u32 flags{};
     input_event_func *cb{};
@@ -77,6 +38,8 @@ inline bool operator!=(const input_keymap_entry &lhs, const input_keymap_entry &
 struct input_keymap
 {
     string name{};
+    // Key (id): Starting from MSB to LSB
+    // | ---- kmcode (10 bits) --- | ---- keymods (14 bits) ---- | ---- mbutton_mask (8 bits) ---- |
     hmap<u32, input_keymap_entry> hm{};
 };
 
@@ -88,39 +51,35 @@ struct input_keymap_stack
 };
 
 // Get the hash key for the passed in key/mouse button, modifiers, action combination
-u32 keymap_button_key(int key_or_button, int modifiers, int action);
-
-// Get the hash key for a cursor movement entry with the passed in modifiers
-u32 keymap_cursor_key(int modifiers);
-
-// Get the hash key for a scroll entry with the passed in modifiers
-u32 keymap_scroll_key(int modifiers);
+u32 generate_keymap_id(input_kmcode code, u16 keymods, u8 mbutton_mask);
 
 // Get the key/mouse button code from the hash key
-int button_from_key(u32 key);
+input_kmcode get_kmcode_from_keymap_id(u32 id);
 
 // Get the modifiers from the hash key
-int mods_from_key(u32 key);
+u16 get_keymods_from_keymap_id(u32 id);
 
 // Get the action from the hash key
-int action_from_key(u32 key);
+u8 get_mbutton_mask_from_keymap_id(u32 key);
 
-// Set keymap entry overwriting an existing one if its there - returns true if overwrote an existing entry otherwise
-// returns false
-input_keymap_entry *set_keymap_entry(u32 key, const input_keymap_entry *entry, input_keymap *km);
+// Set keymap entry overwriting an existing one if its there
+void set_keymap_entry(u32 id, const input_keymap_entry *entry, input_keymap *km);
 
-// Find keymap entry by key and return it - return null if no match is found
-input_keymap_entry *get_keymap_entry(u32 key, input_keymap *km);
-
-// Find the keymap entry with name and return it - return null if no match is found
-input_keymap_entry *get_keymap_entry(const char *name, input_keymap *km);
+// Insert keymap entry - if it exists return null otherwise return the inserted entry
+input_keymap_entry *insert_keymap_entry(u32 id, const input_keymap_entry *entry, input_keymap *km);
 
 // Find keymap entry by key and return it - return null if no match is found
-const input_keymap_entry *get_keymap_entry(u32 key, const input_keymap *km);
+input_keymap_entry *find_keymap_entry(u32 id, input_keymap *km);
+
+// Find keymap entry by key and return it - return null if no match is found
+const input_keymap_entry *find_keymap_entry(u32 id, const input_keymap *km);
 
 // Find the keymap entry with name and return it - return null if no match is found
-const input_keymap_entry *get_keymap_entry(const char *name, const input_keymap *km);
-    
+input_keymap_entry *find_keymap_entry(const char *name, input_keymap *km);
+
+// Find the keymap entry with name and return it - return null if no match is found
+const input_keymap_entry *find_keymap_entry(const char *name, const input_keymap *km);
+
 // Remove a keymap entry - returns true if removed
 bool remove_keymap_entry(u32 key, input_keymap *km);
 

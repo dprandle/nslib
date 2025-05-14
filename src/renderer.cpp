@@ -6,9 +6,9 @@
 #include "vk_context.h"
 #include "renderer.h"
 
-#include "imgui/imgui.h"
-#include "imgui/imgui_impl_glfw.h"
-#include "imgui/imgui_impl_vulkan.h"
+// #include "imgui/imgui.h"
+// #include "imgui/imgui_impl_glfw.h"
+// #include "imgui/imgui_impl_vulkan.h"
 
 namespace nslib
 {
@@ -103,6 +103,7 @@ intern void check_vk_result(VkResult err)
 
 intern void init_imgui(renderer *rndr)
 {
+    #if 0
     mem_init_fl_arena(&rndr->imgui.fl, 10 * MB_SIZE, rndr->upstream_fl_arena, "imgui");
     auto rpass = hmap_find(&rndr->rpasses, FWD_RPASS);
     assert(rpass);
@@ -142,16 +143,18 @@ intern void init_imgui(renderer *rndr)
     if (!ImGui_ImplVulkan_CreateFontsTexture()) {
         wlog("Could not create imgui vulkan font texture");
     }
-
+    #endif
 }
 
 intern void terminate_imgui(renderer *rndr)
 {
+    #if 0
     vkr_terminate_descriptor_pool(&rndr->imgui.pool, &rndr->vk);
     ImGui_ImplGlfw_Shutdown();
     ImGui_ImplVulkan_Shutdown();    
     ImGui::DestroyContext(rndr->imgui.ctxt);
     mem_terminate_arena(&rndr->imgui.fl);
+    #endif
 }
 
 intern int setup_render_pass(renderer *rndr)
@@ -813,7 +816,7 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
     auto dev = &rndr->vk.inst.device;
     auto vert_buf = &dev->buffers[rndr->rmi.verts.buf_ind];
     auto ind_buf = &dev->buffers[rndr->rmi.inds.buf_ind];
-    auto img_data = ImGui::GetDrawData();
+    //auto img_data = ImGui::GetDrawData();
 
     int err = vkr_begin_cmd_buf(cmd_buf);
     if (err != err_code::VKR_NO_ERROR) {
@@ -900,7 +903,7 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
     }
 
     // See if this scoobys
-    ImGui_ImplVulkan_RenderDrawData(img_data, cmd_buf->hndl);
+    //ImGui_ImplVulkan_RenderDrawData(img_data, cmd_buf->hndl);
 
     vkr_cmd_end_rpass(cmd_buf);
     return vkr_end_cmd_buf(cmd_buf);
@@ -1212,9 +1215,9 @@ int begin_render_frame(renderer *rndr, int finished_frame_count)
     // Clear all prev desc sets
     vkr_reset_descriptor_pool(&cur_frame->desc_pool, &rndr->vk);
 
-    ImGui_ImplVulkan_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();    
+    // ImGui_ImplVulkan_NewFrame();
+    // ImGui_ImplGlfw_NewFrame();
+    // ImGui::NewFrame();    
 
     return err_code::VKR_NO_ERROR;
 }
@@ -1335,7 +1338,7 @@ int end_render_frame(renderer *rndr, camera *cam)
     // handle recreation for other things that might happen so keep the acquire image and present image recreations
     // based on return value
     if (platform_framebuffer_resized(rndr->vk.cfg.window)) {
-        ivec2 sz = get_window_pixel_size(rndr->vk.cfg.window);
+        ivec2 sz = get_platform_window_pixel_size(rndr->vk.cfg.window);
         if (cam) {
             cam->proj = (math::perspective(60.0f, (f32)sz.w / (f32)sz.h, 0.1f, 1000.0f));
         }
@@ -1364,7 +1367,7 @@ int end_render_frame(renderer *rndr, camera *cam)
     }
 
     // Get IM GUI data
-    ImGui::Render();
+    //ImGui::Render();
 
     // The command buf index struct has an ind struct into the pool the cmd buf comes from, and then an ind into the buffer
     // The ind into the pool has an ind into the queue family (as that contains our array of command pools) and then and
