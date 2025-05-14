@@ -80,7 +80,7 @@ struct input_keymap
     hmap<u32, input_keymap_entry> hm{};
 };
 
-// The most important keymap is at the back of the array
+// Keymaps are owned elsewhere - likely an asset as they will just have keyboard shortcuts.... assigned to what?
 struct input_keymap_stack
 {
     input_keymap *kmaps[MAX_INPUT_CONTEXT_STACK_COUNT] = {};
