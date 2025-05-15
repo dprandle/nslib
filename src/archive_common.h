@@ -18,10 +18,14 @@
 #define pup_member_meta(mem_name, ...) pup_var(ar, val.mem_name, {#mem_name, {__VA_ARGS__}})
 #define pup_member_name(mem_name, name) pup_var(ar, val.mem_name, {name, {}})
 #define pup_member_info(mem_name, info) pup_var(ar, val.mem_name, info)
+#define pup_enum_member(enum_type, int_type, mem_name)                                                                                     \
+    int_type mem_name = (int_type)(val.mem_name);                                                                                          \
+    pup_var(ar, mem_name, {#mem_name, {}});                                                                                                \
+    val.mem_name = (enum_type)mem_name
 
 namespace nslib
 {
-// Pack direction - OUT means packing the objects to the archive, and IN means 
+// Pack direction - pack means putting items in to the archive, and unpack means taking them out and putting them in the object
 enum struct archive_opmode
 {
     PACK,

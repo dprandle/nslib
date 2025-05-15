@@ -69,19 +69,8 @@ enum platform_input_event_type
     INPUT_EVENT_TYPE_INVALID = -1,
     INPUT_EVENT_TYPE_KEY,
     INPUT_EVENT_TYPE_MBUTTON,
-    INPUT_EVENT_TYPE_MSCROLL,
-    INPUT_EVENT_TYPE_MMOVE
-};
-
-enum struct platform_window_event_type
-{
-    INVALID = -1,
-    WIN_RESIZE,
-    FB_RESIZE,
-    MOVE,
-    FOCUS,
-    ICONIFIED,
-    MAXIMIZED,
+    INPUT_EVENT_TYPE_MWHEEL,
+    INPUT_EVENT_TYPE_MMOTION
 };
 
 struct platform_key_event
@@ -96,6 +85,14 @@ struct platform_key_event
     u32 keyboard_id;
 };
 
+pup_func(platform_key_event)
+{
+    pup_member(action);
+    pup_member(scancode);
+    pup_member(raw_scancode);
+    pup_member(keyboard_id);
+}
+
 struct platform_mbutton_event
 {
     // Press, release
@@ -107,6 +104,14 @@ struct platform_mbutton_event
     // Which mouse
     u32 mouse_id;
 };
+
+pup_func(platform_mbutton_event)
+{
+    pup_member(action);
+    pup_member(mpos);
+    pup_member(norm_mpos);
+    pup_member(mouse_id);
+}
 
 struct platform_mmotion_event
 {
@@ -122,6 +127,15 @@ struct platform_mmotion_event
     u32 mouse_id;
 };
 
+pup_func(platform_mmotion_event)
+{
+    pup_member(mpos);
+    pup_member(norm_mpos);
+    pup_member(delta);
+    pup_member(norm_delta);
+    pup_member(mouse_id);
+}
+
 struct platform_mwheel_event
 {
     // Mouse position pixel coordinates
@@ -135,6 +149,15 @@ struct platform_mwheel_event
     // Which mouse
     u32 mouse_id;
 };
+
+pup_func(platform_mwheel_event)
+{
+    pup_member(mpos);
+    pup_member(norm_mpos);
+    pup_member(delta);
+    pup_member(idelta);
+    pup_member(mouse_id);
+}
 
 struct platform_input_event
 {
@@ -153,24 +176,97 @@ struct platform_input_event
     };
 };
 
+pup_func(platform_input_event)
+{
+    pup_enum_member(platform_input_event_type, u32, type);
+    pup_member(timestamp);
+    pup_member(kmcode);
+    pup_member(keymods);
+    pup_member(mbutton_mask);
+    pup_member(win_id);
+    if (val.type == INPUT_EVENT_TYPE_KEY) {
+        pup_member(key);
+    }
+    else if (val.type == INPUT_EVENT_TYPE_MBUTTON) {
+        pup_member(mbutton);
+    }
+    else if (val.type == INPUT_EVENT_TYPE_MWHEEL) {
+        pup_member(mwheel);
+    }
+    else if (val.type == INPUT_EVENT_TYPE_MMOTION) {
+        pup_member(mmotion);
+    }
+}
+
+enum platform_window_event_type
+{
+    WINDOW_EVENT_TYPE_INVALID = -1,
+    WINDOW_EVENT_TYPE_RESIZE,
+    WINDOW_EVENT_TYPE_PIXEL_SIZE_CHANGE,
+    WINDOW_EVENT_TYPE_MOVE,
+    WINDOW_EVENT_TYPE_FOCUS,
+    WINDOW_EVENT_TYPE_MOUSE,
+    WINDOW_EVENT_TYPE_FULLSCREEN,
+    WINDOW_EVENT_TYPE_VIEWSTATE,
+    WINDOW_EVENT_TYPE_VISIBILITY
+};
+
 struct platform_window_event
 {
-    platform_window_event_type type{platform_window_event_type::INVALID};
-    void *window{};
+    platform_window_event_type type{WINDOW_EVENT_TYPE_INVALID};
+    u64 timestamp;
+    u32 win_id;
     union
     {
         // First is new size, second is prev size - for window resize these are screen coords, for fb resize they are pixels
         pair<ivec2, ivec2> resize{};
         // First is new pos, second is prev pos
         pair<ivec2, ivec2> move;
-        // Lost focus is 0, gained focus is 1
+        // Generic name
+        pair<ivec2, ivec2> data;
+
+        // Gained focus is 1, lost focus is 0
         int focus;
-        // Iconified is 1, restored is 0
-        int iconified;
-        // Maximized is 1, restored is 0
-        int maximized;
+        // Mouse entered is 1, mouse left is 0
+        int mouse;
+        // Enter fullscreen is 1, leave fullscreen is 0
+        int fullscreen;
+        // Minimized is -1, restored is 0, maximized is 1
+        int viewstate;
+        // Shown is 1 and hidden is 0
+        int visibility;
+        // Generic name
+        int idata;
     };
 };
+
+pup_func(platform_window_event)
+{
+    pup_enum_member(platform_window_event_type, u32, type);
+    pup_member(timestamp);
+    pup_member(win_id);
+    if (val.type == WINDOW_EVENT_TYPE_RESIZE || val.type == WINDOW_EVENT_TYPE_PIXEL_SIZE_CHANGE) {
+        pup_member(resize);
+    }
+    else if (val.type == WINDOW_EVENT_TYPE_MOVE) {
+        pup_member(move);
+    }
+    else if (val.type == WINDOW_EVENT_TYPE_FOCUS) {
+        pup_member(focus);
+    }
+    else if (val.type == WINDOW_EVENT_TYPE_MOUSE) {
+        pup_member(mouse);
+    }
+    else if (val.type == WINDOW_EVENT_TYPE_FULLSCREEN) {
+        pup_member(fullscreen);
+    }
+    else if (val.type == WINDOW_EVENT_TYPE_VIEWSTATE) {
+        pup_member(viewstate);
+    }
+    else if (val.type == WINDOW_EVENT_TYPE_VISIBILITY) {
+        pup_member(visibility);
+    }
+}
 
 struct platform_frame_input_events
 {
@@ -205,6 +301,7 @@ struct platform_ctxt
     platform_memory arenas{};
     int finished_frames{0};
     char **argv{};
+    bool running{false};
     int argc;
 };
 
@@ -257,19 +354,28 @@ void platform_free(void *block);
 void start_platform_frame(platform_ctxt *ctxt);
 void end_platform_frame(platform_ctxt *ctxt);
 
-void *create_platform_window(const platform_window_init_info *pf_config);
+void *create_window(const platform_window_init_info *pf_config);
 
 // Get the window size in screen coords
-ivec2 get_platform_window_size(void *window_hndl);
+ivec2 get_window_size(void *window_hndl);
 
 // Get the window size in pixels - could be different than screen coords for HighDPI displays
-ivec2 get_platform_window_pixel_size(void *window_hndl);
+ivec2 get_window_pixel_size(void *window_hndl);
+
+// Get the window position in screen coords
+ivec2 get_window_pos(void *window_hndl);
 
 // Get a pointer to the window from the id
-void *get_platform_window(u32 id);
+void *get_window(u32 id);
+
+// Get mouse position in pixels relative to the currently focused window
+vec2 get_mouse_pos();
 
 // Get the OS specific thread id
 u64 get_thread_id();
+
+const char *window_event_type_to_string(platform_window_event_type type);
+const char *input_event_type_to_string(platform_input_event_type type);
 
 // // Get the cursor
 // vec2 get_cursor_pos(void *window_hndl);
@@ -278,10 +384,8 @@ u64 get_thread_id();
 platform_window_event *get_latest_window_event(platform_window_event_type type, platform_frame_window_events *fwind);
 bool frame_has_event_type(platform_window_event_type type, const platform_frame_window_events *fwind);
 void process_platform_events(platform_ctxt *pf);
-bool platform_framebuffer_resized(void *win_hndl);
-bool platform_window_resized(void *win_hndl);
-
-void *get_platform_window(u32 id);
+bool window_pixel_size_changed_this_frame(void *win_hndl);
+bool window_resized_this_frame(void *win_hndl);
 
 const char *get_path_basename(const char *path);
 
@@ -344,7 +448,7 @@ sizet write_file(const char *fname, const byte_array *data, sizet byte_offset = 
         }                                                                                                                                  \
     }                                                                                                                                      \
     ptimer_restart(&ctxt.time_pts);                                                                                                        \
-    while (run_loop && ctxt.win_hndl) {                                                                                                    \
+    while (run_loop && ctxt.running) {                                                                                                     \
         start_platform_frame(&ctxt);                                                                                                       \
         if (pf_config.user_cb.run_frame && pf_config.user_cb.run_frame(&ctxt, &user_data) != err_code::PLATFORM_NO_ERROR) {                \
             run_loop = false;                                                                                                              \

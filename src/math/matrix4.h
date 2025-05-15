@@ -690,6 +690,6 @@ using u16mat4 = matrix4<u16>;
 using umat4 = matrix4<u32>;
 using u64mat4 = matrix4<u64>;
 using mat4 = matrix4<f32>;
-using dmat4 = matrix4<f64>;
+using f64mat4 = matrix4<f64>;
 
 } // namespace nslib

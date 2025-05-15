@@ -369,7 +369,7 @@ int vkr_init_instance(const vkr_context *vk, vkr_instance *inst)
 
     // This is for clarity.. we could just directly pass the enabled extension count
     u32 ext_count{0};
-    const char * const *glfw_ext = SDL_Vulkan_GetInstanceExtensions(&ext_count);
+    const char *const *glfw_ext = SDL_Vulkan_GetInstanceExtensions(&ext_count);
     auto ext = (char **)mem_alloc((ext_count + vk->cfg.extra_instance_extension_count) * sizeof(char *), vk->cfg.arenas.command_arena);
 
     u32 copy_ind = 0;
@@ -1431,6 +1431,7 @@ int vkr_init_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *
     VkDescriptorPoolCreateInfo pool_info{};
     pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     pool_info.poolSizeCount = desc_size_count;
+    pool_info.flags = cfg->flags;
     pool_info.pPoolSizes = psize;
     pool_info.maxSets = (cfg->max_sets != VKR_INVALID) ? cfg->max_sets : total_desc_cnt;
     ilog("Setting max sets to %u (for %u total descriptors)", pool_info.maxSets, total_desc_cnt);
@@ -1833,7 +1834,7 @@ int vkr_init_surface(const vkr_context *vk, VkSurfaceKHR *surface)
     ilog("Initializing window surface");
     assert(vk->cfg.window);
     // Create surface
-    bool ret = SDL_Vulkan_CreateSurface((SDL_Window*)vk->cfg.window, vk->inst.hndl, &vk->alloc_cbs, surface);
+    bool ret = SDL_Vulkan_CreateSurface((SDL_Window *)vk->cfg.window, vk->inst.hndl, &vk->alloc_cbs, surface);
     if (!ret) {
         log_any_sdl_error("Failed to create surface");
         return err_code::VKR_CREATE_SURFACE_FAIL;
@@ -1999,11 +2000,14 @@ void vkr_terminate_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
     arr_terminate(&sw_info->image_views);
 }
 
+void vkr_device_wait_idle(vkr_device *dev)
+{
+    vkDeviceWaitIdle(dev->hndl);
+}
+
 void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
 {
     // TODO: Make this wait on our semaphores and fences more explicitly
-    ilog("Waiting for sync objects before terminating device...");
-    vkDeviceWaitIdle(dev->hndl);
     ilog("Terminating vkr device");
     vkr_terminate_render_frames(dev, vk);
     vkr_terminate_swapchain(&dev->swapchain, vk);

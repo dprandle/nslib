@@ -500,6 +500,7 @@ struct vkr_descriptor_cfg
     u32 max_desc_per_type[VKR_DESCRIPTOR_TYPE_COUNT] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     // If this is left as invalid, then it will be set to the sum of all descriptors in max_desc_per_type
     u32 max_sets{INVALID_ID};
+    u32 flags{0};
 };
 
 struct vkr_cfg
@@ -703,6 +704,8 @@ void vkr_cmd_end_rpass(const vkr_command_buffer *cmd_buf);
 
 sizet vkr_min_uniform_buffer_offset_alignment(vkr_context *vk);
 sizet vkr_uniform_buffer_offset_alignment(vkr_context *vk, sizet uniform_block_size);
+
+void vkr_device_wait_idle(vkr_device *dev);
 
 struct vkr_image_transition_cfg
 {

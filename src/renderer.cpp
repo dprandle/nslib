@@ -6,9 +6,9 @@
 #include "vk_context.h"
 #include "renderer.h"
 
-// #include "imgui/imgui.h"
-// #include "imgui/imgui_impl_glfw.h"
-// #include "imgui/imgui_impl_vulkan.h"
+#include "imgui/imgui.h"
+#include "imgui/imgui_impl_sdl3.h"
+#include "imgui/imgui_impl_vulkan.h"
 
 namespace nslib
 {
@@ -103,7 +103,6 @@ intern void check_vk_result(VkResult err)
 
 intern void init_imgui(renderer *rndr)
 {
-    #if 0
     mem_init_fl_arena(&rndr->imgui.fl, 10 * MB_SIZE, rndr->upstream_fl_arena, "imgui");
     auto rpass = hmap_find(&rndr->rpasses, FWD_RPASS);
     assert(rpass);
@@ -118,9 +117,12 @@ intern void init_imgui(renderer *rndr)
 
     vkr_descriptor_cfg cfg{};
     cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE;
-    vkr_init_descriptor_pool(&rndr->imgui.pool, &rndr->vk, &cfg);
+    cfg.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    if (vkr_init_descriptor_pool(&rndr->imgui.pool, &rndr->vk, &cfg) != err_code::VKR_NO_ERROR) {
+        wlog("Could not create imgui descriptor pool");
+    }
 
-    ImGui_ImplGlfw_InitForVulkan((GLFWwindow *)rndr->vk.cfg.window, true);
+    ImGui_ImplSDL3_InitForVulkan((SDL_Window *)rndr->vk.cfg.window);
 
     ImGui_ImplVulkan_InitInfo init_info = {};
     init_info.ApiVersion = VKR_API_VERSION;
@@ -143,18 +145,15 @@ intern void init_imgui(renderer *rndr)
     if (!ImGui_ImplVulkan_CreateFontsTexture()) {
         wlog("Could not create imgui vulkan font texture");
     }
-    #endif
 }
 
 intern void terminate_imgui(renderer *rndr)
 {
-    #if 0
-    vkr_terminate_descriptor_pool(&rndr->imgui.pool, &rndr->vk);
-    ImGui_ImplGlfw_Shutdown();
     ImGui_ImplVulkan_Shutdown();    
+    vkr_terminate_descriptor_pool(&rndr->imgui.pool, &rndr->vk);
+    ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext(rndr->imgui.ctxt);
     mem_terminate_arena(&rndr->imgui.fl);
-    #endif
 }
 
 intern int setup_render_pass(renderer *rndr)
@@ -816,7 +815,7 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
     auto dev = &rndr->vk.inst.device;
     auto vert_buf = &dev->buffers[rndr->rmi.verts.buf_ind];
     auto ind_buf = &dev->buffers[rndr->rmi.inds.buf_ind];
-    //auto img_data = ImGui::GetDrawData();
+    auto img_data = ImGui::GetDrawData();
 
     int err = vkr_begin_cmd_buf(cmd_buf);
     if (err != err_code::VKR_NO_ERROR) {
@@ -903,7 +902,7 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
     }
 
     // See if this scoobys
-    //ImGui_ImplVulkan_RenderDrawData(img_data, cmd_buf->hndl);
+    ImGui_ImplVulkan_RenderDrawData(img_data, cmd_buf->hndl);
 
     vkr_cmd_end_rpass(cmd_buf);
     return vkr_end_cmd_buf(cmd_buf);
@@ -965,9 +964,7 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
         return err;
     }
 
-    // 
     init_imgui(rndr);
-    dlog("HERE");
 
     // Create a default material for submeshes without materials
     auto mat_cache = get_cache<material>(cg);
@@ -1215,9 +1212,9 @@ int begin_render_frame(renderer *rndr, int finished_frame_count)
     // Clear all prev desc sets
     vkr_reset_descriptor_pool(&cur_frame->desc_pool, &rndr->vk);
 
-    // ImGui_ImplVulkan_NewFrame();
-    // ImGui_ImplGlfw_NewFrame();
-    // ImGui::NewFrame();    
+    ImGui_ImplVulkan_NewFrame();
+    ImGui_ImplSDL3_NewFrame();
+    ImGui::NewFrame();    
 
     return err_code::VKR_NO_ERROR;
 }
@@ -1337,8 +1334,8 @@ int end_render_frame(renderer *rndr, camera *cam)
     // Recreating the swapchain here before even acquiring images gives us the smoothest resizing, but we still need to
     // handle recreation for other things that might happen so keep the acquire image and present image recreations
     // based on return value
-    if (platform_framebuffer_resized(rndr->vk.cfg.window)) {
-        ivec2 sz = get_platform_window_pixel_size(rndr->vk.cfg.window);
+    if (window_pixel_size_changed_this_frame(rndr->vk.cfg.window)) {
+        ivec2 sz = get_window_pixel_size(rndr->vk.cfg.window);
         if (cam) {
             cam->proj = (math::perspective(60.0f, (f32)sz.w / (f32)sz.h, 0.1f, 1000.0f));
         }
@@ -1367,7 +1364,7 @@ int end_render_frame(renderer *rndr, camera *cam)
     }
 
     // Get IM GUI data
-    //ImGui::Render();
+    ImGui::Render();
 
     // The command buf index struct has an ind struct into the pool the cmd buf comes from, and then an ind into the buffer
     // The ind into the pool has an ind into the queue family (as that contains our array of command pools) and then and
@@ -1403,8 +1400,8 @@ void terminate_renderer(renderer *rndr)
     mem_terminate_arena(&rndr->rmi.inds.node_pool);
     mem_terminate_arena(&rndr->rmi.verts.node_pool);
 
+    vkr_device_wait_idle(&rndr->vk.inst.device);
     terminate_imgui(rndr);
-
     vkr_terminate(&rndr->vk);
     mem_terminate_arena(&rndr->vk_free_list);
     mem_terminate_arena(&rndr->vk_frame_linear);

@@ -195,5 +195,5 @@ using u16vec4 = vector4<u16>;
 using uvec4 = vector4<u32>;
 using u64vec4 = vector4<u64>;
 using vec4 = vector4<f32>;
-using dvec4 = vector4<f64>;
+using f64vec4 = vector4<f64>;
 } // namespace nslib

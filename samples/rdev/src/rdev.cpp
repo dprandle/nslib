@@ -27,9 +27,8 @@ struct app_data
 
 intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_keymap *kmap)
 {
-    #if 0    
     // Create camera
-    auto sz = get_platform_window_pixel_size(ctxt->win_hndl);
+    auto sz = get_window_pixel_size(ctxt->win_hndl);
     auto cam = add_entity("Editor_Cam", &app->rgn);
     auto cam_comp = add_comp<camera>(cam);
     auto cam_tcomp = add_comp<transform>(cam);
@@ -46,19 +45,14 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_ke
     cam_tcomp->cached = math::model_tform(cam_tcomp->world_pos, cam_tcomp->orientation, cam_tcomp->scale);
     cam_comp->view = math::inverse(cam_tcomp->cached);
 
-    // Setup some keys
-
-    input_keymap_entry cam_turn{};
-    cam_turn.name = "cam_turn";
-    cam_turn.cb_user_param = app;
-    cam_turn.cb = [](const input_trigger *ev, void *data) {
+    // Add our input trigger functions
+    auto cam_turn_func = [](const input_trigger &t, void *data) {
         auto app = (app_data *)data;
         auto cam_ent = get_entity(app->cam_id, &app->rgn);
         auto camc = get_comp<camera>(cam_ent);
         auto camt = get_comp<transform>(cam_ent);
 
-        auto delta = ev->norm_pos - app->mpos;
-        app->mpos = ev->norm_pos;
+        auto delta = t.ev->mmotion.norm_delta;
 
         vec3 right = math::right_vec(camt->orientation);
         f32 factor = 2.5;
@@ -68,85 +62,11 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_ke
         camt->cached = math::model_tform(camt->world_pos, camt->orientation, camt->scale);
         camc->view = math::inverse(camt->cached);
     };
-
-    u32 k = generate_keymap_cursor_id(CURSOR_SCROLL_MOD_MOUSE_RIGHT);
-    set_keymap_entry(k, &cam_turn, kmap);
-
-    input_keymap_entry cam_track_cursor{"reset_pos"};
-    cam_track_cursor.cb_user_param = app;
-    cam_track_cursor.cb = [](const input_trigger *ev, void *data) {
-        auto app = (app_data *)data;
-        app->mpos = ev->norm_pos;
-    };
-    k = generate_keymap_button_id(MOUSE_BTN_RIGHT, MOD_ANY, INPUT_ACTION_PRESS);
-    set_keymap_entry(k, &cam_track_cursor, kmap);
-
-    input_keymap_entry cam_move{};
-    cam_move.name = "cam_forward_press";
-    cam_move.cb_user_param = app;
-    cam_move.cb = [](const input_trigger *ev, void *data) {
-        auto app = (app_data *)data;
-        app->movement.y += 1;
-    };
-    k = generate_keymap_button_id(KEY_W, MOD_NONE, INPUT_ACTION_PRESS);
-    set_keymap_entry(k, &cam_move, kmap);
-
-    cam_move.name = "cam_forward_release";
-    cam_move.cb = [](const input_trigger *ev, void *data) {
-        auto app = (app_data *)data;
-        app->movement.y -= 1;
-    };
-    k = generate_keymap_button_id(KEY_W, MOD_NONE, INPUT_ACTION_RELEASE);
-    set_keymap_entry(k, &cam_move, kmap);
-
-    cam_move.name = "cam_back_press";
-    cam_move.cb = [](const input_trigger *ev, void *data) {
-        auto app = (app_data *)data;
-        app->movement.y -= 1;
-    };
-    k = generate_keymap_button_id(KEY_S, MOD_NONE, INPUT_ACTION_PRESS);
-    set_keymap_entry(k, &cam_move, kmap);
-
-    cam_move.name = "cam_back_release";
-    cam_move.cb = [](const input_trigger *ev, void *data) {
-        auto app = (app_data *)data;
-        app->movement.y += 1;
-    };
-    k = generate_keymap_button_id(KEY_S, MOD_NONE, INPUT_ACTION_RELEASE);
-    set_keymap_entry(k, &cam_move, kmap);
-
-    cam_move.name = "cam_left_press";
-    cam_move.cb = [](const input_trigger *ev, void *data) {
-        auto app = (app_data *)data;
-        app->movement.x -= 1;
-    };
-    k = generate_keymap_button_id(KEY_A, MOD_NONE, INPUT_ACTION_PRESS);
-    set_keymap_entry(k, &cam_move, kmap);
-
-    cam_move.name = "cam_left_release";
-    cam_move.cb = [](const input_trigger *ev, void *data) {
-        auto app = (app_data *)data;
-        app->movement.x += 1;
-    };
-    k = generate_keymap_button_id(KEY_A, MOD_NONE, INPUT_ACTION_RELEASE);
-    set_keymap_entry(k, &cam_move, kmap);
-
-    cam_move.name = "cam_right_press";
-    cam_move.cb = [](const input_trigger *ev, void *data) {
-        auto app = (app_data *)data;
-        app->movement.x += 1;
-    };
-    k = generate_keymap_button_id(KEY_D, MOD_NONE, INPUT_ACTION_PRESS);
-    set_keymap_entry(k, &cam_move, kmap);
-
-    cam_move.name = "cam_right_release";
-    cam_move.cb = [](const input_trigger *ev, void *data) {
-        auto app = (app_data *)data;
-        app->movement.x -= 1;
-    };
-    k = generate_keymap_button_id(KEY_D, MOD_NONE, INPUT_ACTION_RELEASE);
-    set_keymap_entry(k, &cam_move, kmap);
-    #endif
+    add_input_trigger_func(&app->stack, "cam_turn", {cam_turn_func, app});
+    
+    input_keymap_entry cam_turn_entry{};
+    cam_turn_entry.name = "cam_turn";
+    add_keymap_entry(cam_turn_entry, &app->global_km);
 }
 
 int init(platform_ctxt *ctxt, void *user_data)
@@ -202,7 +122,7 @@ int init(platform_ctxt *ctxt, void *user_data)
     }
 
     // Create input map
-    init_keymap("global", &app->global_km, &ctxt->arenas.free_list);
+    init_keymap(&app->global_km, "global", &ctxt->arenas.free_list);
 
     // Create and setup input for camera
     setup_camera_controller(ctxt, app, &app->global_km);
@@ -270,7 +190,7 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
     update_tm += pt.dt;
 
     // Draw some imgui stuff
-    //ImGui::ShowDemoWindow();
+    ImGui::ShowDemoWindow();
 
     res = end_render_frame(&app->rndr, cam);
     ptimer_split(&pt);
@@ -308,7 +228,7 @@ int configure_platform(platform_init_info *settings, app_data *app)
 {
     settings->wind.resolution = {800, 600};
     settings->wind.title = "RDev";
-    settings->wind.win_flags = WINDOW_RESIZABLE | WINDOW_INPUT_FOCUS | WINDOW_VULKAN;
+    settings->wind.win_flags = WINDOW_RESIZABLE | WINDOW_INPUT_FOCUS | WINDOW_VULKAN | WINDOW_SHOWN | WINDOW_ALLOW_HIGHDPI;
     settings->default_log_level = LOG_DEBUG;
     settings->user_cb.init = init;
     settings->user_cb.run_frame = run_frame;

@@ -64,6 +64,13 @@ struct matrix3
     };
 };
 
+pup_func_tt(matrix3)
+{
+    pup_member(row1);
+    pup_member(row2);
+    pup_member(row3);
+}    
+
 // Enable type trait
 template<class U>
 struct is_mat<matrix3<U>>
@@ -576,5 +583,5 @@ using u16mat3 = matrix3<u16>;
 using umat3 = matrix3<u32>;
 using u64mat3 = matrix3<u64>;
 using mat3 = matrix3<f32>;
-using dmat3 = matrix3<f64>;
+using f64mat3 = matrix3<f64>;
 } // namespace nslib

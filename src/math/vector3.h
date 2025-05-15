@@ -203,6 +203,6 @@ using u8vec3 = vector3<u8>;
 using u16vec3 = vector3<u16>;
 using uvec3 = vector3<u32>;
 using u64vec3 = vector3<u64>;
-using vec3 = vector3<float>;
-using dvec3 = vector3<double>;
+using vec3 = vector3<f32>;
+using f64vec3 = vector3<f64>;
 } // namespace nslib
