@@ -62,11 +62,10 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_ke
         camt->cached = math::model_tform(camt->world_pos, camt->orientation, camt->scale);
         camc->view = math::inverse(camt->cached);
     };
-    add_input_trigger_func(&app->stack, "cam_turn", {cam_turn_func, app});
-    
-    input_keymap_entry cam_turn_entry{};
-    cam_turn_entry.name = "cam_turn";
-    add_keymap_entry(cam_turn_entry, &app->global_km);
+    auto ins = add_input_trigger_func(&app->stack, "cam-turn", {cam_turn_func, app});
+    assert(ins);
+
+    add_keymap_entry(&app->global_km, KMCODE_MMOTION, 0, MBUTTON_MASK_MIDDLE, {"cam-turn"});
 }
 
 int init(platform_ctxt *ctxt, void *user_data)
@@ -122,12 +121,12 @@ int init(platform_ctxt *ctxt, void *user_data)
     }
 
     // Create input map
+    init_keymap_stack(&app->stack, &ctxt->arenas.free_list);
     init_keymap(&app->global_km, "global", &ctxt->arenas.free_list);
-
+    push_keymap(&app->stack, &app->global_km);
+    
     // Create and setup input for camera
     setup_camera_controller(ctxt, app, &app->global_km);
-
-    push_keymap(&app->global_km, &app->stack);
 
     int ret = init_renderer(&app->rndr, &app->cg, ctxt->win_hndl, &ctxt->arenas.free_list);
     if (ret == err_code::RENDER_NO_ERROR) {
@@ -141,7 +140,7 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
 {
     auto app = (app_data *)user_data;
     profile_timepoints pt;
-    map_input_frame(&ctxt->finp, &app->stack);
+    map_input_frame(&app->stack, &ctxt->finp);
 
     int res = begin_render_frame(&app->rndr, ctxt->finished_frames);
     if (res != err_code::VKR_NO_ERROR) {
@@ -219,6 +218,7 @@ int terminate(platform_ctxt *ctxt, void *user_data)
     auto app = (app_data *)user_data;
     terminate_renderer(&app->rndr);
     terminate_keymap(&app->global_km);
+    terminate_keymap_stack(&app->stack);
     terminate_sim_region(&app->rgn);
     terminate_cache_group_default_types(&app->cg);
     return err_code::PLATFORM_NO_ERROR;

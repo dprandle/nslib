@@ -1,3 +1,4 @@
+#include "logging.h"
 #include "hashfuncs.h"
 #include <cstring>
 
@@ -484,9 +485,10 @@ u64 hash_ptr_xxhash3(const void *data, sizet len, u64 seed0, u64)
     return xxhash3(data, len, seed0);
 }
 
-u64 hash_type(const char* key, u64 seed0, u64 seed1)
+u64 hash_type(const cstr &key, u64 seed0, u64 seed1)
 {
-    return hash_ptr_murmur(key, strlen(key), seed0, seed1);
+    u64 ret = hash_ptr_murmur(key, strlen(key), seed0, seed1);
+    return ret;
 }
 
 } // namespace nslib

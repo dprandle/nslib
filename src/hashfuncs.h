@@ -56,14 +56,15 @@ u64 hash_ptr_murmur(const void *data, sizet len, u64 seed0, u64 seed1);
 // hashmap_xxhash3 returns a hash value for `data` using xxhash algorithm
 u64 hash_ptr_xxhash3(const void *data, sizet len, u64 seed0, u64 seed1);
 
+// Hash strings
+
 // Simply 1 for 1 hash - the key has been computed already and we just make use of the hash buckets
 template<integral T>
 inline u64 hash_type(const T &key, u64, u64) {
     return (T)key;
 }
 
-// Hash strings
-u64 hash_type(const char* key, u64, u64);
+u64 hash_type(const cstr&, u64, u64);
 
 
 } // namespace nslib

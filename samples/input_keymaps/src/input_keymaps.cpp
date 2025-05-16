@@ -155,7 +155,7 @@ int app_run_frame(platform_ctxt *ctxt, void *user_data)
 {
     auto app = (app_data*)user_data;
     // Use our context stack to map the platform input to callback functions
-    map_input_frame(&ctxt->finp, &app->stack);
+    map_input_frame(&app->stack, &ctxt->finp);
     return err_code::PLATFORM_NO_ERROR;
 }
 

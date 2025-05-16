@@ -32,7 +32,7 @@ struct hset_bucket
 };
 
 template<class Val>
-using hash_func = u64(const Val &, u64, u64);
+using hash_func = u64(const Val&, u64, u64);
 
 // Since hset manages memory, but we want it to act like a built in type in terms of copying and equality testing, we
 // have to write copy ctor, dtor, assignment operator, and equality operators.

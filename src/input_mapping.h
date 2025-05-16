@@ -29,17 +29,27 @@ using input_event_func = void(const input_trigger &ev, void *user);
 struct input_keymap_entry
 {
     string name{};
-    u16 kmcode{};
-    u16 keymods{};
-    u8 mbutton_mask{};
     u32 flags{};
 };
+
+pup_func(input_keymap_entry)
+{
+    pup_member(name);
+    pup_member(flags);
+}
 
 struct input_trigger_cb
 {
     input_event_func *func{};
     void *user{};
 };
+
+pup_func(input_trigger_cb) {
+    sizet fptr = (sizet)val.func;
+    sizet uptr = (sizet)val.user;
+    pup_var(ar, fptr, {.name="func"});
+    pup_var(ar, fptr, {.name="user"});
+}
 
 bool operator==(const input_keymap_entry &lhs, const input_keymap_entry &rhs);
 inline bool operator!=(const input_keymap_entry &lhs, const input_keymap_entry &rhs)
@@ -63,14 +73,11 @@ struct input_keymap
 struct input_keymap_stack
 {
     static_array<input_keymap *, MAX_INPUT_CONTEXT_STACK_COUNT> kmaps{};
-    hmap<const char *, input_trigger_cb> trigger_funcs;
+    hmap<u64, input_trigger_cb> trigger_funcs;
 };
 
 // Get the hash key for the passed in key/mouse button, modifiers, action combination
 u32 generate_keymap_id(u16 kmcode, u16 keymods, u8 mbutton_mask);
-
-// Get the hash key for the passed in key/mouse button, modifiers, action combination
-u32 generate_keymap_id(const input_keymap_entry &kentry);
 
 // Get the key/mouse button code from the hash key
 input_kmcode get_kmcode_from_keymap_id(u32 id);
@@ -82,35 +89,37 @@ u16 get_keymods_from_keymap_id(u32 id);
 u8 get_mbutton_mask_from_keymap_id(u32 key);
 
 // Set keymap entry overwriting an existing one if its there
-void set_keymap_entry(const input_keymap_entry &entry, input_keymap *km);
+void set_keymap_entry(input_keymap *km, u32 id, const input_keymap_entry &entry);
+void set_keymap_entry(input_keymap *km, input_kmcode kmcode, u16 keymods, u8 mbutton_mask, const input_keymap_entry &entry);
 
-// Insert keymap entry - if it exists return false otherwise return true
-bool add_keymap_entry(const input_keymap_entry &entry, input_keymap *km);
+// Add keymap entry - if it exists return false otherwise return true
+bool add_keymap_entry(input_keymap *km, u32 id, const input_keymap_entry &entry);
+bool add_keymap_entry(input_keymap *km, input_kmcode kmcode, u16 keymods, u8 mbutton_mask, const input_keymap_entry &entry);
 
 // Find keymap entry by key and return it - return null if no match is found
-input_keymap_entry *find_keymap_entry(u32 id, input_keymap *km);
+input_keymap_entry *find_keymap_entry(input_keymap *km, u32 id);
 
 // Find keymap entry by key and return it - return null if no match is found
-const input_keymap_entry *find_keymap_entry(u32 id, const input_keymap *km);
+const input_keymap_entry *find_keymap_entry(const input_keymap *km, u32 id);
 
 // Find the keymap entry with name and return it - return null if no match is found
-input_keymap_entry *find_keymap_entry(const char *name, input_keymap *km);
+input_keymap_entry *find_keymap_entry(input_keymap *km, const char *name);
 
 // Find the keymap entry with name and return it - return null if no match is found
-const input_keymap_entry *find_keymap_entry(const char *name, const input_keymap *km);
+const input_keymap_entry *find_keymap_entry(const input_keymap *km, const char *name);
 
 // Remove a keymap entry - returns true if removed
-bool remove_keymap_entry(u32 id, input_keymap *km);
+bool remove_keymap_entry(input_keymap *km, u32 id);
 
 // Map the platform event to input_keymap_entries
-void map_input_event(const platform_input_event *raw, const input_keymap_stack *stack);
+void map_input_event(const input_keymap_stack *stack, const platform_input_event *raw);
 
 // Map the frame platform events to input_keymap_entries
-void map_input_frame(const platform_frame_input_events *frame, const input_keymap_stack *stack);
+void map_input_frame(const input_keymap_stack *stack, const platform_frame_input_events *frame);
 
 // Push km to the top of the keymap stack - top is highest priority in input_map_event
 // Returns null if fails
-input_keymap **push_keymap(input_keymap *km, input_keymap_stack *stack);
+input_keymap **push_keymap(input_keymap_stack *stack, input_keymap *km);
 
 // Returns true if km is found in stack, otherwise returns false
 bool keymap_in_stack(const input_keymap *km, const input_keymap_stack *stack);

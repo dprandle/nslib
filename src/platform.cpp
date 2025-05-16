@@ -331,7 +331,7 @@ intern void handle_sdl_key_event(platform_ctxt *ctxt, const SDL_KeyboardEvent &e
     ievent.key.scancode = ev.scancode;
     ievent.key.raw_scancode = ev.raw;
     ievent.key.keyboard_id = ev.which;
-    ilog("Got %s event: %s", input_event_type_to_string(ievent.type), js(ievent));
+    tlog("Got %s event: %s", input_event_type_to_string(ievent.type), js(ievent));
     arr_push_back(&ctxt->finp.events, ievent);
 }
 
@@ -350,7 +350,7 @@ intern void handle_sdl_mbutton_event(platform_ctxt *ctxt, const SDL_MouseButtonE
     ievent.mbutton.mpos = {ev.x, ev.y};
     ievent.mbutton.norm_mpos = ievent.mbutton.mpos / win_sz;
     ievent.mbutton.mouse_id = ev.which;
-    ilog("Got %s event: %s", input_event_type_to_string(ievent.type), js(ievent));
+    tlog("Got %s event: %s", input_event_type_to_string(ievent.type), js(ievent));
     arr_push_back(&ctxt->finp.events, ievent);
 }
 
@@ -370,7 +370,6 @@ intern void handle_sdl_mmotion_event(platform_ctxt *ctxt, const SDL_MouseMotionE
     ievent.mmotion.delta = {ev.xrel, ev.yrel};
     ievent.mmotion.norm_delta = ievent.mmotion.delta / win_sz;
     ievent.mmotion.mouse_id = ev.which;
-    // ilog("Got %s event: %s", input_event_type_to_string(ievent.type), js(ievent));
     arr_push_back(&ctxt->finp.events, ievent);
 }
 
@@ -390,7 +389,7 @@ intern void handle_sdl_mwheel_event(platform_ctxt *ctxt, const SDL_MouseWheelEve
     ievent.mwheel.delta = {ev.x, ev.y};
     ievent.mwheel.idelta = {ev.integer_x, ev.integer_y};
     ievent.mwheel.mouse_id = ev.which;
-    ilog("Got %s event: %s", input_event_type_to_string(ievent.type), js(ievent));
+    tlog("Got %s event: %s", input_event_type_to_string(ievent.type), js(ievent));
     arr_push_back(&ctxt->finp.events, ievent);
 }
 
@@ -401,7 +400,7 @@ intern void handle_sdl_window_geom_with_prev(platform_ctxt *ctxt, const ivec2 &p
     wevent.timestamp = ev.timestamp;
     wevent.win_id = ev.windowID;
     wevent.data = {prev, {ev.data1, ev.data2}};
-    ilog("Got %s event: %s", window_event_type_to_string(wevent.type), js(wevent));
+    tlog("Got %s event: %s", window_event_type_to_string(wevent.type), js(wevent));
     arr_push_back(&ctxt->fwind.events, wevent);
 }
 
@@ -412,7 +411,7 @@ intern void handle_sdl_window_event(platform_ctxt *ctxt, int data, platform_wind
     wevent.timestamp = ev.timestamp;
     wevent.win_id = ev.windowID;
     wevent.idata = data;
-    ilog("Got %s event: %s", window_event_type_to_string(wevent.type), js(wevent));
+    tlog("Got %s event: %s", window_event_type_to_string(wevent.type), js(wevent));
     arr_push_back(&ctxt->fwind.events, wevent);
 }
 
@@ -494,9 +493,7 @@ void process_platform_events(platform_ctxt *pf)
             }
             break;
         case SDL_EVENT_MOUSE_MOTION:
-            if (!io.WantCaptureMouse) {
-                handle_sdl_mmotion_event(pf, event.motion);
-            }
+            handle_sdl_mmotion_event(pf, event.motion);
             break;
         case SDL_EVENT_MOUSE_WHEEL:
             if (!io.WantCaptureMouse) {

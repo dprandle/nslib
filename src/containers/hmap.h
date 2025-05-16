@@ -38,7 +38,7 @@ struct hmap_bucket
 };
 
 template<class Key>
-using hash_func = u64(const Key &, u64, u64);
+using hash_func = u64(const Key&, u64, u64);
 
 // Because hmap uses an array as it's memory management, all of the default dtor/copy ctor, assignment operator, etc
 // should work just fine
