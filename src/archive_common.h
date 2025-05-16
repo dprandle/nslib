@@ -1,7 +1,6 @@
 #pragma once
 #include <cstring>
 
-#include "logging.h"
 #include "basic_types.h"
 #include "basic_type_traits.h"
 
@@ -72,13 +71,11 @@ const char *get_flag_for_type(T &var)
 template<class ArchiveT, class T>
 void pack_unpack_begin(ArchiveT *, T &, const pack_var_info &vinfo)
 {
-    dlog("Pack %s begin", vinfo.name);
 }
 
 template<class ArchiveT, class T>
 void pack_unpack_end(ArchiveT *, T &, const pack_var_info &vinfo)
 {
-    dlog("Pack %s end", vinfo.name);
 }
 
 template<class ArchiveT, class T>

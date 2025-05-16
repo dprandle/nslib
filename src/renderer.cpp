@@ -990,7 +990,7 @@ intern void recreate_swapchain(renderer *rndr)
     ilog("Recreating swapchain");
     // Recreating the swapchain will wait on all semaphores and fences before continuing
     auto dev = &rndr->vk.inst.device;
-    vkDeviceWaitIdle(dev->hndl);
+    vkr_device_wait_idle(dev);
     terminate_swapchain_images_and_framebuffer(rndr);
     vkr_terminate_swapchain(&dev->swapchain, &rndr->vk);
     vkr_terminate_surface(&rndr->vk, rndr->vk.inst.surface);

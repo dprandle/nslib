@@ -1,6 +1,6 @@
 #pragma once
 
-#include "math/vector2.h"
+#include "containers/linked_list.h"
 #include "containers/string.h"
 #include "containers/hmap.h"
 #include "input_kmcodes.h"
@@ -29,6 +29,7 @@ using input_event_func = void(const input_trigger &ev, void *user);
 struct input_keymap_entry
 {
     string name{};
+    u8 action_mask{INPUT_ACTION_PRESS};
     u32 flags{};
 };
 
@@ -44,11 +45,12 @@ struct input_trigger_cb
     void *user{};
 };
 
-pup_func(input_trigger_cb) {
+pup_func(input_trigger_cb)
+{
     sizet fptr = (sizet)val.func;
     sizet uptr = (sizet)val.user;
-    pup_var(ar, fptr, {.name="func"});
-    pup_var(ar, fptr, {.name="user"});
+    pup_var(ar, fptr, {.name = "func"});
+    pup_var(ar, fptr, {.name = "user"});
 }
 
 bool operator==(const input_keymap_entry &lhs, const input_keymap_entry &rhs);
@@ -69,11 +71,18 @@ struct input_keymap
     u8 mbutton_mask{MBUTTON_MASK_LEFT | MBUTTON_MASK_MIDDLE | MBUTTON_MASK_RIGHT | MBUTTON_MASK_X1 | MBUTTON_MASK_X2};
 };
 
+struct input_pressed_entry
+{
+    const input_keymap_entry *kme;
+    input_trigger_cb cb;
+};
+
 // Keymaps are owned elsewhere - likely an asset as they will just have keyboard shortcuts.... assigned to what?
 struct input_keymap_stack
 {
     static_array<input_keymap *, MAX_INPUT_CONTEXT_STACK_COUNT> kmaps{};
     hmap<u64, input_trigger_cb> trigger_funcs;
+    hmap<u16, static_array<input_pressed_entry, 4>> cur_pressed;
 };
 
 // Get the hash key for the passed in key/mouse button, modifiers, action combination
@@ -112,10 +121,10 @@ const input_keymap_entry *find_keymap_entry(const input_keymap *km, const char *
 bool remove_keymap_entry(input_keymap *km, u32 id);
 
 // Map the platform event to input_keymap_entries
-void map_input_event(const input_keymap_stack *stack, const platform_input_event *raw);
+void map_input_event(input_keymap_stack *stack, const platform_input_event *raw);
 
 // Map the frame platform events to input_keymap_entries
-void map_input_frame(const input_keymap_stack *stack, const platform_frame_input_events *frame);
+void map_input_frame(input_keymap_stack *stack, const platform_frame_input_events *frame);
 
 // Push km to the top of the keymap stack - top is highest priority in input_map_event
 // Returns null if fails

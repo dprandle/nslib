@@ -1,9 +1,9 @@
 #include <cstring>
 
 #include "vk_context.h"
+#include "platform.h"
 #include "SDL3/SDL_vulkan.h"
 #include "logging.h"
-#include "memory.h"
 
 #define PRINT_MEM_DEBUG false
 #define PRINT_MEM_INSTANCE_ONLY false
@@ -838,11 +838,10 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
 
     // Handle the extents - if the screen coords don't match the pixel coords then we gotta set this from the frame
     // buffer as by default the extents are screen coords - this is really only for retina displays
-    // swap_create.imageExtent = caps->currentExtent;
+    swap_create.imageExtent = caps->currentExtent;
     // if (caps->currentExtent.width == VKR_INVALID) {
-    int width, height;
-    SDL_GetWindowSizeInPixels((SDL_Window *)vk->cfg.window, &width, &height);
-    swap_create.imageExtent = {(u32)width, (u32)height};
+    auto cur_win_sz = get_window_pixel_size(vk->cfg.window);
+    swap_create.imageExtent = {(u32)cur_win_sz.w, (u32)cur_win_sz.h};
     // swap_create.imageExtent.width = std::clamp(swap_create.imageExtent.width, caps->minImageExtent.width, caps->maxImageExtent.width);
     // swap_create.imageExtent.height = std::clamp(swap_create.imageExtent.height, caps->minImageExtent.height,
     // caps->maxImageExtent.height);
@@ -2007,7 +2006,6 @@ void vkr_device_wait_idle(vkr_device *dev)
 
 void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
 {
-    // TODO: Make this wait on our semaphores and fences more explicitly
     ilog("Terminating vkr device");
     vkr_terminate_render_frames(dev, vk);
     vkr_terminate_swapchain(&dev->swapchain, vk);

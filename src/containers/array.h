@@ -1,7 +1,6 @@
 #pragma once
 
 #include <utility>
-#include <new>
 #include <algorithm>
 
 #include "../archive_common.h"

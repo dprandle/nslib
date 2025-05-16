@@ -7,6 +7,7 @@
 #include "containers/string.h"
 #include "containers/hset.h"
 #include "containers/hmap.h"
+#include "logging.h"
 
 #define js(p) str_cstr(to_json(p))
 

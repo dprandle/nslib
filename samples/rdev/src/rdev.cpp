@@ -15,6 +15,7 @@ struct app_data
     robj_cache_group cg{};
 
     input_keymap global_km;
+    
     input_keymap_stack stack{};
 
     u32 cam_id;
@@ -65,7 +66,44 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_ke
     auto ins = add_input_trigger_func(&app->stack, "cam-turn", {cam_turn_func, app});
     assert(ins);
 
+    auto move_forward_action = [](const input_trigger &t, void *data) {
+        auto app = (app_data *)data;
+        app->movement.y += (t.ev->key.action - 1)*(-2) + 1;
+    };
+    auto move_back_action = [](const input_trigger &t, void *data) {
+        auto app = (app_data *)data;
+        app->movement.y -= (t.ev->key.action - 1)*(-2) + 1;
+    };
+    auto move_right_action = [](const input_trigger &t, void *data) {
+        auto app = (app_data *)data;
+        app->movement.x += (t.ev->key.action - 1)*(-2) + 1;
+    };
+    auto move_left_action = [](const input_trigger &t, void *data) {
+        auto app = (app_data *)data;
+        app->movement.x -= (t.ev->key.action - 1)*(-2) + 1;
+    };
+    
+    
+    ins = add_input_trigger_func(&app->stack, "move-forward", {move_forward_action, app});
+    assert(ins);
+    ins = add_input_trigger_func(&app->stack, "move-back", {move_back_action, app});
+    assert(ins);
+    ins = add_input_trigger_func(&app->stack, "move-right", {move_right_action, app});
+    assert(ins);
+    ins = add_input_trigger_func(&app->stack, "move-left", {move_left_action, app});
+    assert(ins);
+
     add_keymap_entry(&app->global_km, KMCODE_MMOTION, 0, MBUTTON_MASK_MIDDLE, {"cam-turn"});
+    add_keymap_entry(&app->global_km, KMCODE_KEY_W, 0, 0, {"move-forward", INPUT_ACTION_PRESS | INPUT_ACTION_RELEASE});
+    add_keymap_entry(&app->global_km, KMCODE_KEY_S, 0, 0, {"move-back", INPUT_ACTION_PRESS | INPUT_ACTION_RELEASE});
+    add_keymap_entry(&app->global_km, KMCODE_KEY_D, 0, 0, {"move-right", INPUT_ACTION_PRESS | INPUT_ACTION_RELEASE});
+    add_keymap_entry(&app->global_km, KMCODE_KEY_A, 0, 0, {"move-left", INPUT_ACTION_PRESS | INPUT_ACTION_RELEASE});
+
+    add_keymap_entry(&app->global_km, KMCODE_KEY_W, 0, MBUTTON_MASK_MIDDLE, {"move-forward", INPUT_ACTION_PRESS | INPUT_ACTION_RELEASE});
+    add_keymap_entry(&app->global_km, KMCODE_KEY_S, 0, MBUTTON_MASK_MIDDLE, {"move-back", INPUT_ACTION_PRESS | INPUT_ACTION_RELEASE});
+    add_keymap_entry(&app->global_km, KMCODE_KEY_D, 0, MBUTTON_MASK_MIDDLE, {"move-right", INPUT_ACTION_PRESS | INPUT_ACTION_RELEASE});
+    add_keymap_entry(&app->global_km, KMCODE_KEY_A, 0, MBUTTON_MASK_MIDDLE, {"move-left", INPUT_ACTION_PRESS | INPUT_ACTION_RELEASE});
+    
 }
 
 int init(platform_ctxt *ctxt, void *user_data)

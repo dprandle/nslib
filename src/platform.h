@@ -4,6 +4,7 @@
 #include "math/vector2.h"
 #include "containers/array.h"
 #include "util.h"
+#include "logging.h"
 
 namespace nslib
 {
