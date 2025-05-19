@@ -245,7 +245,7 @@ void map_input_event(input_keymap_stack *stack, const platform_input_event *raw,
                 if (key_or_mbtn) {
                     if (t.ev->key.action == INPUT_ACTION_PRESS && test_flags(kentry->action_mask, INPUT_ACTION_RELEASE)) {
                         auto cur_press_item = hmap_find_or_insert(&stack->cur_pressed, t.ev->kmcode);
-                        arr_emplace_back(&cur_press_item->val, kentry, cb);
+                        arr_emplace_back(&cur_press_item->val, input_pressed_entry{.kme=kentry, .cb=cb});
                     }
                     call_func = test_flags(kentry->action_mask, t.ev->key.action);
                 }
