@@ -133,6 +133,13 @@ bool fequals(T left, T right, T eps = FLOAT_EPS)
     return (left < (right + FLOAT_EPS)) && (left > (right - FLOAT_EPS));
 }
 
+template<holds_floating_pt T>
+bool fequals(T left, T right)
+{
+    return (left == right);
+}
+
+
 template<holds_basic_comparable_type T>
 requires holds_floating_pt<T>
 bool operator==(const T &lhs_, const T &rhs_)

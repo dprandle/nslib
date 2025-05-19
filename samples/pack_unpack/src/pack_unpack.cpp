@@ -294,17 +294,16 @@ int app_init(platform_ctxt *ctxt, void *user_data)
 
     // ilog("data_to_pup after unpacking: \n%s", to_cstr(data));
 
-    ilog("Packing data_to_pup to json archive");
+    ilog("Packing data_to_pup to json archive: %s", to_cstr(data));
     
-    json_archive ja{};
+    json_archive ja{}; 
     init_jsa(&ja);
     pup_var(&ja, data, {"data_to_pup"});
+    
     string js_str = jsa_to_json_string(ja, true);
-    //string js_compact_str = jsa_to_json_string(ja, false);
     terminate_jsa(&ja);
     
     ilog("Resulting JSON pretty string:\n%s", str_cstr(js_str));
-    //ilog("Resulting JSON compact string:\n%s", str_cstr(js_compact_str));
     write_file("data.json", str_cstr(js_str), 1, str_len(js_str));
 
     clear_data(&data);
@@ -348,7 +347,7 @@ int configure_platform(platform_init_info *settings, app_data *app)
     settings->wind.resolution = {1920, 1080};
     settings->wind.title = "Pack Unpack";
     settings->default_log_level = LOG_DEBUG;
-    settings->user_cb.init = app_init;
+    settings->user_hooks.init = app_init;
     return err_code::PLATFORM_NO_ERROR;
 }
 

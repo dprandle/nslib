@@ -65,14 +65,25 @@ enum platform_window_flags
     WINDOW_NOT_FOCUSABLE = 1u << 31
 };
 
-enum platform_input_event_type
+enum platform_event_type
 {
-    INPUT_EVENT_TYPE_INVALID = -1,
-    INPUT_EVENT_TYPE_KEY,
-    INPUT_EVENT_TYPE_MBUTTON,
-    INPUT_EVENT_TYPE_MWHEEL,
-    INPUT_EVENT_TYPE_MMOTION
+    EVENT_TYPE_INVALID = -1,
+    EVENT_TYPE_INPUT_KEY,
+    EVENT_TYPE_INPUT_MBUTTON,
+    EVENT_TYPE_INPUT_MWHEEL,
+    EVENT_TYPE_INPUT_MMOTION,
+    EVENT_TYPE_WINDOW_RESIZE,
+    EVENT_TYPE_WINDOW_PIXEL_SIZE_CHANGE,
+    EVENT_TYPE_WINDOW_MOVE,
+    EVENT_TYPE_WINDOW_FOCUS,
+    EVENT_TYPE_WINDOW_MOUSE,
+    EVENT_TYPE_WINDOW_FULLSCREEN,
+    EVENT_TYPE_WINDOW_VIEWSTATE,
+    EVENT_TYPE_WINDOW_VISIBILITY
 };
+
+bool is_input_event(u32 ev_type);
+bool is_window_event(u32 ev_typ);
 
 struct platform_key_event
 {
@@ -162,12 +173,9 @@ pup_func(platform_mwheel_event)
 
 struct platform_input_event
 {
-    platform_input_event_type type{INPUT_EVENT_TYPE_INVALID};
-    u64 timestamp;
     u16 kmcode;
     u16 keymods;
     u8 mbutton_mask;
-    u32 win_id;
     union
     {
         platform_key_event key;
@@ -179,111 +187,110 @@ struct platform_input_event
 
 pup_func(platform_input_event)
 {
-    pup_enum_member(platform_input_event_type, u32, type);
-    pup_member(timestamp);
+    u32 type = *((u32 *)vinfo.meta.data);
     pup_member(kmcode);
     pup_member(keymods);
     pup_member(mbutton_mask);
-    pup_member(win_id);
-    if (val.type == INPUT_EVENT_TYPE_KEY) {
+    if (type == EVENT_TYPE_INPUT_KEY) {
         pup_member(key);
     }
-    else if (val.type == INPUT_EVENT_TYPE_MBUTTON) {
+    else if (type == EVENT_TYPE_INPUT_MBUTTON) {
         pup_member(mbutton);
     }
-    else if (val.type == INPUT_EVENT_TYPE_MWHEEL) {
+    else if (type == EVENT_TYPE_INPUT_MWHEEL) {
         pup_member(mwheel);
     }
-    else if (val.type == INPUT_EVENT_TYPE_MMOTION) {
+    else if (type == EVENT_TYPE_INPUT_MMOTION) {
         pup_member(mmotion);
     }
 }
 
-enum platform_window_event_type
+union platform_window_event
 {
-    WINDOW_EVENT_TYPE_INVALID = -1,
-    WINDOW_EVENT_TYPE_RESIZE,
-    WINDOW_EVENT_TYPE_PIXEL_SIZE_CHANGE,
-    WINDOW_EVENT_TYPE_MOVE,
-    WINDOW_EVENT_TYPE_FOCUS,
-    WINDOW_EVENT_TYPE_MOUSE,
-    WINDOW_EVENT_TYPE_FULLSCREEN,
-    WINDOW_EVENT_TYPE_VIEWSTATE,
-    WINDOW_EVENT_TYPE_VISIBILITY
-};
+    // First is new size, second is prev size - for window resize these are screen coords, for fb resize they are pixels
+    pair<ivec2, ivec2> resize{};
+    // First is new pos, second is prev pos
+    pair<ivec2, ivec2> move;
+    // Generic name
+    pair<ivec2, ivec2> data;
 
-struct platform_window_event
-{
-    platform_window_event_type type{WINDOW_EVENT_TYPE_INVALID};
-    u64 timestamp;
-    u32 win_id;
-    union
-    {
-        // First is new size, second is prev size - for window resize these are screen coords, for fb resize they are pixels
-        pair<ivec2, ivec2> resize{};
-        // First is new pos, second is prev pos
-        pair<ivec2, ivec2> move;
-        // Generic name
-        pair<ivec2, ivec2> data;
-
-        // Gained focus is 1, lost focus is 0
-        int focus;
-        // Mouse entered is 1, mouse left is 0
-        int mouse;
-        // Enter fullscreen is 1, leave fullscreen is 0
-        int fullscreen;
-        // Minimized is -1, restored is 0, maximized is 1
-        int viewstate;
-        // Shown is 1 and hidden is 0
-        int visibility;
-        // Generic name
-        int idata;
-    };
+    // Gained focus is 1, lost focus is 0
+    int focus;
+    // Mouse entered is 1, mouse left is 0
+    int mouse;
+    // Enter fullscreen is 1, leave fullscreen is 0
+    int fullscreen;
+    // Minimized is -1, restored is 0, maximized is 1
+    int viewstate;
+    // Shown is 1 and hidden is 0
+    int visibility;
+    // Generic name
+    int idata;
 };
 
 pup_func(platform_window_event)
 {
-    pup_enum_member(platform_window_event_type, u32, type);
-    pup_member(timestamp);
-    pup_member(win_id);
-    if (val.type == WINDOW_EVENT_TYPE_RESIZE || val.type == WINDOW_EVENT_TYPE_PIXEL_SIZE_CHANGE) {
+    u32 type = *((u32 *)vinfo.meta.data);
+    if (type == EVENT_TYPE_WINDOW_RESIZE || type == EVENT_TYPE_WINDOW_PIXEL_SIZE_CHANGE) {
         pup_member(resize);
     }
-    else if (val.type == WINDOW_EVENT_TYPE_MOVE) {
+    else if (type == EVENT_TYPE_WINDOW_MOVE) {
         pup_member(move);
     }
-    else if (val.type == WINDOW_EVENT_TYPE_FOCUS) {
+    else if (type == EVENT_TYPE_WINDOW_FOCUS) {
         pup_member(focus);
     }
-    else if (val.type == WINDOW_EVENT_TYPE_MOUSE) {
+    else if (type == EVENT_TYPE_WINDOW_MOUSE) {
         pup_member(mouse);
     }
-    else if (val.type == WINDOW_EVENT_TYPE_FULLSCREEN) {
+    else if (type == EVENT_TYPE_WINDOW_FULLSCREEN) {
         pup_member(fullscreen);
     }
-    else if (val.type == WINDOW_EVENT_TYPE_VIEWSTATE) {
+    else if (type == EVENT_TYPE_WINDOW_VIEWSTATE) {
         pup_member(viewstate);
     }
-    else if (val.type == WINDOW_EVENT_TYPE_VISIBILITY) {
+    else if (type == EVENT_TYPE_WINDOW_VISIBILITY) {
         pup_member(visibility);
     }
 }
 
-struct platform_frame_input_events
+struct platform_event
 {
-    static_array<platform_input_event, 1024> events{};
+    platform_event_type type{EVENT_TYPE_INVALID};
+    u64 timestamp;
+    u32 win_id;
+    union
+    {
+        platform_input_event ie;
+        platform_window_event we;
+    };
 };
 
-struct platform_frame_window_events
+pup_func(platform_event)
 {
-    static_array<platform_window_event, 1024> events{};
+    pup_enum_member(platform_event_type, u32, type);
+    pup_member(timestamp);
+    pup_member(win_id);
+    if (is_input_event(val.type)) {
+        pup_member_meta(ie, .data = &val.type);
+    }
+    else if (is_window_event(val.type)) {
+        pup_member_meta(we, .data = &val.type);
+    }
+}
 
-    // Screen coords
-    ivec2 win_size;
-    ivec2 pos;
+// Return true if the event was handled and the platform input should ignore it
+using platform_sdl_event_func = bool(void *sdl_event, void *user);
+struct platform_sdl_event_hook
+{
+    platform_sdl_event_func *cb;
+    void *user;
+};
 
-    // Pixels
-    ivec2 fb_size;
+struct platform_frame_event_queue
+{
+    static_array<platform_event, 1024> events{};
+    platform_sdl_event_hook sdl_hook{};
 };
 
 struct platform_memory
@@ -296,15 +303,19 @@ struct platform_memory
 struct platform_ctxt
 {
     void *win_hndl{};
+    f32 display_scale{};
+
     profile_timepoints time_pts{};
-    platform_frame_input_events finp;
-    platform_frame_window_events fwind;
+    platform_frame_event_queue feventq{};
+
     platform_memory arenas{};
     int finished_frames{0};
     char **argv{};
     bool running{false};
     int argc;
 };
+
+using platform_user_hook = int(platform_ctxt *ctxt, void *user_data);
 
 struct platform_file_err_desc
 {
@@ -326,20 +337,18 @@ struct platform_memory_init_info
     sizet frame_linear_size{100 * MB_SIZE};
 };
 
-using platform_user_cb = int(platform_ctxt *ctxt, void *user_data);
-
-struct platform_user_callbacks
+struct platform_user_hooks
 {
-    platform_user_cb *init;
-    platform_user_cb *run_frame;
-    platform_user_cb *terminate;
+    platform_user_hook *init;
+    platform_user_hook *run_frame;
+    platform_user_hook *terminate;
 };
 
 struct platform_init_info
 {
     int argc;
     char **argv;
-    platform_user_callbacks user_cb;
+    platform_user_hooks user_hooks;
     platform_window_init_info wind;
     platform_memory_init_info mem;
     int default_log_level{LOG_TRACE};
@@ -355,7 +364,9 @@ void platform_free(void *block);
 void start_platform_frame(platform_ctxt *ctxt);
 void end_platform_frame(platform_ctxt *ctxt);
 
-void *create_window(const platform_window_init_info *pf_config);
+void set_platform_sdl_event_hook(void *window, const platform_sdl_event_hook &hook);
+
+void *create_window(const platform_window_init_info *pf_config, float *display_scale = nullptr);
 
 // Get the window size in screen coords
 ivec2 get_window_size(void *window_hndl);
@@ -375,17 +386,14 @@ vec2 get_mouse_pos();
 // Get the OS specific thread id
 u64 get_thread_id();
 
-const char *window_event_type_to_string(platform_window_event_type type);
-const char *input_event_type_to_string(platform_input_event_type type);
+const char *event_type_to_string(platform_event_type type);
 
 // // Get the cursor
 // vec2 get_cursor_pos(void *window_hndl);
 // vec2 get_normalized_cursor_pos(void *window_hndl);
 
-platform_window_event *get_latest_window_event(platform_window_event_type type, platform_frame_window_events *fwind);
-bool frame_has_event_type(platform_window_event_type type, const platform_frame_window_events *fwind);
+bool frame_has_event_type(platform_event_type type, const platform_frame_event_queue *fevents);
 void process_platform_events(platform_ctxt *pf);
-bool window_pixel_size_changed_this_frame(void *win_hndl);
 bool window_resized_this_frame(void *win_hndl);
 
 const char *get_path_basename(const char *path);
@@ -441,8 +449,8 @@ sizet write_file(const char *fname, const byte_array *data, sizet byte_offset = 
     if (init_platform(&pf_config, &ctxt) != err_code::PLATFORM_NO_ERROR) {                                                                 \
         return err_code::PLATFORM_INIT_FAIL;                                                                                               \
     }                                                                                                                                      \
-    if (pf_config.user_cb.init) {                                                                                                          \
-        int err = pf_config.user_cb.init(&ctxt, &user_data);                                                                               \
+    if (pf_config.user_hooks.init) {                                                                                                       \
+        int err = pf_config.user_hooks.init(&ctxt, &user_data);                                                                            \
         if (err != err_code::PLATFORM_NO_ERROR) {                                                                                          \
             elog("User init failed with code %d", err);                                                                                    \
             return terminate_platform(&ctxt);                                                                                              \
@@ -451,13 +459,13 @@ sizet write_file(const char *fname, const byte_array *data, sizet byte_offset = 
     ptimer_restart(&ctxt.time_pts);                                                                                                        \
     while (run_loop && ctxt.running) {                                                                                                     \
         start_platform_frame(&ctxt);                                                                                                       \
-        if (pf_config.user_cb.run_frame && pf_config.user_cb.run_frame(&ctxt, &user_data) != err_code::PLATFORM_NO_ERROR) {                \
+        if (pf_config.user_hooks.run_frame && pf_config.user_hooks.run_frame(&ctxt, &user_data) != err_code::PLATFORM_NO_ERROR) {          \
             run_loop = false;                                                                                                              \
         }                                                                                                                                  \
         end_platform_frame(&ctxt);                                                                                                         \
     }                                                                                                                                      \
-    if (pf_config.user_cb.terminate) {                                                                                                     \
-        int err = pf_config.user_cb.terminate(&ctxt, &user_data);                                                                          \
+    if (pf_config.user_hooks.terminate) {                                                                                                  \
+        int err = pf_config.user_hooks.terminate(&ctxt, &user_data);                                                                       \
         if (err != err_code::PLATFORM_NO_ERROR) {                                                                                          \
             elog("User terminate failed with code %d", err);                                                                               \
         }                                                                                                                                  \

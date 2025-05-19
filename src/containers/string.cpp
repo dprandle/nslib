@@ -241,7 +241,7 @@ string *str_resize(string *str, sizet new_size)
     }
 
     // Make sure our current size doesn't exceed the capacity - it shouldnt that would definitely be a bug if it did.
-    assert(str_len(*str) < str_capacity(*str));
+    asrt(str_len(*str) < str_capacity(*str));
 
     sizet cap = str_capacity(*str);
     if ((new_size + 1) > cap) {
@@ -274,7 +274,7 @@ string *str_reserve(string *str, sizet new_cap)
 
 string *str_shrink_to_fit(string *str)
 {
-    assert(str_len(str) <= str_capacity(str));
+    asrt(str_len(str) <= str_capacity(str));
     if (str_len(str) + 1 < str_capacity(str)) {
         str_set_capacity(str, str_len(str) + 1);
     }

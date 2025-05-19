@@ -78,7 +78,7 @@ intern void vk_gpu_free_cb(VmaAllocator allocator, uint32_t memory_type, VkDevic
 
 intern void *vk_alloc(void *user, sizet size, sizet alignment, VkSystemAllocationScope scope)
 {
-    assert(user);
+    asrt(user);
     auto arenas = (vk_arenas *)user;
     ++arenas->stats[scope].alloc_count;
     arenas->stats[scope].req_alloc += size;
@@ -124,7 +124,7 @@ intern void *vk_alloc(void *user, sizet size, sizet alignment, VkSystemAllocatio
 
 intern void vk_free(void *user, void *ptr)
 {
-    assert(user);
+    asrt(user);
     if (!ptr) {
         return;
     }
@@ -171,7 +171,7 @@ intern void vk_free(void *user, void *ptr)
 
 intern void *vk_realloc(void *user, void *ptr, sizet size, sizet alignment, VkSystemAllocationScope scope)
 {
-    assert(user);
+    asrt(user);
     if (!ptr) {
         return nullptr;
     }
@@ -183,7 +183,7 @@ intern void *vk_realloc(void *user, void *ptr, sizet size, sizet alignment, VkSy
 
     sizet header_size = sizeof(internal_alloc_header);
     auto old_header = (internal_alloc_header *)((sizet)ptr - header_size);
-    assert(old_header->scope == scope);
+    asrt(old_header->scope == scope);
     if (scope == VK_SYSTEM_ALLOCATION_SCOPE_COMMAND) {
         arena = arenas->command_arena;
     }
@@ -229,7 +229,7 @@ intern void *vk_realloc(void *user, void *ptr, sizet size, sizet alignment, VkSy
     if (diff != (new_block_size - old_block_size)) {
         wlog("Diff problems!");
     }
-    //    assert(diff == (new_block_size - old_block_size));
+    //    asrt(diff == (new_block_size - old_block_size));
     return ret;
 }
 
@@ -241,12 +241,12 @@ void vkr_enumerate_device_extensions(const vkr_phys_device *pdevice,
     u32 extension_count{0};
     ilog("Enumerating device extensions...");
     int res = vkEnumerateDeviceExtensionProperties(pdevice->hndl, nullptr, &extension_count, nullptr);
-    assert(res == VK_SUCCESS);
+    asrt(res == VK_SUCCESS);
     VkExtensionProperties *ext_array =
         (VkExtensionProperties *)mem_alloc(extension_count * sizeof(VkExtensionProperties), arenas->command_arena);
     memset(ext_array, 0, extension_count * sizeof(VkExtensionProperties));
     res = vkEnumerateDeviceExtensionProperties(pdevice->hndl, nullptr, &extension_count, ext_array);
-    assert(res == VK_SUCCESS);
+    asrt(res == VK_SUCCESS);
     for (u32 i = 0; i < extension_count; ++i) {
         bool ext_enabled{false};
         for (u32 j = 0; j < enabled_extension_count; ++j) {
@@ -263,12 +263,12 @@ void vkr_enumerate_instance_extensions(const char *const *enabled_extensions, u3
     u32 extension_count{0};
     ilog("Enumerating instance extensions...");
     int res = vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, nullptr);
-    assert(res == VK_SUCCESS);
+    asrt(res == VK_SUCCESS);
     VkExtensionProperties *ext_array =
         (VkExtensionProperties *)mem_alloc(extension_count * sizeof(VkExtensionProperties), arenas->command_arena);
     memset(ext_array, 0, extension_count * sizeof(VkExtensionProperties));
     res = vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, ext_array);
-    assert(res == VK_SUCCESS);
+    asrt(res == VK_SUCCESS);
     for (u32 i = 0; i < extension_count; ++i) {
         bool ext_enabled{false};
         for (u32 j = 0; j < enabled_extension_count; ++j) {
@@ -285,12 +285,12 @@ void vkr_enumerate_validation_layers(const char *const *enabled_layers, u32 enab
     u32 layer_count{0};
     ilog("Enumerating vulkan validation layers...");
     int res = vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
-    assert(res == VK_SUCCESS);
+    asrt(res == VK_SUCCESS);
     VkLayerProperties *layer_array = (VkLayerProperties *)mem_alloc(layer_count * sizeof(VkLayerProperties), arenas->command_arena);
     memset(layer_array, 0, layer_count * sizeof(VkLayerProperties));
 
     res = vkEnumerateInstanceLayerProperties(&layer_count, layer_array);
-    assert(res == VK_SUCCESS);
+    asrt(res == VK_SUCCESS);
 
     for (u32 i = 0; i < layer_count; ++i) {
         bool enabled{false};
@@ -336,8 +336,8 @@ intern void fill_extension_funcs(vkr_debug_extension_funcs *funcs, VkInstance hn
     funcs->create_debug_utils_messenger = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(hndl, "vkCreateDebugUtilsMessengerEXT");
     funcs->destroy_debug_utils_messenger =
         (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(hndl, "vkDestroyDebugUtilsMessengerEXT");
-    assert(funcs->create_debug_utils_messenger);
-    assert(funcs->destroy_debug_utils_messenger);
+    asrt(funcs->create_debug_utils_messenger);
+    asrt(funcs->destroy_debug_utils_messenger);
 }
 
 intern void fill_debug_ext_create_info(VkDebugUtilsMessengerCreateInfoEXT *create_info, void *user_p)
@@ -473,7 +473,7 @@ vkr_queue_families vkr_get_queue_families(const vkr_context *vk, VkPhysicalDevic
     ilog("%d queue families available for selected device", count);
 
     // Crash if we ever get a higher count than our max queue fam allotment
-    assert(count <= MAX_QUEUE_REQUEST_COUNT);
+    asrt(count <= MAX_QUEUE_REQUEST_COUNT);
     for (u32 i = 0; i < count; ++i) {
         bool has_flag = test_flags(qfams[i].queueFlags, VK_QUEUE_GRAPHICS_BIT);
         bool nothing_set_yet = ret.qinfo[VKR_QUEUE_FAM_TYPE_GFX].available_count == 0;
@@ -734,7 +734,6 @@ int vkr_select_best_graphics_physical_device(const vkr_context *vk, vkr_phys_dev
         if (cur_score > high_score) {
             dev_info->hndl = pdevices[i];
             dev_info->qfams = fams;
-            vkr_fill_pdevice_swapchain_support(dev_info->hndl, vk->inst.surface, &dev_info->swap_support);
             high_score = cur_score;
             sel_dev_props = props;
             sel_dev_features = features;
@@ -785,10 +784,14 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
     arr_init(&sw_info->images, vk->cfg.arenas.persistent_arena);
 
     // I no like typing too much
-    auto caps = &vk->inst.pdev_info.swap_support.capabilities;
+    vkr_pdevice_swapchain_support swap_support{};
+    vkr_init_pdevice_swapchain_support(&swap_support, vk->cfg.arenas.command_arena);    
+    vkr_fill_pdevice_swapchain_support(vk->inst.pdev_info.hndl, vk->inst.surface, &swap_support);
+
+    // auto caps = &vk->inst.pdev_info.swap_support.capabilities;
+    // auto formats = &vk->inst.pdev_info.swap_support.formats;
+    // auto pmodes = &vk->inst.pdev_info.swap_support.present_modes;
     auto qfams = &vk->inst.pdev_info.qfams;
-    auto formats = &vk->inst.pdev_info.swap_support.formats;
-    auto pmodes = &vk->inst.pdev_info.swap_support.present_modes;
 
     VkSwapchainCreateInfoKHR swap_create{};
     swap_create.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -796,12 +799,12 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
     swap_create.imageArrayLayers = 1;
     swap_create.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     swap_create.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    swap_create.preTransform = vk->inst.pdev_info.swap_support.capabilities.currentTransform;
+    swap_create.preTransform = swap_support.capabilities.currentTransform;
     swap_create.clipped = VK_TRUE;
     swap_create.oldSwapchain = VK_NULL_HANDLE;
-    swap_create.minImageCount = caps->minImageCount + 1;
-    if (caps->maxImageCount != 0 && caps->maxImageCount < swap_create.minImageCount) {
-        swap_create.minImageCount = caps->maxImageCount;
+    swap_create.minImageCount = swap_support.capabilities.minImageCount + 1;
+    if (swap_support.capabilities.maxImageCount != 0 && swap_support.capabilities.maxImageCount < swap_create.minImageCount) {
+        swap_create.minImageCount = swap_support.capabilities.maxImageCount;
     }
 
     // Basically if our present queue is different than our graphics queue then we enable concurrent sharing mode..
@@ -818,34 +821,42 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
 
     // Set the format to our ideal format, but just get the first one if thats not found
     int desired_format_ind{0};
-    for (int i = 0; i < formats->size; ++i) {
-        if ((*formats)[i].format == VK_FORMAT_B8G8R8A8_SRGB && (*formats)[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+    for (int i = 0; i < swap_support.formats.size; ++i) {
+        if (swap_support.formats[i].format == VK_FORMAT_B8G8R8A8_SRGB &&
+            swap_support.formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
             desired_format_ind = i;
             break;
         }
     }
-    swap_create.imageFormat = (*formats)[desired_format_ind].format;
-    swap_create.imageColorSpace = (*formats)[desired_format_ind].colorSpace;
+    swap_create.imageFormat = swap_support.formats[desired_format_ind].format;
+    swap_create.imageColorSpace = swap_support.formats[desired_format_ind].colorSpace;
 
     // If mailbox is available then use it, otherwise use fifo
     swap_create.presentMode = VK_PRESENT_MODE_FIFO_KHR;
-    for (int i = 0; i < pmodes->size; ++i) {
-        if ((*pmodes)[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
-            swap_create.presentMode = (*pmodes)[i];
+    for (int i = 0; i < swap_support.present_modes.size; ++i) {
+        if (swap_support.present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
+            swap_create.presentMode = swap_support.present_modes[i];
             break;
         }
     }
 
     // Handle the extents - if the screen coords don't match the pixel coords then we gotta set this from the frame
     // buffer as by default the extents are screen coords - this is really only for retina displays
-    swap_create.imageExtent = caps->currentExtent;
-    // if (caps->currentExtent.width == VKR_INVALID) {
+    swap_create.imageExtent = swap_support.capabilities.currentExtent;
+    // if (swap_support.capabilities.currentExtent.width == VKR_INVALID) {
     auto cur_win_sz = get_window_pixel_size(vk->cfg.window);
     swap_create.imageExtent = {(u32)cur_win_sz.w, (u32)cur_win_sz.h};
-    // swap_create.imageExtent.width = std::clamp(swap_create.imageExtent.width, caps->minImageExtent.width, caps->maxImageExtent.width);
-    // swap_create.imageExtent.height = std::clamp(swap_create.imageExtent.height, caps->minImageExtent.height,
-    // caps->maxImageExtent.height);
-    ilog("Should be setting extent to {%d %d}", swap_create.imageExtent.width, swap_create.imageExtent.height);
+    swap_create.imageExtent.width = std::clamp(
+        swap_create.imageExtent.width, swap_support.capabilities.minImageExtent.width, swap_support.capabilities.maxImageExtent.width);
+    swap_create.imageExtent.height = std::clamp(
+        swap_create.imageExtent.height, swap_support.capabilities.minImageExtent.height, swap_support.capabilities.maxImageExtent.height);
+    ilog("Should be setting extent to {%d %d} (min {%d %d} max {%d %d})",
+         swap_create.imageExtent.width,
+         swap_create.imageExtent.height,
+         swap_support.capabilities.minImageExtent.width,
+         swap_support.capabilities.minImageExtent.height,
+         swap_support.capabilities.maxImageExtent.width,
+         swap_support.capabilities.maxImageExtent.height);
     //    }
 
     // Create this baby boo
@@ -895,6 +906,8 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
         }
     }
     ilog("Successfully set up swapchain with %d image views", sw_info->image_views.size);
+    vkr_terminate_pdevice_swapchain_support(&swap_support);
+    
     return err_code::VKR_NO_ERROR;
 }
 
@@ -1022,7 +1035,7 @@ void vkr_terminate_cmd_pool(const vkr_context *vk, u32 fam_ind, vkr_command_pool
     arr_terminate(&cpool->buffers);
 }
 
-int vkr_init_shader_module(const vkr_context *vk, const byte_array *code, VkShaderModule *module)
+int vkr_init_shader_module(VkShaderModule *module, const byte_array *code, const vkr_context *vk)
 {
     ilog("Initializing shader module");
     VkShaderModuleCreateInfo create_info{};
@@ -1036,13 +1049,13 @@ int vkr_init_shader_module(const vkr_context *vk, const byte_array *code, VkShad
     ilog("Successfully initialized shader module");
     return err_code::VKR_NO_ERROR;
 }
-void vkr_terminate_shader_module(const vkr_context *vk, VkShaderModule module)
+void vkr_terminate_shader_module(VkShaderModule module, const vkr_context *vk)
 {
     ilog("Terminating shader module");
     vkDestroyShaderModule(vk->inst.device.hndl, module, &vk->alloc_cbs);
 }
 
-int vkr_init_render_pass(const vkr_context *vk, const vkr_rpass_cfg *cfg, vkr_rpass *rpass)
+int vkr_init_render_pass(vkr_rpass *rpass, const vkr_rpass_cfg *cfg, const vkr_context *vk)
 {
     ilog("Initializing render pass");
 
@@ -1108,7 +1121,7 @@ sizet vkr_add_render_pass(vkr_device *device, const vkr_rpass &copy)
     return ind;
 }
 
-void vkr_terminate_render_pass(const vkr_context *vk, const vkr_rpass *rpass)
+void vkr_terminate_render_pass(const vkr_rpass *rpass, const vkr_context *vk)
 {
     ilog("Terminating render pass");
     vkDestroyRenderPass(vk->inst.device.hndl, rpass->hndl, &vk->alloc_cbs);
@@ -1122,8 +1135,7 @@ VkShaderStageFlagBits vkr_shader_stage_type_bits(vkr_shader_stage_type st_type)
     case (VKR_SHADER_STAGE_FRAG):
         return VK_SHADER_STAGE_FRAGMENT_BIT;
     default:
-        elog("Shader type unknown");
-        assert(true);
+        asrt_break("Shader type unknown");
         return (VkShaderStageFlagBits)-1;
     }
 }
@@ -1136,24 +1148,23 @@ const char *vkr_shader_stage_type_str(vkr_shader_stage_type st_type)
     case (VKR_SHADER_STAGE_FRAG):
         return "frag";
     default:
-        elog("Shader type unknown");
-        assert(true);
+        asrt_break("Shader type unknown");
         return "unknown";
     }
 }
 
-int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pipeline *pipe_info)
+int vkr_init_pipeline(vkr_pipeline *pipe_info, const vkr_pipeline_cfg *cfg, const vkr_context *vk)
 {
     ilog("Initializing pipeline");
     VkPipelineShaderStageCreateInfo stages[VKR_SHADER_STAGE_COUNT]{};
     sizet actual_stagei = 0;
     for (u32 stagei = 0; stagei < VKR_SHADER_STAGE_COUNT; ++stagei) {
         if (cfg->shader_stages[stagei].code.size > 0) {
-            int err = vkr_init_shader_module(vk, &cfg->shader_stages[stagei].code, &stages[actual_stagei].module);
+            int err = vkr_init_shader_module(&stages[actual_stagei].module, &cfg->shader_stages[stagei].code, vk);
             if (err != err_code::VKR_NO_ERROR) {
                 // Destroy the previously successfully initialized shader modules
                 for (sizet previ = 0; previ < actual_stagei; ++previ) {
-                    vkr_terminate_shader_module(vk, stages[previ].module);
+                    vkr_terminate_shader_module(stages[previ].module, vk);
                 }
                 elog("Could not initialize %s shader module", vkr_shader_stage_type_str((vkr_shader_stage_type)stagei));
                 return err;
@@ -1277,7 +1288,7 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
     if (vkCreatePipelineLayout(vk->inst.device.hndl, &pipeline_layout_create_inf, &vk->alloc_cbs, &pipe_info->layout_hndl) != VK_SUCCESS) {
         elog("Failed to create pileline layout");
         for (u32 si = 0; si < actual_stagei; ++si) {
-            vkr_terminate_shader_module(vk, stages[si].module);
+            vkr_terminate_shader_module(stages[si].module, vk);
         }
         for (u32 i = 0; i < pipe_info->descriptor_layouts.size; ++i) {
             vkDestroyDescriptorSetLayout(vk->inst.device.hndl, pipe_info->descriptor_layouts[i], &vk->alloc_cbs);
@@ -1309,7 +1320,7 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
     int err_ret = vkCreateGraphicsPipelines(vk->inst.device.hndl, VK_NULL_HANDLE, 1, &pipeline_info, &vk->alloc_cbs, &pipe_info->hndl);
     if (err_ret != VK_SUCCESS) {
         for (u32 si = 0; si < actual_stagei; ++si) {
-            vkr_terminate_shader_module(vk, stages[si].module);
+            vkr_terminate_shader_module(stages[si].module, vk);
         }
         for (u32 i = 0; i < pipe_info->descriptor_layouts.size; ++i) {
             vkDestroyDescriptorSetLayout(vk->inst.device.hndl, pipe_info->descriptor_layouts[i], &vk->alloc_cbs);
@@ -1318,7 +1329,7 @@ int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pi
         err_ret = err_code::VKR_CREATE_PIPELINE_FAIL;
     }
     for (u32 si = 0; si < actual_stagei; ++si) {
-        vkr_terminate_shader_module(vk, stages[si].module);
+        vkr_terminate_shader_module(stages[si].module, vk);
     }
     ilog("Successfully initialized pipeline");
     err_ret = err_code::VKR_NO_ERROR;
@@ -1333,7 +1344,7 @@ sizet vkr_add_pipeline(vkr_device *device, const vkr_pipeline &copy)
     return ind;
 }
 
-void vkr_terminate_pipeline(const vkr_context *vk, const vkr_pipeline *pipe_info)
+void vkr_terminate_pipeline(const vkr_pipeline *pipe_info, const vkr_context *vk)
 {
     ilog("Terminating pipeline");
     vkDestroyPipeline(vk->inst.device.hndl, pipe_info->hndl, &vk->alloc_cbs);
@@ -1343,11 +1354,11 @@ void vkr_terminate_pipeline(const vkr_context *vk, const vkr_pipeline *pipe_info
     }
 }
 
-int vkr_init_framebuffer(const vkr_context *vk, const vkr_framebuffer_cfg *cfg, vkr_framebuffer *fb)
+int vkr_init_framebuffer(vkr_framebuffer *fb, const vkr_framebuffer_cfg *cfg, const vkr_context *vk)
 {
     ilog("Initializing framebuffer");
-    assert(cfg->rpass);
-    assert(cfg->attachments);
+    asrt(cfg->rpass);
+    asrt(cfg->attachments);
 
     arr_init(&fb->attachments, vk->cfg.arenas.persistent_arena);
     fb->size = cfg->size;
@@ -1389,7 +1400,7 @@ sizet vkr_add_framebuffer(vkr_device *device, const vkr_framebuffer &copy)
     return ind;
 }
 
-void vkr_terminate_framebuffer(const vkr_context *vk, vkr_framebuffer *fb)
+void vkr_terminate_framebuffer(vkr_framebuffer *fb, const vkr_context *vk)
 {
     ilog("Terminating framebuffer");
     vkDestroyFramebuffer(vk->inst.device.hndl, fb->hndl, &vk->alloc_cbs);
@@ -1519,7 +1530,7 @@ sizet vkr_add_buffer(vkr_device *device, const vkr_buffer &copy)
 
 int vkr_init_buffer(vkr_buffer *buffer, const vkr_buffer_cfg *cfg)
 {
-    assert(cfg->vma_alloc);
+    asrt(cfg->vma_alloc);
 
     VkBufferCreateInfo cinfo{};
     cinfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1558,7 +1569,7 @@ sizet vkr_add_image(vkr_device *device, const vkr_image &copy)
 
 int vkr_init_image(vkr_image *image, const vkr_image_cfg *cfg)
 {
-    assert(cfg->vma_alloc);
+    asrt(cfg->vma_alloc);
     VkImageCreateInfo cinfo{};
     cinfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     cinfo.imageType = cfg->type;
@@ -1609,7 +1620,7 @@ sizet vkr_add_image_view(vkr_device *device, const vkr_image_view &copy)
 
 int vkr_init_image_view(vkr_image_view *iview, const vkr_image_view_cfg *cfg, const vkr_context *vk)
 {
-    assert(cfg->image);
+    asrt(cfg->image);
     VkImageViewCreateInfo create_info{};
     create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     create_info.image = cfg->image->hndl;
@@ -1774,7 +1785,7 @@ void vkr_init_swapchain_framebuffers(vkr_device *device,
         }
         cfg.attachment_count = (u32)atts.size;
         cfg.attachments = atts.data;
-        vkr_init_framebuffer(vk, &cfg, &device->framebuffers[fb_offset + i]);
+        vkr_init_framebuffer(&device->framebuffers[fb_offset + i], &cfg, vk);
         arr_terminate(&atts);
     }
 }
@@ -1822,7 +1833,7 @@ void vkr_init_swapchain_framebuffers(vkr_device *device,
 void vkr_terminate_swapchain_framebuffers(vkr_device *device, const vkr_context *vk, sizet fb_offset)
 {
     for (int i = 0; i < vk->inst.device.swapchain.image_views.size; ++i) {
-        vkr_terminate_framebuffer(vk, &device->framebuffers[i + fb_offset]);
+        vkr_terminate_framebuffer(&device->framebuffers[i + fb_offset], vk);
         device->framebuffers[i + fb_offset] = {};
     }
 }
@@ -1831,7 +1842,7 @@ void vkr_terminate_swapchain_framebuffers(vkr_device *device, const vkr_context 
 int vkr_init_surface(const vkr_context *vk, VkSurfaceKHR *surface)
 {
     ilog("Initializing window surface");
-    assert(vk->cfg.window);
+    asrt(vk->cfg.window);
     // Create surface
     bool ret = SDL_Vulkan_CreateSurface((SDL_Window *)vk->cfg.window, vk->inst.hndl, &vk->alloc_cbs, surface);
     if (!ret) {
@@ -1869,8 +1880,8 @@ int vkr_init_render_frames(vkr_device *dev, const vkr_context *vk)
 
     // Add a command buffer for each frame - assign to the actual frames in the loop below
     auto buf_res = vkr_add_cmd_bufs(&gfx_fam->cmd_pools[gfx_fam->default_pool], vk, dev->rframes.size);
-    assert(buf_res.err_code == err_code::VKR_NO_ERROR);
-    assert((buf_res.end - buf_res.begin) == dev->rframes.size);
+    asrt(buf_res.err_code == err_code::VKR_NO_ERROR);
+    asrt((buf_res.end - buf_res.begin) == dev->rframes.size);
 
     // Create frame synchronization objects - start all fences as signalled already
     for (u32 framei = 0; framei < dev->rframes.size; ++framei) {
@@ -1920,7 +1931,7 @@ int vkr_init_render_frames(vkr_device *dev, const vkr_context *vk)
 int vkr_init(const vkr_cfg *cfg, vkr_context *vk)
 {
     ilog("Initializing vulkan");
-    assert(cfg);
+    asrt(cfg);
     vk->cfg = *cfg;
     if (!cfg->arenas.command_arena) {
         vk->cfg.arenas.command_arena = mem_global_frame_lin_arena();
@@ -1949,8 +1960,6 @@ int vkr_init(const vkr_cfg *cfg, vkr_context *vk)
             return code;
         }
     }
-
-    vkr_init_pdevice_swapchain_support(&vk->inst.pdev_info.swap_support, vk->cfg.arenas.persistent_arena);
 
     // Select the physical device
     code = vkr_select_best_graphics_physical_device(vk, &vk->inst.pdev_info);
@@ -2011,13 +2020,13 @@ void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
     vkr_terminate_swapchain(&dev->swapchain, vk);
 
     for (int i = 0; i < dev->render_passes.size; ++i) {
-        vkr_terminate_render_pass(vk, &dev->render_passes[i]);
+        vkr_terminate_render_pass(&dev->render_passes[i], vk);
     }
     for (int i = 0; i < dev->framebuffers.size; ++i) {
-        vkr_terminate_framebuffer(vk, &dev->framebuffers[i]);
+        vkr_terminate_framebuffer(&dev->framebuffers[i], vk);
     }
     for (int i = 0; i < dev->pipelines.size; ++i) {
-        vkr_terminate_pipeline(vk, &dev->pipelines[i]);
+        vkr_terminate_pipeline(&dev->pipelines[i], vk);
     }
     for (int i = 0; i < dev->buffers.size; ++i) {
         vkr_terminate_buffer(&dev->buffers[i], vk);
@@ -2071,7 +2080,6 @@ void vkr_terminate_instance(const vkr_context *vk, vkr_instance *inst)
     if (inst->device.hndl != VK_NULL_HANDLE) {
         vkr_terminate_device(&inst->device, vk);
     }
-    vkr_terminate_pdevice_swapchain_support(&inst->pdev_info.swap_support);
     vkr_terminate_surface(vk, inst->surface);
     inst->ext_funcs.destroy_debug_utils_messenger(inst->hndl, inst->dbg_messenger, &vk->alloc_cbs);
     // Destroying the instance calls more vk alloc calls
@@ -2133,11 +2141,15 @@ sizet vkr_uniform_buffer_offset_alignment(vkr_context *vk, sizet uniform_block_s
     }
 }
 
-void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf, const vkr_framebuffer *fb, const VkClearValue *att_clear_vals, sizet clear_val_size)
+void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf,
+                         const vkr_framebuffer *fb,
+                         const vkr_rpass *rpass,
+                         const VkClearValue *att_clear_vals,
+                         sizet clear_val_size)
 {
     VkRenderPassBeginInfo info{};
     info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    info.renderPass = fb->rpass.hndl;
+    info.renderPass = rpass->hndl;
     info.framebuffer = fb->hndl;
     info.renderArea.extent = {fb->size.w, fb->size.h};
 

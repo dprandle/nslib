@@ -3,6 +3,7 @@
 
 #include "basic_types.h"
 #include "basic_type_traits.h"
+#include "logging.h"
 
 #define pup_func(type)                                                                                                                     \
     template<class ArchiveT>                                                                                                               \
@@ -71,11 +72,13 @@ const char *get_flag_for_type(T &var)
 template<class ArchiveT, class T>
 void pack_unpack_begin(ArchiveT *, T &, const pack_var_info &vinfo)
 {
+    ilog("pack begin %s", (vinfo.name) ? vinfo.name : "");
 }
 
 template<class ArchiveT, class T>
 void pack_unpack_end(ArchiveT *, T &, const pack_var_info &vinfo)
 {
+    ilog("pack end %s", (vinfo.name) ? vinfo.name : "");
 }
 
 template<class ArchiveT, class T>

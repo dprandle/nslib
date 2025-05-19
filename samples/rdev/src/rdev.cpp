@@ -14,8 +14,8 @@ struct app_data
     sim_region rgn{};
     robj_cache_group cg{};
 
+    input_keymap movement_km;
     input_keymap global_km;
-    
     input_keymap_stack stack{};
 
     u32 cam_id;
@@ -26,7 +26,7 @@ struct app_data
     u32 plane_1;
 };
 
-intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_keymap *kmap)
+intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app)
 {
     // Create camera
     auto sz = get_window_pixel_size(ctxt->win_hndl);
@@ -34,6 +34,8 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_ke
     auto cam_comp = add_comp<camera>(cam);
     auto cam_tcomp = add_comp<transform>(cam);
 
+    cam_comp->fov = 60.0f;
+    cam_comp->near_far = {0.1f, 1000.0f};
     cam_comp->proj = (math::perspective(60.0f, (f32)sz.w / (f32)sz.h, 0.1f, 1000.0f));
     cam_comp->view = (math::look_at(vec3{0.0f, 10.0f, -5.0f}, vec3{0.0f}, vec3{0.0f, 1.0f, 0.0f}));
 
@@ -64,46 +66,40 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app, input_ke
         camc->view = math::inverse(camt->cached);
     };
     auto ins = add_input_trigger_func(&app->stack, "cam-turn", {cam_turn_func, app});
-    assert(ins);
+    asrt(ins);
 
     auto move_forward_action = [](const input_trigger &t, void *data) {
         auto app = (app_data *)data;
-        app->movement.y += (t.ev->key.action - 1)*(-2) + 1;
+        app->movement.y += (t.ev->key.action - 1) * (-2) + 1;
     };
     auto move_back_action = [](const input_trigger &t, void *data) {
         auto app = (app_data *)data;
-        app->movement.y -= (t.ev->key.action - 1)*(-2) + 1;
+        app->movement.y -= (t.ev->key.action - 1) * (-2) + 1;
     };
     auto move_right_action = [](const input_trigger &t, void *data) {
         auto app = (app_data *)data;
-        app->movement.x += (t.ev->key.action - 1)*(-2) + 1;
+        app->movement.x += (t.ev->key.action - 1) * (-2) + 1;
     };
     auto move_left_action = [](const input_trigger &t, void *data) {
         auto app = (app_data *)data;
-        app->movement.x -= (t.ev->key.action - 1)*(-2) + 1;
+        app->movement.x -= (t.ev->key.action - 1) * (-2) + 1;
     };
-    
-    
-    ins = add_input_trigger_func(&app->stack, "move-forward", {move_forward_action, app});
-    assert(ins);
-    ins = add_input_trigger_func(&app->stack, "move-back", {move_back_action, app});
-    assert(ins);
-    ins = add_input_trigger_func(&app->stack, "move-right", {move_right_action, app});
-    assert(ins);
-    ins = add_input_trigger_func(&app->stack, "move-left", {move_left_action, app});
-    assert(ins);
 
-    add_keymap_entry(&app->global_km, KMCODE_MMOTION, 0, MBUTTON_MASK_MIDDLE, {"cam-turn"});
-    add_keymap_entry(&app->global_km, KMCODE_KEY_W, 0, 0, {"move-forward", INPUT_ACTION_PRESS | INPUT_ACTION_RELEASE});
-    add_keymap_entry(&app->global_km, KMCODE_KEY_S, 0, 0, {"move-back", INPUT_ACTION_PRESS | INPUT_ACTION_RELEASE});
-    add_keymap_entry(&app->global_km, KMCODE_KEY_D, 0, 0, {"move-right", INPUT_ACTION_PRESS | INPUT_ACTION_RELEASE});
-    add_keymap_entry(&app->global_km, KMCODE_KEY_A, 0, 0, {"move-left", INPUT_ACTION_PRESS | INPUT_ACTION_RELEASE});
+    set_input_trigger_func(&app->stack, "move-forward", {move_forward_action, app});
+    set_input_trigger_func(&app->stack, "move-back", {move_back_action, app});
+    set_input_trigger_func(&app->stack, "move-right", {move_right_action, app});
+    set_input_trigger_func(&app->stack, "move-left", {move_left_action, app});
 
-    add_keymap_entry(&app->global_km, KMCODE_KEY_W, 0, MBUTTON_MASK_MIDDLE, {"move-forward", INPUT_ACTION_PRESS | INPUT_ACTION_RELEASE});
-    add_keymap_entry(&app->global_km, KMCODE_KEY_S, 0, MBUTTON_MASK_MIDDLE, {"move-back", INPUT_ACTION_PRESS | INPUT_ACTION_RELEASE});
-    add_keymap_entry(&app->global_km, KMCODE_KEY_D, 0, MBUTTON_MASK_MIDDLE, {"move-right", INPUT_ACTION_PRESS | INPUT_ACTION_RELEASE});
-    add_keymap_entry(&app->global_km, KMCODE_KEY_A, 0, MBUTTON_MASK_MIDDLE, {"move-left", INPUT_ACTION_PRESS | INPUT_ACTION_RELEASE});
-    
+    set_keymap_entry(&app->global_km, KMCODE_MMOTION, 0, MBUTTON_MASK_MIDDLE, {"cam-turn"});
+
+    set_keymap_entry(&app->movement_km, KMCODE_KEY_W, 0, 0, {"move-forward", INPUT_ACTION_PRESS | INPUT_ACTION_RELEASE});
+    set_keymap_entry(&app->movement_km, KMCODE_KEY_S, 0, 0, {"move-back", INPUT_ACTION_PRESS | INPUT_ACTION_RELEASE});
+    set_keymap_entry(&app->movement_km, KMCODE_KEY_D, 0, 0, {"move-right", INPUT_ACTION_PRESS | INPUT_ACTION_RELEASE});
+    set_keymap_entry(&app->movement_km, KMCODE_KEY_A, 0, 0, {"move-left", INPUT_ACTION_PRESS | INPUT_ACTION_RELEASE});
+
+    // Make our movement keymap not care about any modifiers at all - we always move no matter what
+    app->movement_km.kmod_mask = KEYMOD_NONE;
+    app->movement_km.mbutton_mask = MBUTTON_MASK_NONE;
 }
 
 int init(platform_ctxt *ctxt, void *user_data)
@@ -160,11 +156,14 @@ int init(platform_ctxt *ctxt, void *user_data)
 
     // Create input map
     init_keymap_stack(&app->stack, &ctxt->arenas.free_list);
+    init_keymap(&app->movement_km, "movement", &ctxt->arenas.free_list);
     init_keymap(&app->global_km, "global", &ctxt->arenas.free_list);
+
+    push_keymap(&app->stack, &app->movement_km);
     push_keymap(&app->stack, &app->global_km);
-    
+
     // Create and setup input for camera
-    setup_camera_controller(ctxt, app, &app->global_km);
+    setup_camera_controller(ctxt, app);
 
     int ret = init_renderer(&app->rndr, &app->cg, ctxt->win_hndl, &ctxt->arenas.free_list);
     if (ret == err_code::RENDER_NO_ERROR) {
@@ -178,7 +177,7 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
 {
     auto app = (app_data *)user_data;
     profile_timepoints pt;
-    map_input_frame(&app->stack, &ctxt->finp);
+    map_input_frame(&app->stack, &ctxt->feventq);
 
     int res = begin_render_frame(&app->rndr, ctxt->finished_frames);
     if (res != err_code::VKR_NO_ERROR) {
@@ -227,9 +226,9 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
     update_tm += pt.dt;
 
     // Draw some imgui stuff
-    ImGui::ShowDemoWindow();
+    ImGui::ShowDebugLogWindow();
 
-    res = end_render_frame(&app->rndr, cam);
+    res = end_render_frame(&app->rndr, cam, ctxt->time_pts.dt);
     ptimer_split(&pt);
     render_tm += pt.dt;
 
@@ -256,6 +255,7 @@ int terminate(platform_ctxt *ctxt, void *user_data)
     auto app = (app_data *)user_data;
     terminate_renderer(&app->rndr);
     terminate_keymap(&app->global_km);
+    terminate_keymap(&app->movement_km);
     terminate_keymap_stack(&app->stack);
     terminate_sim_region(&app->rgn);
     terminate_cache_group_default_types(&app->cg);
@@ -268,9 +268,9 @@ int configure_platform(platform_init_info *settings, app_data *app)
     settings->wind.title = "RDev";
     settings->wind.win_flags = WINDOW_RESIZABLE | WINDOW_INPUT_FOCUS | WINDOW_VULKAN | WINDOW_SHOWN | WINDOW_ALLOW_HIGHDPI;
     settings->default_log_level = LOG_DEBUG;
-    settings->user_cb.init = init;
-    settings->user_cb.run_frame = run_frame;
-    settings->user_cb.terminate = terminate;
+    settings->user_hooks.init = init;
+    settings->user_hooks.run_frame = run_frame;
+    settings->user_hooks.terminate = terminate;
     settings->mem.free_list_size = 4 * 1024 * MB_SIZE;
 
     return err_code::PLATFORM_NO_ERROR;

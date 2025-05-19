@@ -11,7 +11,7 @@ constexpr const u8 MAX_INPUT_CONTEXT_STACK_COUNT = 32;
 
 struct mem_arena;
 struct platform_input_event;
-struct platform_frame_input_events;
+struct platform_frame_event_queue;
 
 enum keymap_entry_flags
 {
@@ -21,6 +21,7 @@ enum keymap_entry_flags
 struct input_trigger
 {
     const char *name{};
+    u32 ev_type;
     const platform_input_event *ev;
 };
 
@@ -121,10 +122,10 @@ const input_keymap_entry *find_keymap_entry(const input_keymap *km, const char *
 bool remove_keymap_entry(input_keymap *km, u32 id);
 
 // Map the platform event to input_keymap_entries
-void map_input_event(input_keymap_stack *stack, const platform_input_event *raw);
+void map_input_event(input_keymap_stack *stack, const platform_input_event *raw, u32 in_ev_type);
 
 // Map the frame platform events to input_keymap_entries
-void map_input_frame(input_keymap_stack *stack, const platform_frame_input_events *frame);
+void map_input_frame(input_keymap_stack *stack, const platform_frame_event_queue *frame);
 
 // Push km to the top of the keymap stack - top is highest priority in input_map_event
 // Returns null if fails

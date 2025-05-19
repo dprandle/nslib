@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <cassert>
 #include <climits>
-//#include "osdef.h"
+// #include "osdef.h"
 
 // Check if all of the flags in provided flags
 #define test_all_flags(bitmask, flags) (((bitmask) & (flags)) == (flags))
@@ -22,6 +22,14 @@
 #define intern static
 
 #define SMALL_STR_LEN 24
+
+#if defined(NDEBUG)
+    #define asrt(param) (!(param)) ? elog("Assertion: " #param " failed") : (void)0
+    #define asrt_break(msg) elog("Assertion break: " #msg)
+#else
+    #define asrt(param) assert(param)
+    #define asrt_break(msg) assert(!msg)
+#endif
 
 namespace nslib
 {
@@ -42,7 +50,7 @@ using f32 = float;
 using f64 = double;
 using f128 = long double;
 using b32 = bool;
-using cstr = const char*;
+using cstr = const char *;
 
 const sizet KB_SIZE = 1024;
 const sizet MB_SIZE = 1024 * KB_SIZE;

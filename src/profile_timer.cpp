@@ -9,7 +9,7 @@
 
 namespace nslib
 {
-ptimespec ptimer_cur(int ptype)
+ptimespec ptimer_cur(s32 ptype)
 {
     ptimespec temp;
 #if defined(PLATFORM_UNIX)

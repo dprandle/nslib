@@ -155,7 +155,7 @@ int app_run_frame(platform_ctxt *ctxt, void *user_data)
 {
     auto app = (app_data*)user_data;
     // Use our context stack to map the platform input to callback functions
-    map_input_frame(&app->stack, &ctxt->finp);
+    map_input_frame(&app->stack, &ctxt->feventq);
     return err_code::PLATFORM_NO_ERROR;
 }
 
@@ -163,9 +163,9 @@ int configure_platform(platform_init_info *settings, app_data *app)
 {
     settings->wind.resolution = {1920, 1080};
     settings->wind.title = "Input Keymaps";
-    settings->user_cb.init = app_init;
-    settings->user_cb.terminate = app_terminate;
-    settings->user_cb.run_frame = app_run_frame;
+    settings->user_hooks.init = app_init;
+    settings->user_hooks.terminate = app_terminate;
+    settings->user_hooks.run_frame = app_run_frame;
     return err_code::PLATFORM_NO_ERROR;
 }
 

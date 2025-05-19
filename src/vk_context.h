@@ -247,7 +247,6 @@ struct vkr_phys_device
     VkPhysicalDeviceFeatures features{};
     VkPhysicalDeviceProperties props{};
     vkr_queue_families qfams{};
-    vkr_pdevice_swapchain_support swap_support{};
     VkPhysicalDeviceMemoryProperties mem_properties{};
 };
 
@@ -577,20 +576,20 @@ void vkr_remove_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, sizet in
 
 // Render passes
 sizet vkr_add_render_pass(vkr_device *device, const vkr_rpass &copy = {});
-int vkr_init_render_pass(const vkr_context *vk, const vkr_rpass_cfg *cfg, vkr_rpass *rpass);
-void vkr_terminate_render_pass(const vkr_context *vk, const vkr_rpass *rpass);
+int vkr_init_render_pass(vkr_rpass *rpass, const vkr_rpass_cfg *cfg, const vkr_context *vk);
+void vkr_terminate_render_pass(const vkr_rpass *rpass, const vkr_context *vk);
 
 // Pipelines
 sizet vkr_add_pipeline(vkr_device *device, const vkr_pipeline &copy = {});
-int vkr_init_pipeline(const vkr_context *vk, const vkr_pipeline_cfg *cfg, vkr_pipeline *pipe_info);
-void vkr_terminate_pipeline(const vkr_context *vk_ctxt, const vkr_pipeline *pipe_info);
-int vkr_init_shader_module(const vkr_context *vk, const byte_array *code, VkShaderModule *module);
-void vkr_terminate_shader_module(const vkr_context *vk, VkShaderModule module);
+int vkr_init_pipeline(vkr_pipeline *pipe_info, const vkr_pipeline_cfg *cfg, const vkr_context *vk);
+void vkr_terminate_pipeline(const vkr_pipeline *pipe_info, const vkr_context *vk_ctxt);
+int vkr_init_shader_module(VkShaderModule *module, const byte_array *code, const vkr_context *vk);
+void vkr_terminate_shader_module(VkShaderModule module, const vkr_context *vk);
 
 // Framebuffers
 sizet vkr_add_framebuffer(vkr_device *device, const vkr_framebuffer &copy = {});
-int vkr_init_framebuffer(const vkr_context *vk, const vkr_framebuffer_cfg *cfg, vkr_framebuffer *framebuffer);
-void vkr_terminate_framebuffer(const vkr_context *vk, vkr_framebuffer *fb);
+int vkr_init_framebuffer(vkr_framebuffer *framebuffer, const vkr_framebuffer_cfg *cfg, const vkr_context *vk);
+void vkr_terminate_framebuffer(vkr_framebuffer *fb, const vkr_context *vk);
 
 // Buffers
 sizet vkr_add_buffer(vkr_device *device, const vkr_buffer &copy = {});
@@ -699,7 +698,11 @@ void vkr_terminate(vkr_context *vk);
 int vkr_begin_cmd_buf(const vkr_command_buffer *buf);
 int vkr_end_cmd_buf(const vkr_command_buffer *buf);
 
-void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf, const vkr_framebuffer *fb, const VkClearValue *att_clear_vals, sizet clear_val_size);
+void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf,
+                         const vkr_framebuffer *fb,
+                         const vkr_rpass *rpass,
+                         const VkClearValue *att_clear_vals,
+                         sizet clear_val_size);
 void vkr_cmd_end_rpass(const vkr_command_buffer *cmd_buf);
 
 sizet vkr_min_uniform_buffer_offset_alignment(vkr_context *vk);

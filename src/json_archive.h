@@ -59,10 +59,10 @@ template<class T>
 void pack_unpack_begin(json_archive *ar, T &, const pack_var_info &vinfo)
 {
     jsa_stack_frame *cur_frame = arr_back(&ar->stack);
-    assert(cur_frame);
+    asrt(cur_frame);
     bool is_array = json_is_array(cur_frame->current);
     bool is_obj = json_is_object(cur_frame->current);
-    assert(is_array || is_obj);
+    asrt(is_array || is_obj);
 
     json_obj *item{};
     if (ar->opmode == archive_opmode::UNPACK) {
@@ -92,10 +92,12 @@ void pack_unpack_begin(json_archive *ar, T &, const pack_var_info &vinfo)
                  (is_array) ? "array" : "obj",
                  cur_frame->current->string);
             if (is_array) {
-                assert(json_add_item_to_array(cur_frame->current, item));
+                auto result = json_add_item_to_array(cur_frame->current, item);
+                asrt(result);
             }
             else if (is_obj) {
-                assert(json_add_item_to_object(cur_frame->current, vinfo.name, item));
+                auto result = json_add_item_to_object(cur_frame->current, vinfo.name, item);
+                asrt(result);
             }
             arr_emplace_back(&ar->stack, jsa_stack_frame{item, 0});
         }
@@ -133,10 +135,10 @@ template<class T, class CheckTAssignFunc, class CreateItemFunc>
 void pack_unpack_helper(json_archive *ar, T &val, const pack_var_info &vinfo, CheckTAssignFunc check_func, CreateItemFunc create_func)
 {
     jsa_stack_frame *cur_frame = arr_back(&ar->stack);
-    assert(cur_frame);
+    asrt(cur_frame);
     bool is_array = json_is_array(cur_frame->current);
     bool is_obj = json_is_object(cur_frame->current);
-    assert(is_array || is_obj);
+    asrt(is_array || is_obj);
 
     if (ar->opmode == archive_opmode::UNPACK) {
         if (is_array) {
@@ -168,10 +170,12 @@ void pack_unpack_helper(json_archive *ar, T &val, const pack_var_info &vinfo, Ch
              (is_array) ? "array" : "obj",
              cur_frame->current->string);
         if (is_array) {
-            assert(json_add_item_to_array(cur_frame->current, item));
+            auto result = json_add_item_to_array(cur_frame->current, item);
+            asrt(result);
         }
         else if (is_obj) {
-            assert(json_add_item_to_object(cur_frame->current, vinfo.name, item));
+            auto result = json_add_item_to_object(cur_frame->current, vinfo.name, item);
+            asrt(result);
         }
     }
 }
@@ -196,10 +200,10 @@ template<class T, sizet N>
 void pack_unpack_begin(json_archive *ar, T (&val)[N], const pack_var_info &vinfo)
 {
     jsa_stack_frame *cur_frame = arr_back(&ar->stack);
-    assert(cur_frame);
+    asrt(cur_frame);
     bool is_array = json_is_array(cur_frame->current);
     bool is_obj = json_is_object(cur_frame->current);
-    assert(is_array || is_obj);
+    asrt(is_array || is_obj);
 
     if (ar->opmode == archive_opmode::UNPACK) {
         json_obj *item{};
@@ -228,10 +232,12 @@ void pack_unpack_begin(json_archive *ar, T (&val)[N], const pack_var_info &vinfo
              (is_array) ? "array" : "obj",
              cur_frame->current->string);
         if (is_array) {
-            assert(json_add_item_to_array(cur_frame->current, new_item));
+            auto result = json_add_item_to_array(cur_frame->current, new_item);
+            asrt(result);
         }
         else if (is_obj) {
-            assert(json_add_item_to_object(cur_frame->current, vinfo.name, new_item));
+            auto result = json_add_item_to_object(cur_frame->current, vinfo.name, new_item);
+            asrt(result);
         }
         arr_emplace_back(&ar->stack, jsa_stack_frame{new_item, 0});
     }
@@ -264,10 +270,10 @@ template<class T, sizet N>
 void pack_unpack_begin(json_archive *ar, static_array<T, N> &val, const pack_var_info &vinfo)
 {
     jsa_stack_frame *cur_frame = arr_back(&ar->stack);
-    assert(cur_frame);
+    asrt(cur_frame);
     bool is_array = json_is_array(cur_frame->current);
     bool is_obj = json_is_object(cur_frame->current);
-    assert(is_array || is_obj);
+    asrt(is_array || is_obj);
 
     if (ar->opmode == archive_opmode::UNPACK) {
         json_obj *item{};
@@ -297,10 +303,12 @@ void pack_unpack_begin(json_archive *ar, static_array<T, N> &val, const pack_var
              (is_array) ? "array" : "obj",
              cur_frame->current->string);
         if (is_array) {
-            assert(json_add_item_to_array(cur_frame->current, new_item));
+            auto result = json_add_item_to_array(cur_frame->current, new_item);
+            asrt(result);
         }
         else if (is_obj) {
-            assert(json_add_item_to_object(cur_frame->current, vinfo.name, new_item));
+            auto result = json_add_item_to_object(cur_frame->current, vinfo.name, new_item);
+            asrt(result);
         }
         arr_emplace_back(&ar->stack, jsa_stack_frame{new_item, 0});
     }
@@ -323,10 +331,10 @@ template<class T>
 void pack_unpack_begin(json_archive *ar, array<T> &val, const pack_var_info &vinfo)
 {
     jsa_stack_frame *cur_frame = arr_back(&ar->stack);
-    assert(cur_frame);
+    asrt(cur_frame);
     bool is_array = json_is_array(cur_frame->current);
     bool is_obj = json_is_object(cur_frame->current);
-    assert(is_array || is_obj);
+    asrt(is_array || is_obj);
 
     if (ar->opmode == archive_opmode::UNPACK) {
         json_obj *item{};
@@ -356,10 +364,12 @@ void pack_unpack_begin(json_archive *ar, array<T> &val, const pack_var_info &vin
              (is_array) ? "array" : "obj",
              cur_frame->current->string);
         if (is_array) {
-            assert(json_add_item_to_array(cur_frame->current, new_item));
+            auto result = json_add_item_to_array(cur_frame->current, new_item);
+            asrt(result);
         }
         else if (is_obj) {
-            assert(json_add_item_to_object(cur_frame->current, vinfo.name, new_item));
+            auto result = json_add_item_to_object(cur_frame->current, vinfo.name, new_item);
+            asrt(result);
         }
         arr_emplace_back(&ar->stack, jsa_stack_frame{new_item, 0});
     }
@@ -387,10 +397,10 @@ template<class T>
 void pack_unpack_begin(json_archive *ar, hset<T> &, const pack_var_info &vinfo)
 {
     jsa_stack_frame *cur_frame = arr_back(&ar->stack);
-    assert(cur_frame);
+    asrt(cur_frame);
     bool is_array = json_is_array(cur_frame->current);
     bool is_obj = json_is_object(cur_frame->current);
-    assert(is_array || is_obj);
+    asrt(is_array || is_obj);
 
     if (ar->opmode == archive_opmode::UNPACK) {
         json_obj *item{};
@@ -419,10 +429,12 @@ void pack_unpack_begin(json_archive *ar, hset<T> &, const pack_var_info &vinfo)
              (is_array) ? "set" : "obj",
              cur_frame->current->string);
         if (is_array) {
-            assert(json_add_item_to_array(cur_frame->current, new_item));
+            auto result = json_add_item_to_array(cur_frame->current, new_item);
+            asrt(result);
         }
         else if (is_obj) {
-            assert(json_add_item_to_object(cur_frame->current, vinfo.name, new_item));
+            auto result = json_add_item_to_object(cur_frame->current, vinfo.name, new_item);
+            asrt(result);
         }
         arr_emplace_back(&ar->stack, jsa_stack_frame{new_item, 0});
     }
@@ -439,13 +451,13 @@ void pack_unpack(json_archive *ar, hset<T> &val, const pack_var_info &vinfo)
 {
     if (ar->opmode == archive_opmode::UNPACK) {
         jsa_stack_frame *cur_frame = arr_back(&ar->stack);
-        assert(cur_frame);
+        asrt(cur_frame);
         sizet frame_ind = ar->stack.size - 1;
         sizet count = json_get_array_size(cur_frame->current);
         for (int i = 0; i < count; ++i) {
             T item;
             pup_var(ar, item, {});
-            assert(hset_set(&val, item));
+            hset_set(&val, item);
             ++ar->stack[frame_ind].cur_arr_ind;
         }
     }
@@ -466,7 +478,7 @@ void pack_unpack(json_archive *ar, hmap<string, T> &val, const pack_var_info &vi
 {
     if (ar->opmode == archive_opmode::UNPACK) {
         jsa_stack_frame *cur_frame = arr_back(&ar->stack);
-        assert(cur_frame);
+        asrt(cur_frame);
         auto obj = cur_frame->current->child;
         while (obj) {
             string key = obj->string;
@@ -491,7 +503,7 @@ void pack_unpack(json_archive *ar, hmap<rid, T> &val, const pack_var_info &vinfo
 {
     if (ar->opmode == archive_opmode::UNPACK) {
         jsa_stack_frame *cur_frame = arr_back(&ar->stack);
-        assert(cur_frame);
+        asrt(cur_frame);
         auto obj = cur_frame->current->child;
         while (obj) {
             auto key = rid(obj->string);
@@ -516,7 +528,7 @@ void pack_unpack(json_archive *ar, hmap<K, T> &val, const pack_var_info &vinfo)
 {
     if (ar->opmode == archive_opmode::UNPACK) {
         jsa_stack_frame *cur_frame = arr_back(&ar->stack);
-        assert(cur_frame);
+        asrt(cur_frame);
         auto obj = cur_frame->current->child;
         while (obj) {
             K key{};

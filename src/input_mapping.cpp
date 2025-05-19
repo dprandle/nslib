@@ -45,8 +45,8 @@ u8 get_mbutton_mask_from_keymap_id(u32 key)
 
 void init_keymap(input_keymap *km, const char *name, mem_arena *arena)
 {
-    assert(km);
-    assert(name);
+    asrt(km);
+    asrt(name);
     int seed0 = rand();
     int seed1 = rand();
     km->name = name;
@@ -55,14 +55,14 @@ void init_keymap(input_keymap *km, const char *name, mem_arena *arena)
 
 void terminate_keymap(input_keymap *km)
 {
-    assert(km);
+    asrt(km);
     hmap_terminate(&km->hm);
     memset(km, 0, sizeof(input_keymap));
 }
 
 void init_keymap_stack(input_keymap_stack *stack, mem_arena *arena)
 {
-    assert(stack);
+    asrt(stack);
     hmap_init(&stack->trigger_funcs, hash_type, arena, DEFAULT_FUNCMAP_BUCKET_COUNT);
     hmap_init(&stack->cur_pressed, hash_type, arena);
 }
@@ -75,7 +75,7 @@ void terminate_keymap_stack(input_keymap_stack *stack)
 }
 void set_keymap_entry(input_keymap *km, u32 id, const input_keymap_entry &entry)
 {
-    assert(km);
+    asrt(km);
     hmap_set(&km->hm, id, entry);
 }
 
@@ -89,7 +89,7 @@ void set_keymap_entry(input_keymap *km, input_kmcode kmcode, u16 keymods, u8 mbu
 
 bool add_keymap_entry(input_keymap *km, u32 id, const input_keymap_entry &entry)
 {
-    assert(km);
+    asrt(km);
     auto item = hmap_insert(&km->hm, id, entry);
     return item;
 }
@@ -102,7 +102,7 @@ bool add_keymap_entry(input_keymap *km, input_kmcode kmcode, u16 keymods, u8 mbu
 
 input_keymap_entry *find_keymap_entry(input_keymap *km, u32 id)
 {
-    assert(km);
+    asrt(km);
     auto item = hmap_find(&km->hm, id);
     if (item) {
         return &item->val;
@@ -112,7 +112,7 @@ input_keymap_entry *find_keymap_entry(input_keymap *km, u32 id)
 
 const input_keymap_entry *find_keymap_entry(const input_keymap *km, u32 id)
 {
-    assert(km);
+    asrt(km);
     auto item = hmap_find(&km->hm, id);
     if (item) {
         return &item->val;
@@ -122,8 +122,8 @@ const input_keymap_entry *find_keymap_entry(const input_keymap *km, u32 id)
 
 input_keymap_entry *find_keymap_entry(input_keymap *km, const char *name)
 {
-    assert(name);
-    assert(km);
+    asrt(name);
+    asrt(km);
     auto iter = hmap_begin(&km->hm);
     while (iter) {
         if (name == iter->val.name) {
@@ -136,8 +136,8 @@ input_keymap_entry *find_keymap_entry(input_keymap *km, const char *name)
 
 const input_keymap_entry *find_keymap_entry(const input_keymap *km, const char *name)
 {
-    assert(name);
-    assert(km);
+    asrt(name);
+    asrt(km);
     auto iter = hmap_begin(&km->hm);
     while (iter) {
         if (name == iter->val.name) {
@@ -150,22 +150,22 @@ const input_keymap_entry *find_keymap_entry(const input_keymap *km, const char *
 
 bool remove_keymap_entry(input_keymap *km, u32 key)
 {
-    assert(km);
+    asrt(km);
     return hmap_remove(&km->hm, key);
 }
 
 input_keymap **push_keymap(input_keymap_stack *stack, input_keymap *km)
 {
-    assert(km);
-    assert(stack);
-    assert(stack->kmaps.size + 1 <= MAX_INPUT_CONTEXT_STACK_COUNT);
+    asrt(km);
+    asrt(stack);
+    asrt(stack->kmaps.size + 1 <= MAX_INPUT_CONTEXT_STACK_COUNT);
     return arr_push_back(&stack->kmaps, km);
 }
 
 bool keymap_in_stack(const input_keymap *km, const input_keymap_stack *stack)
 {
-    assert(km);
-    assert(stack);
+    asrt(km);
+    asrt(stack);
     for (int i = 0; i < stack->kmaps.size; ++i) {
         if (stack->kmaps[i] == km) {
             return true;
@@ -177,7 +177,7 @@ bool keymap_in_stack(const input_keymap *km, const input_keymap_stack *stack)
 // Pop to top keymap from the stack and return it
 input_keymap *pop_keymap(input_keymap_stack *stack)
 {
-    assert(stack);
+    asrt(stack);
     auto back = arr_back(&stack->kmaps);
     if (back) {
         arr_pop_back(&stack->kmaps);
@@ -186,13 +186,14 @@ input_keymap *pop_keymap(input_keymap_stack *stack)
     return nullptr;
 }
 
-void map_input_event(input_keymap_stack *stack, const platform_input_event *raw)
+void map_input_event(input_keymap_stack *stack, const platform_input_event *raw, u32 in_ev_type)
 {
-    assert(raw);
-    assert(stack);
+    asrt(raw);
+    asrt(stack);
     input_trigger t{};
     t.ev = raw;
-    bool key_or_mbtn = t.ev->type == INPUT_EVENT_TYPE_KEY || t.ev->type == INPUT_EVENT_TYPE_MBUTTON;
+    t.ev_type = in_ev_type;
+    bool key_or_mbtn = t.ev_type == EVENT_TYPE_INPUT_KEY || t.ev_type == EVENT_TYPE_INPUT_MBUTTON;
     // We can use key.action for both mouse button and key because they are unioned
     bool key_or_mbtn_release = key_or_mbtn && t.ev->key.action == INPUT_ACTION_RELEASE;
     
@@ -263,19 +264,21 @@ void map_input_event(input_keymap_stack *stack, const platform_input_event *raw)
     }
 }
 
-void map_input_frame(input_keymap_stack *stack, const platform_frame_input_events *frame)
+void map_input_frame(input_keymap_stack *stack, const platform_frame_event_queue *frame)
 {
-    assert(frame);
-    assert(stack);
-    assert(frame->events.size <= frame->events.capacity);
+    asrt(frame);
+    asrt(stack);
+    asrt(frame->events.size <= frame->events.capacity);
     for (sizet i = 0; i < frame->events.size; ++i) {
-        map_input_event(stack, &frame->events[i]);
+        if (is_input_event(frame->events[i].type)) {
+            map_input_event(stack, &frame->events[i].ie, frame->events[i].type);
+        }
     }
 }
 
 bool add_input_trigger_func(input_keymap_stack *stack, const char *name, const input_trigger_cb &cb)
 {
-    assert(stack);
+    asrt(stack);
     if (!name) {
         wlog("Cannot add trigger func under empty name");
         return false;
@@ -287,7 +290,7 @@ bool add_input_trigger_func(input_keymap_stack *stack, const char *name, const i
 
 void set_input_trigger_func(input_keymap_stack *stack, const char *name, const input_trigger_cb &cb)
 {
-    assert(stack);
+    asrt(stack);
     if (!name) {
         wlog("Cannot add trigger func under empty name");
         return;

@@ -21,7 +21,7 @@ sizet add_entities(sizet count, sim_region *reg)
         reg->ents[ind + i].id = ++reg->last_id;
         reg->ents[ind + i].cdb = &reg->cdb;
         auto iter = hmap_insert(&reg->entmap, reg->ents[ind + i].id, ind + i);
-        assert(iter);
+        asrt(iter);
     }
     return ind;
 }
@@ -33,7 +33,7 @@ entity *add_entity(const entity &copy, sim_region *reg)
     reg->ents[ind].id = ++reg->last_id;
     reg->ents[ind].cdb = &reg->cdb;
     auto iter = hmap_insert(&reg->entmap, reg->ents[ind].id, ind);
-    assert(iter);
+    asrt(iter);
     return &reg->ents[ind];
 }
 
@@ -42,7 +42,7 @@ entity *add_entity(const char *name, sim_region *reg)
     sizet ind = reg->ents.size;
     arr_emplace_back(&reg->ents, entity{++reg->last_id, name, &reg->cdb});
     auto iter = hmap_insert(&reg->entmap, reg->ents[ind].id, ind);
-    assert(iter);
+    asrt(iter);
     return &reg->ents[ind];
 }
 
@@ -62,8 +62,8 @@ bool remove_entity(u32 ent_id, sim_region *reg)
     if (!rem) {
         return rem;
     }
-    assert(ent_ind!=INVALID_IND);
-    assert(ent_ind < reg->ents.size);
+    asrt(ent_ind!=INVALID_IND);
+    asrt(ent_ind < reg->ents.size);
     if (arr_swap_remove(&reg->ents, ent_ind)) {
         if (ent_ind < reg->ents.size) {
             // Update the entry for this entity that has been swapped to have the correct index in to the entity array

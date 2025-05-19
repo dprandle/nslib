@@ -46,6 +46,7 @@ struct vector2
             T u;
             T v;
         };
+        
     };
 };
 

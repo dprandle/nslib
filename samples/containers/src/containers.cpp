@@ -321,7 +321,7 @@ void test_hashmaps()
         iter = hmap_prev(&hm1, iter);
     }
     ilog("Buckets...");
-    hmap_debug_print(hm1.buckets);
+    hmap_print_internal(hm1.buckets);
 
     auto fnd = hmap_find(&hm1, 'a');
     ilog("Found value %s for key %s", to_cstr(fnd->val));
@@ -367,7 +367,7 @@ void test_hashmaps()
         iter = hmap_prev(&hm1, iter);
     }
     ilog("Buckets...");
-    hmap_debug_print(hm1.buckets);
+    hmap_print_internal(hm1.buckets);
 
     auto ins = hmap_insert(&hm1, 'a', string("a"));
     ilog("Inserted a ptr: %p", ins);
@@ -408,7 +408,7 @@ void test_hashmaps()
     }
 
     ilog("Buckets...");
-    hmap_debug_print(hm1.buckets);
+    hmap_print_internal(hm1.buckets);
 
     hmap_terminate(&hm1);
 }
@@ -446,7 +446,7 @@ void test_hashmaps_string_keys()
     }
 
     ilog("Buckets...");
-    hmap_debug_print(hm1.buckets);
+    hmap_print_internal(hm1.buckets);
 
     ilog("Removing 4 entries");
     hmap_remove(&hm1, rid("do-the-dance"));
@@ -469,7 +469,7 @@ void test_hashmaps_string_keys()
     }
 
     ilog("Buckets...");
-    hmap_debug_print(hm1.buckets);
+    hmap_print_internal(hm1.buckets);
 
     ilog("Inserting 5 more strange strings");
     hmap_insert(&hm1, rid("another"), string("another-data"));
@@ -493,7 +493,7 @@ void test_hashmaps_string_keys()
     }
 
     ilog("Buckets...");
-    hmap_debug_print(hm1.buckets);
+    hmap_print_internal(hm1.buckets);
     hmap_terminate(&hm1);
 }
 
@@ -597,7 +597,7 @@ int configure_platform(platform_init_info *config, app_data *app)
 {
     config->wind.resolution = {1920, 1080};
     config->wind.title = "Containers";
-    config->user_cb.init = app_init;
+    config->user_hooks.init = app_init;
     return err_code::PLATFORM_NO_ERROR;
 }
 
