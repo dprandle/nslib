@@ -4,6 +4,7 @@ set(SDL_STATIC ON CACHE BOOL "" FORCE)
 set(SDL_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/SDL/include CACHE INTERNAL "")
 set(CMAKE_ARGS)
 add_subdirectory(SDL)
-target_compile_options(SDL3-static PRIVATE -fPIC)
-
+if (UNIX)
+  target_compile_options(SDL3-static PRIVATE -fPIC)
+endif()
 
