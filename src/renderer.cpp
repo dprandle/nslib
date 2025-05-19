@@ -132,7 +132,7 @@ intern void init_imgui(renderer *rndr, void *win_hndl)
     rndr->imgui.ctxt = ImGui::CreateContext();
     ImGui::StyleColorsDark();
     auto &io = ImGui::GetIO();
-    io.FontGlobalScale = 2.0f;
+    io.FontGlobalScale = get_window_display_scale(win_hndl);
 
     vkr_descriptor_cfg cfg{};
     cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE;

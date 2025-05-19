@@ -377,6 +377,9 @@ ivec2 get_window_pixel_size(void *window_hndl);
 // Get the window position in screen coords
 ivec2 get_window_pos(void *window_hndl);
 
+// Get the window scale for the display it is on at the time of this call
+f32 get_window_display_scale(void *window_hndl);
+
 // Get a pointer to the window from the id
 void *get_window(u32 id);
 

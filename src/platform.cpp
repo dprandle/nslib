@@ -178,6 +178,13 @@ intern void log_display_info()
     }
 }
 
+f32 get_window_display_scale(void *window_hndl)
+{
+    auto disp_id = SDL_GetDisplayForWindow((SDL_Window*)window_hndl);
+    return SDL_GetDisplayContentScale(disp_id);
+}
+
+
 intern u32 get_sdl_window_flags(u32 platform_win_flags)
 {
     return platform_win_flags;
