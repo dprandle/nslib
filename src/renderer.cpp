@@ -563,10 +563,10 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
                                                &rndr->vk);
         asrt(ret == err_code::VKR_NO_ERROR);
     }
-    dlog("Should be adding mesh id %s %d submeshes", str_cstr(msh->id.str), new_mentry.submesh_entrees.size);
+    ilog("Adding mesh id %s %d submeshes", str_cstr(msh->id.str), new_mentry.submesh_entrees.size);
     for (int si = 0; si < new_mentry.submesh_entrees.size; ++si) {
         auto sub = &new_mentry.submesh_entrees[si];
-        dlog("submesh %d:  vertsp(offset:%d  size:%d)  inds(offset:%d size:%d)",
+        ilog("submesh %d:  vertsp(offset:%d  size:%d)  inds(offset:%d size:%d)",
              si,
              sub->verts.offset,
              sub->verts.size,

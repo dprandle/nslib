@@ -72,7 +72,7 @@ string to_str(const custom_type_2 &item)
 
 void test_strings()
 {
-    dlog("Starting string test");
+    ilog("Starting string test");
     string s = "test this range we are going to make a big fatty string";
     auto first = &s[4];
     auto last = &s[9];
@@ -95,7 +95,7 @@ void test_strings()
 
 void test_arrays()
 {
-    dlog("Starting array test");
+    ilog("Starting array test");
     array<int> arr1;
     array<rid> rids;
     array<array<int>> arr_arr;

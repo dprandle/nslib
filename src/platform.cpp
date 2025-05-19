@@ -467,7 +467,6 @@ void process_platform_events(platform_ctxt *pf)
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         if (pf->feventq.sdl_hook.cb && pf->feventq.sdl_hook.cb(&event, pf->feventq.sdl_hook.user)) {
-            dlog("Skip");
             continue;
         }
         platform_event ev{};
