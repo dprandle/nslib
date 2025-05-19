@@ -32,7 +32,7 @@ struct hset_bucket
 };
 
 template<class Val>
-using hash_func = u64(const Val &, u64, u64);
+using hash_func = u64(const Val&, u64, u64);
 
 // Since hset manages memory, but we want it to act like a built in type in terms of copying and equality testing, we
 // have to write copy ctor, dtor, assignment operator, and equality operators.
@@ -124,7 +124,7 @@ bool hset_should_rehash_on_insert(const hset<Val> *hs)
 template<typename Val>
 sizet hset_find_bucket(const hset<Val> *hs, const Val &v)
 {
-    assert(hs->hashf);
+    asrt(hs->hashf);
     if (hs->buckets.size == 0) {
         return false;
     }
@@ -201,7 +201,7 @@ void hset_copy_bucket(hset<Val> *hs, sizet dest_ind, sizet src_ind)
 template<typename Val>
 void hset_clear_bucket(hset<Val> *hs, sizet bckt_ind)
 {
-    assert(bckt_ind < hs->buckets.size);
+    asrt(bckt_ind < hs->buckets.size);
 
     // If our next index is valid, use it to get the next bucket - set the next bucket's prev index to our prev index
     if (is_valid(hs->buckets[bckt_ind].next)) {
@@ -259,7 +259,7 @@ void hset_clear_bucket(hset<Val> *hs, sizet bckt_ind)
 template<typename Val>
 void hset_remove_bucket(hset<Val> *hs, sizet bckt_ind)
 {
-    assert(bckt_ind < hs->buckets.size);
+    asrt(bckt_ind < hs->buckets.size);
     if (!is_valid(hs->buckets[bckt_ind].prev)) {
         return;
     }
@@ -325,7 +325,7 @@ hset<Val>::iterator hset_find(const hset<Val> *hs, const Val &v)
 template<typename Val>
 hset<Val>::iterator hset_insert_or_set(hset<Val> *hs, const Val &val, bool set_if_exists)
 {
-    assert(hs->hashf);
+    asrt(hs->hashf);
     if (hs->buckets.size == 0) {
         return nullptr;
     }
@@ -377,8 +377,8 @@ hset<Val>::iterator hset_insert_or_set(hset<Val> *hs, const Val &val, bool set_i
     }
 
     // The bucket item's next and prev should both be invalid
-    assert(!is_valid(hs->buckets[cur_bckt_ind].item.next));
-    assert(!is_valid(hs->buckets[cur_bckt_ind].item.prev));
+    asrt(!is_valid(hs->buckets[cur_bckt_ind].item.next));
+    asrt(!is_valid(hs->buckets[cur_bckt_ind].item.prev));
 
     // Set the key/value/hashed_v
     hs->buckets[cur_bckt_ind].hashed_v = hashval;
@@ -396,24 +396,24 @@ hset<Val>::iterator hset_insert_or_set(hset<Val> *hs, const Val &val, bool set_i
         hs->buckets[hs->head].item.prev = cur_bckt_ind;
 
         // And finally the bucket before us (which was previously the last bucket) should now point to us as next
-        assert(!is_valid(hs->buckets[hs->buckets[cur_bckt_ind].item.prev].item.next));
+        asrt(!is_valid(hs->buckets[hs->buckets[cur_bckt_ind].item.prev].item.next));
         hs->buckets[hs->buckets[cur_bckt_ind].item.prev].item.next = cur_bckt_ind;
     }
 
     // And now, we need to insert the item in the bucket item's linked list chain
-    assert(!is_valid(hs->buckets[cur_bckt_ind].prev));
+    asrt(!is_valid(hs->buckets[cur_bckt_ind].prev));
 
     // If we are appending to a bucket ll rather than inserting the head bucket node
     sizet head_prev_ind = cur_bckt_ind;
     if (cur_bckt_ind != head_bckt_ind) {
         // Make sure the head bucket has a valid prev ind
-        assert(is_valid(hs->buckets[head_bckt_ind].prev));
+        asrt(is_valid(hs->buckets[head_bckt_ind].prev));
 
         // Set our prev to the bucket that was previously at the end
         hs->buckets[cur_bckt_ind].prev = hs->buckets[head_bckt_ind].prev;
 
         // Asssert the previously end bucket's next index is invalid, and then set it to us
-        assert(!is_valid(hs->buckets[hs->buckets[cur_bckt_ind].prev].next));
+        asrt(!is_valid(hs->buckets[hs->buckets[cur_bckt_ind].prev].next));
         hs->buckets[hs->buckets[cur_bckt_ind].prev].next = cur_bckt_ind;
 
         // Set the head bucket's prev ind to us
@@ -462,9 +462,10 @@ sizet hset_insert(hset<Val> *dest, const hset<Val> *src, array<Val> *not_inserte
 // Insert a new item into the map. If the key already exists, set the value and return the item. If the key does not
 // exist, create it. This may increase the hset capacity and rehash if the new size is greater
 template<typename Val>
-hset<Val>::iterator hset_set(hset<Val> *hs, const Val &val)
+void hset_set(hset<Val> *hs, const Val &val)
 {
-    return hset_insert_or_set(hs, val, true);
+    auto result = hset_insert_or_set(hs, val, true);
+    asrt(result);
 }
 
 // Call hset_set for all items in src on dest.
@@ -473,7 +474,8 @@ void hset_set(hset<Val> *dest, const hset<Val> *src)
 {
     auto iter = hset_begin(src);
     while (iter) {
-        assert(hset_set(dest, iter->key, iter->val));
+        auto result = hset_set(dest, iter->key, iter->val);
+        asrt(result);
         iter = hset_next(src, iter);
     }
 }
@@ -504,7 +506,7 @@ template<typename Val>
 hset<Val>::iterator hset_rbegin(const hset<Val> *hs)
 {
     if (is_valid(hs->head)) {
-        assert(is_valid(hs->buckets[hs->head].item.prev));
+        asrt(is_valid(hs->buckets[hs->head].item.prev));
         return &hs->buckets[hs->buckets[hs->head].item.prev].item;
     }
     return nullptr;

@@ -37,7 +37,6 @@ file(GLOB_RECURSE src_files
 
 # Create lib
 add_library(${NSLIB_TARGET_NAME} SHARED ${src_files})
-
 set_target_properties(${NSLIB_TARGET_NAME} PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY $<1:${CMAKE_BINARY_DIR}/bin>
   ARCHIVE_OUTPUT_DIRECTORY $<1:${CMAKE_BINARY_DIR}/lib>
@@ -47,8 +46,9 @@ target_compile_definitions(${NSLIB_TARGET_NAME} PUBLIC
   NSLIB_VERSION_MAJOR=${NSLIB_VERSION_MAJOR}
   NSLIB_VERSION_MINOR=${NSLIB_VERSION_MINOR}
   NSLIB_VERSION_PATCH=${NSLIB_VERSION_PATCH})
-target_include_directories(${NSLIB_TARGET_NAME} PRIVATE ${GLFW_INCLUDE} PUBLIC ${Vulkan_INCLUDE_DIRS})
-target_link_libraries(${NSLIB_TARGET_NAME} PRIVATE glfw PUBLIC ${Vulkan_LIBRARIES})
+target_include_directories(${NSLIB_TARGET_NAME} PRIVATE ${SDL_INCLUDE} PUBLIC ${Vulkan_INCLUDE_DIRS})
+target_link_libraries(${NSLIB_TARGET_NAME} PRIVATE SDL3::SDL3 PUBLIC ${Vulkan_LIBRARIES})
+
 
 if(WIN32)
   add_custom_target(link_target ALL

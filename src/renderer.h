@@ -141,14 +141,15 @@ struct pipeline_info
 
 struct rpass_info
 {
-    sizet rpind;
-    rid id;
+    sizet rpind{};
+    rid id{};
 };
 
 struct imgui_ctxt
 {
     ImGuiContext *ctxt;
     vkr_descriptor_pool pool;
+    vkr_rpass *rpass;
     sizet queue_family;
     vkr_queue queue;
     mem_arena fl;
@@ -185,7 +186,10 @@ struct renderer
     rmesh_info rmi;
 
     // Stored on reset render frame - used in subsequent frame calls to get the current frame
-    int finished_frames;
+    s32 finished_frames;
+
+    // This is incremented every frame there are no resize events
+    f64 no_resize_frames;
 
     sizet default_image_ind;
     sizet default_image_view_ind;
@@ -214,7 +218,7 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
 
 int begin_render_frame(renderer *rndr, int finished_frames);
 
-int end_render_frame(renderer *rndr, camera *cam);
+int end_render_frame(renderer *rndr, camera *cam, f64 dt);
 
 void terminate_renderer(renderer *rndr);
 

@@ -1,18 +1,19 @@
 #pragma once
 
-#include "basic_types.h"
 #include "osdef.h"
-
 #if defined(PLATFORM_UNIX)
 #include <ctime>
 #endif
+
+#include "basic_types.h"
+
     
-#define NSEC_TO_SEC(nsec) (((double)nsec) / 1000000000.0)
-#define NSEC_TO_MSEC(nsec) (((double)nsec) / 1000000.0)
-#define NSEC_TO_USEC(nsec) (((double)nsec) / 1000.0)
-#define SEC_TO_NSEC(sec) i64(sec * 1000000000)
-#define MSEC_TO_NSEC(msec) i64(msec * 1000000)
-#define USEC_TO_NSEC(usec) i64(usec * 1000)
+#define NSEC_TO_SEC(nsec) (((f64)nsec) / 1000000000.0)
+#define NSEC_TO_MSEC(nsec) (((f64)nsec) / 1000000.0)
+#define NSEC_TO_USEC(nsec) (((f64)nsec) / 1000.0)
+#define SEC_TO_NSEC(sec) s64(sec * 1000000000)
+#define MSEC_TO_NSEC(msec) s64(msec * 1000000)
+#define USEC_TO_NSEC(usec) s64(usec * 1000)
 
 namespace nslib
 {
@@ -29,14 +30,14 @@ struct ptimespec
 #if defined(PLATFORM_UNIX) 
     timespec t;
 #elif defined(PLATFORM_WIN32)
-    i64 t;
-    i64 f;
+    s64 t;
+    s64 f;
 #endif
 };
 
 struct profile_timepoints
 {
-    int ctype{};
+    s32 ctype{};
 
     // Most recent timepoint - set at restart and update
     ptimespec split;
@@ -48,14 +49,14 @@ struct profile_timepoints
     s64 dt_ns;
 
     // Time, in s, between current split point and previous split (updated with ptimer_split)
-    double dt;
+    f64 dt;
 };
 
-inline double nanos_to_sec(s64 ns) {
-    return (double)ns / 1000000000.0;
+inline f64 nanos_to_sec(s64 ns) {
+    return (f64)ns / 1000000000.0;
 }
 
-ptimespec ptimer_cur(int ptype);
+ptimespec ptimer_cur(s32 ptype);
 
 ptimespec ptimer_diff(const ptimespec *start, const ptimespec *end);
 

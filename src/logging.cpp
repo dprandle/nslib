@@ -28,7 +28,7 @@ intern logging_ctxt g_logger{"global", {}, LOG_DEBUG, false, {}};
 
 dllapi logging_ctxt *GLOBAL_LOGGER = &g_logger;
 
-intern const char *level_strings[] = {"TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"};
+intern const char *level_strings[] = {"TRACE", "DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"};
 
 #ifdef LOG_USE_COLOR
 intern const char *level_colors[] = {"\x1b[94m", "\x1b[36m", "\x1b[32m", "\x1b[33m", "\x1b[31m", "\x1b[35m"};
@@ -137,7 +137,7 @@ void lprint(logging_ctxt *logger, int level, const char *file, const char *func,
     log_event ev{};
     lock(logger);
     if (!logger->quiet && level >= logger->level) {
-        ev = {.fmt = fmt, .file = path_basename(file), .func = func, .line = line, .level = level, .thread_id = get_thread_id()};
+        ev = {.fmt = fmt, .file = get_path_basename(file), .func = func, .line = line, .level = level, .thread_id = get_thread_id()};
         init_event(&ev, stdout);
         va_start(ev.ap, fmt);
         stdout_callback(&ev);

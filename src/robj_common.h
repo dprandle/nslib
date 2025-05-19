@@ -166,7 +166,7 @@ template<class T>
 bool remove_cache(robj_cache<T> *cache, robj_cache_group *cg)
 {
     if (cache) {
-        assert(cache == cg->caches[T::type_id]);
+        asrt(cache == cg->caches[T::type_id]);
         terminate_cache(cache);
         mem_free(cache, cg->caches.arena);
         cg->caches[T::type_id] = {};

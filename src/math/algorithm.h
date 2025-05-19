@@ -1,8 +1,8 @@
 #pragma once
 
-#include "mtype_common.h"
 #include <cmath>
 #include <algorithm>
+#include "mtype_common.h"
 
 namespace nslib::math
 {

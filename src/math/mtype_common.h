@@ -1,7 +1,7 @@
 #pragma once
 #include "../basic_types.h"
 #include "../basic_type_traits.h"
-#include "../archive_common.h"
+#include "../archive_common.h" // IWYU pragma: export
 
 
 #define NOBLE_STEED_SSE_BIT (0x00000001)
@@ -132,6 +132,13 @@ bool fequals(T left, T right, T eps = FLOAT_EPS)
 {
     return (left < (right + FLOAT_EPS)) && (left > (right - FLOAT_EPS));
 }
+
+template<holds_floating_pt T>
+bool fequals(T left, T right)
+{
+    return (left == right);
+}
+
 
 template<holds_basic_comparable_type T>
 requires holds_floating_pt<T>

@@ -49,6 +49,12 @@ struct matrix2
     };
 };
 
+pup_func_tt(matrix2)
+{
+    pup_member(row1);
+    pup_member(row2);
+}    
+
 // Enable type trait
 template<class U>
 struct is_mat<matrix2<U>>
@@ -298,5 +304,5 @@ using u16mat2 = matrix2<u16>;
 using umat2 = matrix2<u32>;
 using u64mat2 = matrix2<u64>;
 using mat2 = matrix2<f32>;
-using dmat2 = matrix2<f64>;
+using f64mat2 = matrix2<f64>;
 } // namespace nslib

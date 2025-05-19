@@ -1,4 +1,4 @@
-#include "../container/vector.h"
+#include "../containers/array.h"
 #include "vector3.h"
 #include "matrix4.h"
 
@@ -19,7 +19,7 @@ struct bounding_box
         f_front
     };
 
-    bounding_box(const vector<vector3<T>> &verts_ = vector<vector3<T>>(), const matrix4<T> &tform_=matrix4<T>())
+    bounding_box(const array<vector3<T>> &verts_ = array<vector3<T>>(), const matrix4<T> &tform_=matrix4<T>())
     {
         calculate(verts_, tform_);
     }
@@ -32,7 +32,7 @@ struct bounding_box
     ~bounding_box()
     {}
 
-    void calculate(const vector<vector3<T>> &verts_, const matrix4<T> &tform_ = matrix4<T>())
+    void calculate(const array<vector3<T>> &verts_, const matrix4<T> &tform_ = matrix4<T>())
     {
         clear();
         extend(verts_, tform_);
@@ -75,7 +75,7 @@ struct bounding_box
             verts[i] = vector3<T>();
     }
 
-    void extend(const vector<vector3<T>> &verts_, const matrix4<T> &tform_ = matrix4<T>())
+    void extend(const array<vector3<T>> &verts_, const matrix4<T> &tform_ = matrix4<T>())
     {
         if (!verts_.empty())
         {
@@ -123,16 +123,16 @@ using cbbox = bounding_box<char>;
 using c16bbox = bounding_box<c16>;
 using c32bbox = bounding_box<c32>;
 using cwbbox = bounding_box<wchar>;
-using i8bbox = bounding_box<i8>;
-using i16bbox = bounding_box<i16>;
-using ibbox = bounding_box<i32>;
-using i64bbox = bounding_box<i64>;
+using i8bbox = bounding_box<s8>;
+using i16bbox = bounding_box<s16>;
+using ibbox = bounding_box<s32>;
+using i64bbox = bounding_box<s64>;
 using ui8bbox = bounding_box<u8>;
 using ui16bbox = bounding_box<u16>;
 using uibbox = bounding_box<u32>;
 using ui64bbox = bounding_box<u64>;
-using bbox = bounding_box<float>;
-using dbbox = bounding_box<double>;
-using ldbbox = bounding_box<ldouble>;
+using bbox = bounding_box<f32>;
+using f64bbox = bounding_box<f64>;
+using f128bbox = bounding_box<f128>;
 
 } // namespace nslib

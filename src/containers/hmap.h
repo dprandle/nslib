@@ -38,7 +38,7 @@ struct hmap_bucket
 };
 
 template<class Key>
-using hash_func = u64(const Key &, u64, u64);
+using hash_func = u64(const Key&, u64, u64);
 
 // Because hmap uses an array as it's memory management, all of the default dtor/copy ctor, assignment operator, etc
 // should work just fine
@@ -62,11 +62,11 @@ struct hmap
 };
 
 template<typename Key, typename Val>
-void hmap_debug_print(const array<hmap_bucket<Key, Val>> &buckets)
+void hmap_print_internal(const array<hmap_bucket<Key, Val>> &buckets)
 {
     for (sizet i = 0; i < buckets.size; ++i) {
         auto b = &buckets[i];
-        dlog("Bucket: %lu  hval:%lu  prev:%lu  next:%lu  item [key:%s  val:%s  prev:%lu  next:%lu]",
+        ilog("Bucket: %lu  hval:%lu  prev:%lu  next:%lu  item [key:%s  val:%s  prev:%lu  next:%lu]",
              i,
              b->hashed_v,
              b->prev,
@@ -134,7 +134,7 @@ bool hmap_should_rehash_on_insert(const hmap<Key, Val> *hm)
 template<typename Key, typename Val>
 sizet hmap_find_bucket(const hmap<Key, Val> *hm, const Key &k)
 {
-    assert(hm->hashf);
+    asrt(hm->hashf);
     if (hm->buckets.size == 0) {
         return false;
     }
@@ -211,7 +211,7 @@ void hmap_copy_bucket(hmap<Key, Val> *hm, sizet dest_ind, sizet src_ind)
 template<typename Key, typename Val>
 void hmap_clear_bucket(hmap<Key, Val> *hm, sizet bckt_ind)
 {
-    assert(bckt_ind < hm->buckets.size);
+    asrt(bckt_ind < hm->buckets.size);
 
     // If our next index is valid, use it to get the next bucket - set the next bucket's prev index to our prev index
     if (is_valid(hm->buckets[bckt_ind].next)) {
@@ -269,7 +269,7 @@ void hmap_clear_bucket(hmap<Key, Val> *hm, sizet bckt_ind)
 template<typename Key, typename Val>
 void hmap_remove_bucket(hmap<Key, Val> *hm, sizet bckt_ind)
 {
-    assert(bckt_ind < hm->buckets.size);
+    asrt(bckt_ind < hm->buckets.size);
     if (!is_valid(hm->buckets[bckt_ind].prev)) {
         return;
     }
@@ -328,7 +328,7 @@ bool hmap_remove(hmap<Key, Val> *hm, const Key &k, Val *val = nullptr)
 template<typename Key, typename Val>
 hmap<Key, Val>::iterator hmap_insert_or_set(hmap<Key, Val> *hm, const Key &k, const Val &val, bool set_if_exists)
 {
-    assert(hm->hashf);
+    asrt(hm->hashf);
     if (hm->buckets.size == 0) {
         return nullptr;
     }
@@ -380,8 +380,8 @@ hmap<Key, Val>::iterator hmap_insert_or_set(hmap<Key, Val> *hm, const Key &k, co
     }
 
     // The bucket item's next and prev should both be invalid
-    assert(!is_valid(hm->buckets[cur_bckt_ind].item.next));
-    assert(!is_valid(hm->buckets[cur_bckt_ind].item.prev));
+    asrt(!is_valid(hm->buckets[cur_bckt_ind].item.next));
+    asrt(!is_valid(hm->buckets[cur_bckt_ind].item.prev));
 
     // Set the key/value/hashed_v
     hm->buckets[cur_bckt_ind].hashed_v = hashval;
@@ -400,24 +400,24 @@ hmap<Key, Val>::iterator hmap_insert_or_set(hmap<Key, Val> *hm, const Key &k, co
         hm->buckets[hm->head].item.prev = cur_bckt_ind;
 
         // And finally the bucket before us (which was previously the last bucket) should now point to us as next
-        assert(!is_valid(hm->buckets[hm->buckets[cur_bckt_ind].item.prev].item.next));
+        asrt(!is_valid(hm->buckets[hm->buckets[cur_bckt_ind].item.prev].item.next));
         hm->buckets[hm->buckets[cur_bckt_ind].item.prev].item.next = cur_bckt_ind;
     }
 
     // And now, we need to insert the item in the bucket item's linked list chain
-    assert(!is_valid(hm->buckets[cur_bckt_ind].prev));
+    asrt(!is_valid(hm->buckets[cur_bckt_ind].prev));
 
     // If we are appending to a bucket ll rather than inserting the head bucket node
     sizet head_prev_ind = cur_bckt_ind;
     if (cur_bckt_ind != head_bckt_ind) {
         // Make sure the head bucket has a valid prev ind
-        assert(is_valid(hm->buckets[head_bckt_ind].prev));
+        asrt(is_valid(hm->buckets[head_bckt_ind].prev));
 
         // Set our prev to the bucket that was previously at the end
         hm->buckets[cur_bckt_ind].prev = hm->buckets[head_bckt_ind].prev;
 
         // Asssert the previously end bucket's next index is invalid, and then set it to us
-        assert(!is_valid(hm->buckets[hm->buckets[cur_bckt_ind].prev].next));
+        asrt(!is_valid(hm->buckets[hm->buckets[cur_bckt_ind].prev].next));
         hm->buckets[hm->buckets[cur_bckt_ind].prev].next = cur_bckt_ind;
 
         // Set the head bucket's prev ind to us
@@ -466,9 +466,10 @@ sizet hmap_insert(hmap<Key, Val> *dest, const hmap<Key, Val> *src, array<Key> *n
 // Insert a new item into the map. If the key already exists, set the value and return the item. If the key does not
 // exist, create it. This may increase the hmap capacity and rehash if the new size is greater
 template<typename Key, typename Val>
-hmap<Key, Val>::iterator hmap_set(hmap<Key, Val> *hm, const Key &k, const Val &val)
+void hmap_set(hmap<Key, Val> *hm, const Key &k, const Val &val)
 {
-    return hmap_insert_or_set(hm, k, val, true);
+    auto result = hmap_insert_or_set(hm, k, val, true);
+    asrt(result);
 }
 
 // Call hmap_set for all items in src on dest.
@@ -477,7 +478,8 @@ void hmap_set(hmap<Key, Val> *dest, const hmap<Key, Val> *src)
 {
     auto iter = hmap_begin(src);
     while (iter) {
-        assert(hmap_set(dest, iter->key, iter->val));
+        auto result = hmap_set(dest, iter->key, iter->val);
+        asrt(result);
         iter = hmap_next(src, iter);
     }
 }
@@ -565,7 +567,7 @@ template<typename Key, typename Val>
 hmap<Key, Val>::iterator hmap_rbegin(hmap<Key, Val> *hm)
 {
     if (is_valid(hm->head)) {
-        assert(is_valid(hm->buckets[hm->head].item.prev));
+        asrt(is_valid(hm->buckets[hm->head].item.prev));
         return &hm->buckets[hm->buckets[hm->head].item.prev].item;
     }
     return nullptr;
@@ -575,7 +577,7 @@ template<typename Key, typename Val>
 hmap<Key, Val>::const_iterator hmap_rbegin(const hmap<Key, Val> *hm)
 {
     if (is_valid(hm->head)) {
-        assert(is_valid(hm->buckets[hm->head].item.prev));
+        asrt(is_valid(hm->buckets[hm->head].item.prev));
         return &hm->buckets[hm->buckets[hm->head].item.prev].item;
     }
     return nullptr;

@@ -7,8 +7,9 @@
 #include "renderer.h"
 
 #include "imgui/imgui.h"
-#include "imgui/imgui_impl_glfw.h"
+#include "imgui/imgui_impl_sdl3.h"
 #include "imgui/imgui_impl_vulkan.h"
+#include "SDL3/SDL_events.h"
 
 namespace nslib
 {
@@ -29,15 +30,16 @@ intern const char *ADDITIONAL_INST_EXTENSIONS[ADDITIONAL_INST_EXTENSION_COUNT] =
 intern const u32 DEVICE_EXTENSION_COUNT = 2;
 intern const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_portability_subset"};
 #else
-intern const VkInstanceCreateFlags INST_CREATE_FLAGS = {};
-intern const u32 ADDITIONAL_INST_EXTENSION_COUNT = 1;
-intern const char *ADDITIONAL_INST_EXTENSIONS[ADDITIONAL_INST_EXTENSION_COUNT] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME};
-intern const u32 DEVICE_EXTENSION_COUNT = 1;
-intern const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+intern constexpr VkInstanceCreateFlags INST_CREATE_FLAGS = {};
+intern constexpr u32 ADDITIONAL_INST_EXTENSION_COUNT = 1;
+intern constexpr const char *ADDITIONAL_INST_EXTENSIONS[ADDITIONAL_INST_EXTENSION_COUNT] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME};
+intern constexpr u32 DEVICE_EXTENSION_COUNT = 1;
+intern constexpr const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 #endif
 
-const intern rid FWD_RPASS("forward");
-const intern rid PLINE_FWD_RPASS_S0_OPAQUE("forward-s0-opaque");
+intern constexpr f64 RESIZE_DEBOUNCE_FRAME_COUNT = 0.06; // 60 ms
+intern const rid FWD_RPASS("forward");
+intern const rid PLINE_FWD_RPASS_S0_OPAQUE("forward-s0-opaque");
 intern VkPipelineLayout G_FRAME_PL_LAYOUT{};
 
 enum descriptor_set_layout
@@ -82,7 +84,6 @@ struct render_pass_draw_group
     hmap<rid, pipeline_draw_group *> plines;
 };
 
-
 intern void imgui_mem_free(void *ptr, void *usr)
 {
     mem_free(ptr, (mem_arena *)usr);
@@ -90,7 +91,7 @@ intern void imgui_mem_free(void *ptr, void *usr)
 
 intern void *imgui_mem_alloc(sizet sz, void *usr)
 {
-    return mem_alloc(sz, (mem_arena *)usr, 8);
+    return mem_alloc(sz, (mem_arena *)usr, SIMD_MIN_ALIGNMENT);
 }
 
 intern void check_vk_result(VkResult err)
@@ -98,32 +99,52 @@ intern void check_vk_result(VkResult err)
     if (err != VK_SUCCESS) {
         wlog("vulkan err: %d", err);
     }
-    assert(err >= 0);
+    asrt(err >= 0);
 }
 
-intern void init_imgui(renderer *rndr)
+bool sdl_event_func(void *sdl_event, void *)
 {
+    auto *ev = (SDL_Event *)sdl_event;
+    auto io = ImGui::GetIO();
+    ImGui_ImplSDL3_ProcessEvent(ev);
+    if (ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN || ev->type == SDL_EVENT_MOUSE_BUTTON_UP || ev->type == SDL_EVENT_MOUSE_WHEEL) {
+        return io.WantCaptureMouse;
+    }
+    // NOTE: We might uncomment this in the future but for now we don't need to capture keyboard..
+    if (ev->type == SDL_EVENT_KEY_DOWN || ev->type == SDL_EVENT_KEY_UP) {
+        return io.WantCaptureKeyboard;
+    }
+    return false;
+}
+
+intern void init_imgui(renderer *rndr, void *win_hndl)
+{
+    auto dev = &rndr->vk.inst.device;
     mem_init_fl_arena(&rndr->imgui.fl, 10 * MB_SIZE, rndr->upstream_fl_arena, "imgui");
-    auto rpass = hmap_find(&rndr->rpasses, FWD_RPASS);
-    assert(rpass);
-    auto rpass_hndl = rndr->vk.inst.device.render_passes[rpass->val.rpind].hndl;
-    
+
+    // Use the main forward pass for imgui.. this might only change if we use deferred shading.. but i think the imgui
+    // created pipeling only requires a color attachment
+    auto rpass_fiter = hmap_find(&rndr->rpasses, FWD_RPASS);
+    asrt(rpass_fiter);
+    rndr->imgui.rpass = &dev->render_passes[rpass_fiter->val.rpind];
+
     ImGui::SetAllocatorFunctions(imgui_mem_alloc, imgui_mem_free, &rndr->imgui.fl);
     rndr->imgui.ctxt = ImGui::CreateContext();
     ImGui::StyleColorsDark();
     auto &io = ImGui::GetIO();
     io.FontGlobalScale = 2.0f;
-    
 
     vkr_descriptor_cfg cfg{};
     cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE;
-    vkr_init_descriptor_pool(&rndr->imgui.pool, &rndr->vk, &cfg);
+    cfg.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    if (vkr_init_descriptor_pool(&rndr->imgui.pool, &rndr->vk, &cfg) != err_code::VKR_NO_ERROR) {
+        wlog("Could not create imgui descriptor pool");
+    }
 
-    ImGui_ImplGlfw_InitForVulkan((GLFWwindow *)rndr->vk.cfg.window, true);
+    ImGui_ImplSDL3_InitForVulkan((SDL_Window *)rndr->vk.cfg.window);
 
     ImGui_ImplVulkan_InitInfo init_info = {};
     init_info.ApiVersion = VKR_API_VERSION;
-    
     init_info.Instance = rndr->vk.inst.hndl;
     init_info.PhysicalDevice = rndr->vk.inst.pdev_info.hndl;
     init_info.Device = rndr->vk.inst.device.hndl;
@@ -134,22 +155,24 @@ intern void init_imgui(renderer *rndr)
     init_info.Allocator = &rndr->vk.alloc_cbs;
     init_info.MinImageCount = MAX_FRAMES_IN_FLIGHT;
     init_info.ImageCount = rndr->vk.inst.device.swapchain.images.size;
-    init_info.RenderPass = rpass_hndl;
+    init_info.RenderPass = rndr->imgui.rpass->hndl;
     init_info.Subpass = 0;
     init_info.CheckVkResultFn = check_vk_result;
+    // init_info.MSAASamples
     ImGui_ImplVulkan_Init(&init_info);
 
     if (!ImGui_ImplVulkan_CreateFontsTexture()) {
         wlog("Could not create imgui vulkan font texture");
     }
 
+    set_platform_sdl_event_hook(win_hndl, {.cb = sdl_event_func});
 }
 
 intern void terminate_imgui(renderer *rndr)
 {
+    ImGui_ImplVulkan_Shutdown();
     vkr_terminate_descriptor_pool(&rndr->imgui.pool, &rndr->vk);
-    ImGui_ImplGlfw_Shutdown();
-    ImGui_ImplVulkan_Shutdown();    
+    ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext(rndr->imgui.ctxt);
     mem_terminate_arena(&rndr->imgui.fl);
 }
@@ -205,8 +228,9 @@ intern int setup_render_pass(renderer *rndr)
     rpi.id = FWD_RPASS;
     rpi.rpind = vkr_add_render_pass(&vk->inst.device, {});
 
-    int ret = vkr_init_render_pass(vk, &rp_cfg, &vk->inst.device.render_passes[rpi.rpind]);
+    int ret = vkr_init_render_pass(&vk->inst.device.render_passes[rpi.rpind], &rp_cfg, vk);
     if (ret == err_code::VKR_NO_ERROR) {
+        ilog("Setting render pass %s", str_cstr(rpi.id.str));
         hmap_set(&rndr->rpasses, rpi.id, rpi);
     }
     return ret;
@@ -370,7 +394,7 @@ intern int setup_pipeline(renderer *rndr)
         plinfo.id = PLINE_FWD_RPASS_S0_OPAQUE;
         plinfo.plind = vkr_add_pipeline(&vk->inst.device, {});
         plinfo.rpass_id = rpass_fiter->val.id;
-        int code = vkr_init_pipeline(vk, &info, &vk->inst.device.pipelines[plinfo.plind]);
+        int code = vkr_init_pipeline(&vk->inst.device.pipelines[plinfo.plind], &info, vk);
         if (code == err_code::VKR_NO_ERROR) {
             hmap_set(&rndr->pipelines, plinfo.id, plinfo);
 
@@ -378,6 +402,9 @@ intern int setup_pipeline(renderer *rndr)
             G_FRAME_PL_LAYOUT = vk->inst.device.pipelines[plinfo.plind].layout_hndl;
         }
         return code;
+    }
+    else {
+        elog("Failed to find render pass %s", str_cstr(FWD_RPASS.str));
     }
     return err_code::RENDER_INIT_FAIL;
 }
@@ -449,7 +476,7 @@ intern sbuffer_entry find_sbuffer_block(sbuffer_info *sbuf, sizet req_size)
     }
 
     // Crash if we don't have enough memory spots left
-    assert(node);
+    asrt(node);
     auto ret_entry = node->data;
 
     // Remove the node we just used
@@ -499,8 +526,8 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
         rsubmesh_entry new_smentry{};
         new_smentry.verts = find_sbuffer_block(&rndr->rmi.verts, req_vert_size);
         new_smentry.inds = find_sbuffer_block(&rndr->rmi.inds, req_inds_size);
-        assert(new_smentry.verts.size > 0);
-        assert(new_smentry.inds.size > 0);
+        asrt(new_smentry.verts.size > 0);
+        asrt(new_smentry.inds.size > 0);
         arr_emplace_back(&new_mentry.submesh_entrees, new_smentry);
 
         // Our required vert and ind size might be a little less than the avail block size, if a block was picked that
@@ -514,7 +541,7 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
         ind_region.dstOffset = new_smentry.inds.offset * sizeof(ind_t);
 
         // TODO: Handle error conditions here - there are several reasons why a buffer upload might fail - for new we
-        // just assert it worked
+        // just asrt it worked
 
         // Upload our vert data to the GPU
         int ret = vkr_stage_and_upload_buffer_data(&dev->buffers[rndr->rmi.verts.buf_ind],
@@ -524,7 +551,7 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
                                                    &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX],
                                                    VKR_RENDER_QUEUE,
                                                    &rndr->vk);
-        assert(ret == err_code::VKR_NO_ERROR);
+        asrt(ret == err_code::VKR_NO_ERROR);
 
         // Upload our ind data to the GPU
         ret = vkr_stage_and_upload_buffer_data(&dev->buffers[rndr->rmi.inds.buf_ind],
@@ -534,7 +561,7 @@ bool upload_to_gpu(mesh *msh, renderer *rndr)
                                                &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX],
                                                VKR_RENDER_QUEUE,
                                                &rndr->vk);
-        assert(ret == err_code::VKR_NO_ERROR);
+        asrt(ret == err_code::VKR_NO_ERROR);
     }
     dlog("Should be adding mesh id %s %d submeshes", str_cstr(msh->id.str), new_mentry.submesh_entrees.size);
     for (int si = 0; si < new_mentry.submesh_entrees.size; ++si) {
@@ -684,7 +711,7 @@ intern int init_swapchain_images_and_framebuffer(renderer *rndr)
     }
     // We need the render pass associated with our main framebuffer
     auto rp_fiter = hmap_find(&rndr->rpasses, FWD_RPASS);
-    assert(rp_fiter);
+    asrt(rp_fiter);
     vkr_init_swapchain_framebuffers(dev,
                                     vk,
                                     &dev->render_passes[rp_fiter->val.rpind],
@@ -701,26 +728,31 @@ intern int setup_rendering(renderer *rndr)
 
     int err = setup_render_pass(rndr);
     if (err != err_code::VKR_NO_ERROR) {
+        elog("Failed to setup render pass");
         return err;
     }
 
     err = setup_pipeline(rndr);
     if (err != err_code::VKR_NO_ERROR) {
+        elog("Failed to setup pipeline");
         return err;
     }
 
     err = init_swapchain_images_and_framebuffer(rndr);
     if (err != err_code::VKR_NO_ERROR) {
+        elog("Failed to setup swapchain images/framebuffers");
         return err;
     }
 
     err = setup_rmesh_info(rndr);
     if (err != err_code::VKR_NO_ERROR) {
+        elog("Failed to setup rmeshes");
         return err;
     }
 
     err = load_default_image_and_sampler(rndr);
     if (err != err_code::VKR_NO_ERROR) {
+        elog("Failed to setup default image/sampler");
         return err;
     }
 
@@ -728,7 +760,7 @@ intern int setup_rendering(renderer *rndr)
     // Create uniform buffers and descriptor sets pointing to them for each frame //
     ////////////////////////////////////////////////////////////////////////////////
     auto pline = hmap_find(&rndr->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
-    assert(pline);
+    asrt(pline);
     if (!pline) {
         return err_code::RENDER_INIT_FAIL;
     }
@@ -813,7 +845,6 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
     auto dev = &rndr->vk.inst.device;
     auto vert_buf = &dev->buffers[rndr->rmi.verts.buf_ind];
     auto ind_buf = &dev->buffers[rndr->rmi.inds.buf_ind];
-    auto img_data = ImGui::GetDrawData();
 
     int err = vkr_begin_cmd_buf(cmd_buf);
     if (err != err_code::VKR_NO_ERROR) {
@@ -821,7 +852,6 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
     }
 
     VkClearValue att_clear_vals[] = {{.color{{1.0f, 0.0f, 1.0f, 1.0f}}}, {.depthStencil{1.0f, 0}}};
-    vkr_cmd_begin_rpass(cmd_buf, fb, att_clear_vals, 2);
 
     // Bind the global vertex/index buffer/s
     VkBuffer vert_bufs[] = {vert_buf->hndl};
@@ -829,8 +859,13 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
     vkCmdBindVertexBuffers(cmd_buf->hndl, 0, 1, vert_bufs, offsets);
     vkCmdBindIndexBuffer(cmd_buf->hndl, ind_buf->hndl, 0, VK_INDEX_TYPE_UINT16);
 
+    // TODO: This really can't go in any order we want for render passes.. We might have dependency ordered between
+    // them.. for now we just have the one.. I'm not sure if we need to do a
     auto rpass_iter = hmap_begin(&rndr->dcs.rpasses);
     while (rpass_iter) {
+        auto rpass = &dev->render_passes[rpass_iter->val->rpinfo->rpind];
+        vkr_cmd_begin_rpass(cmd_buf, fb, rpass, att_clear_vals, 2);
+
         // Bind frame rpass descriptor set
         auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->val->fset].hndl;
         vkCmdBindDescriptorSets(
@@ -896,13 +931,17 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
             }
             pl_iter = hmap_next(&rpass_iter->val->plines, pl_iter);
         }
+
+        // If we are on the imgui rpass, render its stuff. It has it's own pipeling, vertex/index buffers, etc
+        if (rpass == rndr->imgui.rpass) {
+            auto img_data = ImGui::GetDrawData();
+            ImGui_ImplVulkan_RenderDrawData(img_data, cmd_buf->hndl);
+        }
+
+        vkr_cmd_end_rpass(cmd_buf);
         rpass_iter = hmap_next(&rndr->dcs.rpasses, rpass_iter);
     }
 
-    // See if this scoobys
-    ImGui_ImplVulkan_RenderDrawData(img_data, cmd_buf->hndl);
-
-    vkr_cmd_end_rpass(cmd_buf);
     return vkr_end_cmd_buf(cmd_buf);
 }
 
@@ -922,7 +961,7 @@ intern vkr_frame *get_previous_frame(renderer *rndr)
 
 int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_arena *fl_arena)
 {
-    assert(fl_arena->alloc_type == mem_alloc_type::FREE_LIST);
+    asrt(fl_arena->alloc_type == mem_alloc_type::FREE_LIST);
     rndr->upstream_fl_arena = fl_arena;
     mem_init_fl_arena(&rndr->vk_free_list, 100 * MB_SIZE, fl_arena, "vk");
     mem_init_fl_arena(&rndr->frame_fl, 100 * MB_SIZE, fl_arena, "frame");
@@ -938,19 +977,19 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
     desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER] = (MAX_RENDERPASS_COUNT + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT);
     desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC] = MAX_RENDERPASS_COUNT;
     desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = MAX_MATERIAL_COUNT * TEXTURE_SLOT_COUNT;
-    vkr_cfg vkii{"rdev",
-                 {1, 0, 0},
-                 {.persistent_arena = &rndr->vk_free_list, .command_arena = &rndr->vk_frame_linear},
-                 LOG_DEBUG,
-                 win_hndl,
-                 INST_CREATE_FLAGS,
-                 desc_cfg,
-                 ADDITIONAL_INST_EXTENSIONS,
-                 ADDITIONAL_INST_EXTENSION_COUNT,
-                 DEVICE_EXTENSIONS,
-                 DEVICE_EXTENSION_COUNT,
-                 VALIDATION_LAYERS,
-                 VALIDATION_LAYER_COUNT};
+    vkr_cfg vkii{.app_name = "rdev",
+                 .vi{1, 0, 0},
+                 .arenas{.persistent_arena = &rndr->vk_free_list, .command_arena = &rndr->vk_frame_linear},
+                 .log_verbosity = LOG_DEBUG,
+                 .window = win_hndl,
+                 .inst_create_flags = INST_CREATE_FLAGS,
+                 .desc_cfg{desc_cfg},
+                 .extra_instance_extension_names = ADDITIONAL_INST_EXTENSIONS,
+                 .extra_instance_extension_count = ADDITIONAL_INST_EXTENSION_COUNT,
+                 .device_extension_names = DEVICE_EXTENSIONS,
+                 .device_extension_count = DEVICE_EXTENSION_COUNT,
+                 .validation_layer_names = VALIDATION_LAYERS,
+                 .validation_layer_count = VALIDATION_LAYER_COUNT};
 
     if (vkr_init(&vkii, &rndr->vk) != err_code::VKR_NO_ERROR) {
         return err_code::RENDER_INIT_FAIL;
@@ -962,9 +1001,7 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
         return err;
     }
 
-    // 
-    init_imgui(rndr);
-    dlog("HERE");
+    init_imgui(rndr, win_hndl);
 
     // Create a default material for submeshes without materials
     auto mat_cache = get_cache<material>(cg);
@@ -990,7 +1027,7 @@ intern void recreate_swapchain(renderer *rndr)
     ilog("Recreating swapchain");
     // Recreating the swapchain will wait on all semaphores and fences before continuing
     auto dev = &rndr->vk.inst.device;
-    vkDeviceWaitIdle(dev->hndl);
+    vkr_device_wait_idle(dev);
     terminate_swapchain_images_and_framebuffer(rndr);
     vkr_terminate_swapchain(&dev->swapchain, &rndr->vk);
     vkr_terminate_surface(&rndr->vk, rndr->vk.inst.surface);
@@ -1013,7 +1050,9 @@ intern s32 acquire_swapchain_image(renderer *rndr, vkr_frame *cur_frame, u32 *im
     // wouldn't work because the queue submit would never fire as it depends on this image available semaphore.
     // At least.. i think?
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        recreate_swapchain(rndr);
+        if (rndr->no_resize_frames > RESIZE_DEBOUNCE_FRAME_COUNT) {
+            recreate_swapchain(rndr);
+        }
         return result;
     }
     else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
@@ -1061,7 +1100,9 @@ intern s32 present_image(renderer *rndr, vkr_frame *cur_frame, u32 image_ind)
     // This purely helps with smoothness - it works fine without recreating the swapchain here and instead doing it on
     // the next frame, but it seems to resize more smoothly doing it here
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
-        recreate_swapchain(rndr);
+        if (rndr->no_resize_frames > RESIZE_DEBOUNCE_FRAME_COUNT) {
+            recreate_swapchain(rndr);
+        }
     }
     else if (result != VK_SUCCESS) {
         elog("Failed to presenet KHR");
@@ -1077,13 +1118,13 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
 
     auto rmesh = hmap_find(&rndr->rmi.meshes, sm->mesh_id);
     static auto default_mat = get_robj(DEFAULT_MAT_ID, mat_cache);
-    assert(rmesh);
+    asrt(rmesh);
 
     // First iterate through all submeshes and associated materials
     // TODO: Create a default material to fall back on in the case that a submesh does not have a material
     auto msh = get_robj(sm->mesh_id, msh_cache);
-    assert(msh);
-    assert(rmesh->val.submesh_entrees.size == msh->submeshes.size);
+    asrt(msh);
+    asrt(rmesh->val.submesh_entrees.size == msh->submeshes.size);
     sizet cur_desc_ind = cur_frame->desc_pool.desc_sets.size;
 
     for (int i = 0; i < msh->submeshes.size; ++i) {
@@ -1099,12 +1140,12 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
         auto pl_iter = hset_begin(&mat->pipelines);
         while (pl_iter) {
             auto pl_fiter = hmap_find(&rndr->pipelines, pl_iter->val);
-            assert(pl_fiter);
+            asrt(pl_fiter);
             auto pline = &dev->pipelines[pl_fiter->val.plind];
 
             // Get the pipelines render pass
             auto rp_fiter = hmap_find(&rndr->rpasses, pl_fiter->val.rpass_id);
-            assert(rp_fiter);
+            asrt(rp_fiter);
 
             // If the render pass has not yet been added to our renderer's push list, add it now
             auto push_rp_fiter = hmap_find(&rndr->dcs.rpasses, rp_fiter->key);
@@ -1128,7 +1169,7 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
 
                 push_rp_fiter = hmap_insert(&rndr->dcs.rpasses, rp_fiter->key, rpdg);
             }
-            assert(push_rp_fiter);
+            asrt(push_rp_fiter);
 
             // If the pipeline has not yey been added to our render pass' push list, add it now
             auto push_pl_fiter = hmap_find(&push_rp_fiter->val->plines, pl_fiter->key);
@@ -1146,7 +1187,7 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
 
                 push_pl_fiter = hmap_insert(&push_rp_fiter->val->plines, pl_fiter->key, pldg);
             }
-            assert(push_pl_fiter);
+            asrt(push_pl_fiter);
 
             // Now create the material set, if it doesn't exist
             auto push_mat_fiter = hmap_find(&push_pl_fiter->val->mats, mat->id);
@@ -1165,7 +1206,7 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
 
                 push_mat_fiter = hmap_insert(&push_pl_fiter->val->mats, mat->id, matdg);
             }
-            assert(push_mat_fiter);
+            asrt(push_mat_fiter);
 
             // Now we create the actual draw call, and add the tform to the tform uniform buffer and increase the cur index
             draw_call dc{.index_count = (u32)rmesh->val.submesh_entrees[i].inds.size,
@@ -1213,8 +1254,8 @@ int begin_render_frame(renderer *rndr, int finished_frame_count)
     vkr_reset_descriptor_pool(&cur_frame->desc_pool, &rndr->vk);
 
     ImGui_ImplVulkan_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();    
+    ImGui_ImplSDL3_NewFrame();
+    ImGui::NewFrame();
 
     return err_code::VKR_NO_ERROR;
 }
@@ -1316,10 +1357,29 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
     return err_code::VKR_NO_ERROR;
 }
 
-int end_render_frame(renderer *rndr, camera *cam)
+int end_render_frame(renderer *rndr, camera *cam, f64 dt)
 {
     auto dev = &rndr->vk.inst.device;
     auto cur_frame = get_current_frame(rndr);
+
+    if (window_resized_this_frame(rndr->vk.cfg.window)) {
+        rndr->no_resize_frames = 0.0;
+    }
+    else {
+        rndr->no_resize_frames += dt;
+    }
+
+    // Recreating the swapchain here before even acquiring images gives us the smoothest resizing, but we still need to
+    // handle recreation for other things that might happen so keep the acquire image and present image recreations
+    // based on return value
+    if (cam) {
+        ivec2 sz = get_window_pixel_size(rndr->vk.cfg.window);
+        if (cam->vp_size != sz) {
+            rndr->no_resize_frames = 0;
+            cam->vp_size = sz;
+            cam->proj = (math::perspective(cam->fov, (f32)cam->vp_size.w / (f32)cam->vp_size.h, cam->near_far.x, cam->near_far.y));
+        }
+    }
 
     // Get the next available swapchain image index or return if the
     u32 im_ind{};
@@ -1329,16 +1389,6 @@ int end_render_frame(renderer *rndr, camera *cam)
             return err_code::RENDER_NO_ERROR;
         }
         return err;
-    }
-
-    // Recreating the swapchain here before even acquiring images gives us the smoothest resizing, but we still need to
-    // handle recreation for other things that might happen so keep the acquire image and present image recreations
-    // based on return value
-    if (platform_framebuffer_resized(rndr->vk.cfg.window)) {
-        ivec2 sz = get_framebuffer_size(rndr->vk.cfg.window);
-        if (cam) {
-            cam->proj = (math::perspective(60.0f, (f32)sz.w / (f32)sz.h, 0.1f, 1000.0f));
-        }
     }
 
     // Here we reset the fence for the current frame.. we wait for it to be signaled in render_frame_begin before
@@ -1353,7 +1403,7 @@ int end_render_frame(renderer *rndr, camera *cam)
     // Update our main pipeline view_proj with the cam transform update
     if (cam) {
         auto pline_to_update = hmap_find(&rndr->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
-        assert(pline_to_update);
+        asrt(pline_to_update);
         pline_to_update->val.proj_view = cam->proj * cam->view;
     }
 
@@ -1400,8 +1450,8 @@ void terminate_renderer(renderer *rndr)
     mem_terminate_arena(&rndr->rmi.inds.node_pool);
     mem_terminate_arena(&rndr->rmi.verts.node_pool);
 
+    vkr_device_wait_idle(&rndr->vk.inst.device);
     terminate_imgui(rndr);
-
     vkr_terminate(&rndr->vk);
     mem_terminate_arena(&rndr->vk_free_list);
     mem_terminate_arena(&rndr->vk_frame_linear);

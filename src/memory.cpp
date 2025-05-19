@@ -124,7 +124,7 @@ intern void *mem_free_list_alloc(mem_arena *arena, sizet size, sizet alignment_p
     // Search through the free list for a free block that has enough space to allocate our data
     mem_node *affected_node{}, *prev_node{};
     find(&arena->mfl, size, alignment, &padding, &prev_node, &affected_node);
-    assert(affected_node && "Not enough memory");
+    asrt(affected_node && "Not enough memory");
 
     // The total required size for this block (including header and alignment paddnig which are both included in padding)
     sizet required_size = size + padding;
@@ -243,7 +243,7 @@ intern void mem_free_list_free(mem_arena *arena, void *ptr)
          orig_sz,
          arena->used);
 #endif
-    assert(arena->used <= arena->total_size);
+    asrt(arena->used <= arena->total_size);
 
     // Merge contiguous nodes
     coalescence(&arena->mfl, it_prev, free_node);
@@ -252,7 +252,7 @@ intern void mem_free_list_free(mem_arena *arena, void *ptr)
 intern void *mem_pool_alloc(mem_arena *arena)
 {
     mem_node *free_pos = ll_pop_front(&arena->mpool.free_list);
-    assert(free_pos);
+    asrt(free_pos);
     arena->used += arena->mpool.chunk_size;
     arena->peak = std::max(arena->peak, arena->used);
     return (void *)free_pos;
@@ -274,7 +274,7 @@ intern void *mem_stack_alloc(mem_arena *arena, sizet size, sizet alignment)
     sizet current_addr = (sizet)arena->start + arena->mstack.offset;
     sizet padding = calc_padding_with_header(current_addr, alignment, sizeof(stack_alloc_header));
 
-    assert((arena->mstack.offset + padding + size) <= arena->total_size);
+    asrt((arena->mstack.offset + padding + size) <= arena->total_size);
 
     sizet next_addr = current_addr + padding;
     sizet header_addr = next_addr - sizeof(stack_alloc_header);
@@ -298,7 +298,7 @@ intern void *mem_stack_alloc(mem_arena *arena, sizet size, sizet alignment)
 intern void mem_stack_free(mem_arena *arena, void *ptr)
 {
     // Assert that we are freeing the stack in the correct order - the arena prev should match the ptr
-    assert(ptr == arena->mstack.prev);
+    asrt(ptr == arena->mstack.prev);
 
     // Move offset back to clear address
     sizet current_addr = (sizet)ptr;
@@ -331,7 +331,7 @@ intern void *mem_linear_alloc(mem_arena *arena, sizet size, sizet alignment)
         padding = calc_padding_with_header(block_addr, alignment, header_size);
     }
 
-    assert(arena->mlin.offset + padding + size <= arena->total_size);
+    asrt(arena->mlin.offset + padding + size <= arena->total_size);
 
     // Setting up a block header is purely to make realloc work with a linear allocator
     auto alignment_padding = padding - header_size;
@@ -366,7 +366,7 @@ void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment)
             ret = mem_free_list_alloc(arena, bytes, alignment);
             break;
         case (mem_alloc_type::POOL):
-            assert(bytes == arena->mpool.chunk_size);
+            asrt(bytes == arena->mpool.chunk_size);
             ret = mem_pool_alloc(arena);
             break;
         case (mem_alloc_type::STACK):
@@ -428,7 +428,7 @@ void *mem_realloc(void *ptr, sizet new_size, mem_arena *arena, sizet alignment, 
         if (ptr) {
             old_block_size = mem_block_user_size(ptr, arena);
             sizet block_size{new_size};
-            assert(old_block_size > 0);
+            asrt(old_block_size > 0);
 
             // We only want to copy the lesser size of the blocks bytes
             if (new_size > old_block_size) {
@@ -534,10 +534,10 @@ void mem_init_arena(mem_arena *arena, sizet total_size, mem_alloc_type mtype, me
     ilog("Initializing %s (%s) arena with %lu available", name, mem_arena_type_str(arena->alloc_type), arena->total_size);
 
     // Make sure user filled out a size before passsing in
-    assert(arena->total_size != 0);
+    asrt(arena->total_size != 0);
 
     // If pool allocator total size must be multiple of chunk size, and chunk size must not be zero
-    assert(arena->alloc_type != mem_alloc_type::POOL ||
+    asrt(arena->alloc_type != mem_alloc_type::POOL ||
            (((arena->total_size % arena->mpool.chunk_size) == 0) && (arena->mpool.chunk_size >= DEFAULT_MIN_ALIGNMENT)));
 
     if (!arena->upstream_allocator) {
@@ -613,7 +613,7 @@ mem_arena *mem_global_arena()
 void mem_set_global_arena(mem_arena *arena)
 {
     if (arena) {
-        assert(arena->alloc_type == mem_alloc_type::FREE_LIST);
+        asrt(arena->alloc_type == mem_alloc_type::FREE_LIST);
     }
     g_fl_arena = arena;
 }
@@ -626,7 +626,7 @@ mem_arena *mem_global_stack_arena()
 void mem_set_global_stack_arena(mem_arena *arena)
 {
     if (arena) {
-        assert(arena->alloc_type == mem_alloc_type::STACK);
+        asrt(arena->alloc_type == mem_alloc_type::STACK);
     }
     g_stack_arena = arena;
 }
@@ -639,7 +639,7 @@ mem_arena *mem_global_frame_lin_arena()
 void mem_set_global_frame_lin_arena(mem_arena *arena)
 {
     if (arena) {
-        assert(arena->alloc_type == mem_alloc_type::LINEAR);
+        asrt(arena->alloc_type == mem_alloc_type::LINEAR);
     }
     g_frame_linear_arena = arena;
 }

@@ -25,6 +25,10 @@ enum comp_flags : u64
     u32 ent_id;                                                                                                                            \
     u64 flags;
 
+#define PUP_COMP_COMMON \
+    pup_member(ent_id); \
+    pup_member(flags)
+
 struct transform
 {
     COMP(TRANSFORM)
@@ -44,9 +48,22 @@ struct static_model
 struct camera
 {
     COMP(CAMERA)
+    f32 fov;
+    vec2 near_far;
     mat4 proj;
     mat4 view;
+    ivec2 vp_size;
 };
+
+pup_func(camera)
+{
+    PUP_COMP_COMMON;
+    pup_member(fov);
+    pup_member(near_far);
+    pup_member(proj);
+    pup_member(view);
+    pup_member(vp_size);
+}    
 
 template<class T>
 struct comp_table

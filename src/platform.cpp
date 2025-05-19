@@ -10,33 +10,101 @@
 #endif
 #include <ctime>
 #include <cerrno>
+
+#include "json_archive.h"
 #include "input_kmcodes.h"
+#include "math/primitives.h"
 #include "platform.h"
 #include "logging.h"
 #include "containers/cjson.h"
+#include "imgui/imgui_impl_sdl3.h"
 
-#include "GLFW/glfw3.h"
+#include "SDL3/SDL_events.h"
+#include "SDL3/SDL_log.h"
+#include "SDL3/SDL_init.h"
 
 namespace nslib
 {
 
-#define platform_ptr(win) (platform_ctxt *)glfwGetWindowUserPointer(win)
+intern platform_ctxt *platform_window_ptr(void *win)
+{
+    auto props = SDL_GetWindowProperties((SDL_Window *)win);
+    auto pf = SDL_GetPointerProperty(props, "platform", nullptr);
+    return (platform_ctxt *)pf;
+}
+
 intern void glfw_error_callback(s32 error, const char *description)
 {
     elog("Error %d: %s", error, description);
 }
 
-platform_window_event *get_latest_window_event(platform_window_event_type type, platform_frame_window_events *fwind)
+intern const char *sdl_cat_str(int cat)
 {
-    for (sizet i = fwind->events.size; i > 0; --i) {
-        if (fwind->events[i - 1].type == type) {
-            return &fwind->events[i - 1];
-        }
+    switch (cat) {
+    case SDL_LOG_CATEGORY_APPLICATION:
+        return "app";
+    case SDL_LOG_CATEGORY_ERROR:
+        return "error";
+    case SDL_LOG_CATEGORY_ASSERT:
+        return "assert";
+    case SDL_LOG_CATEGORY_SYSTEM:
+        return "system";
+    case SDL_LOG_CATEGORY_AUDIO:
+        return "audio";
+    case SDL_LOG_CATEGORY_VIDEO:
+        return "video";
+    case SDL_LOG_CATEGORY_RENDER:
+        return "render";
+    case SDL_LOG_CATEGORY_INPUT:
+        return "input";
+    case SDL_LOG_CATEGORY_TEST:
+        return "test";
+    case SDL_LOG_CATEGORY_GPU:
+        return "gpu";
+    default:
+        return "unknown";
     }
-    return nullptr;
 }
 
-const char *path_basename(const char *path)
+intern void sdl_log_callback(void *userdata, int category, SDL_LogPriority priority, const char *message)
+{
+    switch (priority) {
+    case SDL_LOG_PRIORITY_TRACE:
+        tlog("SDL %s: %s", sdl_cat_str(category), message);
+        break;
+    case SDL_LOG_PRIORITY_VERBOSE:
+        tlog("SDL %s: %s", sdl_cat_str(category), message);
+        break;
+    case SDL_LOG_PRIORITY_DEBUG:
+        dlog("SDL %s: %s", sdl_cat_str(category), message);
+        break;
+    case SDL_LOG_PRIORITY_INFO:
+        ilog("SDL %s: %s", sdl_cat_str(category), message);
+        break;
+    case SDL_LOG_PRIORITY_WARN:
+        wlog("SDL %s: %s", sdl_cat_str(category), message);
+        break;
+    case SDL_LOG_PRIORITY_ERROR:
+        elog("SDL %s: %s", sdl_cat_str(category), message);
+        break;
+    case SDL_LOG_PRIORITY_CRITICAL:
+        clog("SDL %s: %s", sdl_cat_str(category), message);
+        break;
+    default:
+        elog("SDL? %s: %s", sdl_cat_str(category), message);
+    }
+}
+
+intern bool log_any_sdl_error(const char *prefix = "SDL err")
+{
+    auto err = SDL_GetError();
+    elog("%s: %s", prefix, (err) ? err : "none");
+    bool ret = (err);
+    SDL_ClearError();
+    return ret;
+}
+
+const char *get_path_basename(const char *path)
 {
     const char *ret = strrchr(path, PATH_SEP);
     if (!ret) {
@@ -45,201 +113,24 @@ const char *path_basename(const char *path)
     return ret;
 }
 
-bool frame_has_event_type(platform_window_event_type type, const platform_frame_window_events *fwind)
+bool is_input_event(u32 ev_type)
 {
-    for (sizet i = 0; i < fwind->events.size; ++i) {
-        if (fwind->events[i].type == type) {
+    return ev_type < EVENT_TYPE_WINDOW_RESIZE;
+}
+
+bool is_window_event(u32 ev_typ)
+{
+    return !is_input_event(ev_typ);
+}
+
+bool frame_has_event_type(platform_event_type type, const platform_frame_event_queue *fevents)
+{
+    for (sizet i = 0; i < fevents->events.size; ++i) {
+        if (fevents->events[i].type == type) {
             return true;
         }
     }
     return false;
-}
-
-intern s32 get_cursor_scroll_mod_mask(GLFWwindow *window)
-{
-    s32 ret{0};
-    if (glfwGetKey(window, KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, KEY_RIGHT_SHIFT) == GLFW_PRESS) {
-        ret |= KEY_MOD_SHIFT;
-    }
-    if (glfwGetKey(window, KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(window, KEY_RIGHT_CONTROL) == GLFW_PRESS) {
-        ret |= KEY_MOD_CONTROL;
-    }
-    if (glfwGetKey(window, KEY_LEFT_ALT) == GLFW_PRESS || glfwGetKey(window, KEY_RIGHT_ALT) == GLFW_PRESS) {
-        ret |= KEY_MOD_ALT;
-    }
-    if (glfwGetKey(window, KEY_LEFT_SUPER) == GLFW_PRESS || glfwGetKey(window, KEY_RIGHT_SUPER) == GLFW_PRESS) {
-        ret |= KEY_MOD_SUPER;
-    }
-    if (glfwGetKey(window, KEY_CAPS_LOCK) == GLFW_PRESS) {
-        ret |= KEY_MOD_CAPS_LOCK;
-    }
-    if (glfwGetKey(window, KEY_NUM_LOCK) == GLFW_PRESS) {
-        ret |= KEY_MOD_NUM_LOCK;
-    }
-    if (glfwGetMouseButton(window, MOUSE_BTN_LEFT)) {
-        ret |= CURSOR_SCROLL_MOD_MOUSE_LEFT;
-    }
-    if (glfwGetMouseButton(window, MOUSE_BTN_RIGHT)) {
-        ret |= CURSOR_SCROLL_MOD_MOUSE_RIGHT;
-    }
-    if (glfwGetMouseButton(window, MOUSE_BTN_MIDDLE)) {
-        ret |= CURSOR_SCROLL_MOD_MOUSE_MIDDLE;
-    }
-    return ret;
-}
-
-intern void glfw_key_press_callback(GLFWwindow *window, s32 key, s32 scancode, s32 action, s32 mods)
-{
-    platform_ctxt *pf = platform_ptr(window);
-    if (pf->finp.events.size == pf->finp.events.capacity) {
-        pf->finp.events.size = 0;
-    }
-    arr_push_back(&pf->finp.events, {platform_input_event_type::KEY_PRESS, key, scancode, action, mods, {}, {}, window});
-}
-
-intern void glfw_mouse_button_callback(GLFWwindow *window, s32 button, s32 action, s32 mods)
-{
-    platform_ctxt *pf = platform_ptr(window);
-    if (pf->finp.events.size == pf->finp.events.capacity) {
-        pf->finp.events.size = 0;
-    }
-    arr_push_back(&pf->finp.events, {platform_input_event_type::MOUSE_BTN, button, {}, action, mods, {}, {}, window});
-}
-
-intern void glfw_scroll_callback(GLFWwindow *window, double x_offset, double y_offset)
-{
-    vec2 foffset{(float)x_offset, (float)y_offset};
-    platform_ctxt *pf = platform_ptr(window);
-    if (pf->finp.events.size == pf->finp.events.capacity) {
-        pf->finp.events.size = 0;
-    }
-    arr_push_back(&pf->finp.events,
-                  {platform_input_event_type::SCROLL, SCROLL_CHANGE, {}, {}, get_cursor_scroll_mod_mask(window), foffset, {}, window});
-}
-
-intern void glfw_cursor_pos_callback(GLFWwindow *window, double x_pos, double y_pos)
-{
-    vec2 fpos{(float)x_pos, (float)y_pos};
-    platform_ctxt *pf = platform_ptr(window);
-    if (pf->finp.events.size == pf->finp.events.capacity) {
-        pf->finp.events.size = 0;
-    }
-    arr_push_back(&pf->finp.events,
-                  {platform_input_event_type::CURSOR_POS, CURSOR_POS_CHANGE, {}, {}, get_cursor_scroll_mod_mask(window), {}, fpos, window});
-}
-
-intern void glfw_focus_change_callback(GLFWwindow *window, s32 focused)
-{
-    platform_ctxt *pf = platform_ptr(window);
-    if (pf->fwind.events.size == pf->fwind.events.capacity) {
-        pf->fwind.events.size = 0;
-    }
-    platform_window_event we{platform_window_event_type::FOCUS};
-    we.window = window;
-    we.focus = focused;
-    arr_push_back(&pf->fwind.events, we);
-    tlog("Focus Change");
-}
-
-intern void glfw_close_window_callback(GLFWwindow *window)
-{
-    tlog("Closing window...");
-}
-
-intern void glfw_iconify_window_callback(GLFWwindow *window, s32 iconified)
-{
-    platform_ctxt *pf = platform_ptr(window);
-    if (pf->fwind.events.size == pf->fwind.events.capacity) {
-        pf->fwind.events.size = 0;
-    }
-    platform_window_event we{platform_window_event_type::ICONIFIED};
-    we.window = window;
-    we.iconified = iconified;
-    arr_push_back(&pf->fwind.events, we);
-    tlog("Window %s", (iconified) ? "iconified" : "restored");
-}
-
-intern void glfw_maximize_window_callback(GLFWwindow *window, s32 maximized)
-{
-    platform_ctxt *pf = platform_ptr(window);
-    if (pf->fwind.events.size == pf->fwind.events.capacity) {
-        pf->fwind.events.size = 0;
-    }
-    platform_window_event we{platform_window_event_type::MAXIMIZED};
-    we.window = window;
-    we.iconified = maximized;
-    arr_push_back(&pf->fwind.events, we);
-    tlog("Window %s", (maximized) ? "maximized" : "restored");
-}
-
-intern void glfw_window_position_callback(GLFWwindow *window, s32 x_pos, s32 y_pos)
-{
-    platform_ctxt *pf = platform_ptr(window);
-    if (pf->fwind.events.size == pf->fwind.events.capacity) {
-        pf->fwind.events.size = 0;
-    }
-    platform_window_event we{platform_window_event_type::MOVE};
-    we.window = window;
-    we.move.first = {x_pos, y_pos};
-    we.resize.second = pf->fwind.pos;
-    pf->fwind.pos = we.resize.first;
-    arr_push_back(&pf->fwind.events, we);
-}
-
-intern void glfw_resize_window_callback(GLFWwindow *window, s32 width, s32 height)
-{
-    platform_ctxt *pf = platform_ptr(window);
-    platform_window_event *ev_ptr = get_latest_window_event(platform_window_event_type::WIN_RESIZE, &pf->fwind);
-    if (!ev_ptr) {
-        if (pf->fwind.events.size == pf->fwind.events.capacity) {
-            pf->fwind.events.size = 0;
-        }
-        platform_window_event we{platform_window_event_type::WIN_RESIZE};
-        we.window = window;
-        ev_ptr = arr_push_back(&pf->fwind.events, we);
-    }
-    ev_ptr->resize.first = {width, height};
-    ev_ptr->resize.second = pf->fwind.win_size;
-    pf->fwind.win_size = ev_ptr->resize.first;
-    tlog("Resized window from {%d %d} to {%d %d}", ev_ptr->resize.second.w, ev_ptr->resize.second.h, width, height);
-}
-
-intern void glfw_framebuffer_resized_callback(GLFWwindow *window, s32 width, s32 height)
-{
-    platform_ctxt *pf = platform_ptr(window);
-    platform_window_event *ev_ptr = get_latest_window_event(platform_window_event_type::FB_RESIZE, &pf->fwind);
-    if (!ev_ptr) {
-        if (pf->fwind.events.size == pf->fwind.events.capacity) {
-            pf->fwind.events.size = 0;
-        }
-        platform_window_event we{platform_window_event_type::FB_RESIZE};
-        we.window = window;
-        ev_ptr = arr_push_back(&pf->fwind.events, we);
-    }
-    ev_ptr->resize.first = {width, height};
-    ev_ptr->resize.second = pf->fwind.fb_size;
-    pf->fwind.fb_size = ev_ptr->resize.first;
-    tlog("Resized framebuffer from {%d %d} to {%d %d}", ev_ptr->resize.second.w, ev_ptr->resize.second.h, width, height);
-}
-
-intern void set_glfw_callbacks(platform_ctxt *ctxt)
-{
-    auto glfw_win = (GLFWwindow *)ctxt->win_hndl;
-    glfwSetWindowUserPointer(glfw_win, ctxt);
-
-    glfwSetWindowSizeCallback(glfw_win, glfw_resize_window_callback);
-    glfwSetWindowCloseCallback(glfw_win, glfw_close_window_callback);
-    glfwSetWindowMaximizeCallback(glfw_win, glfw_maximize_window_callback);
-    glfwSetWindowIconifyCallback(glfw_win, glfw_iconify_window_callback);
-    glfwSetWindowPosCallback(glfw_win, glfw_window_position_callback);
-    glfwSetWindowFocusCallback(glfw_win, glfw_focus_change_callback);
-    glfwSetFramebufferSizeCallback(glfw_win, glfw_framebuffer_resized_callback);
-    glfwSetKeyCallback(glfw_win, glfw_key_press_callback);
-    glfwSetMouseButtonCallback(glfw_win, glfw_mouse_button_callback);
-    glfwSetScrollCallback(glfw_win, glfw_scroll_callback);
-    glfwSetCursorPosCallback(glfw_win, glfw_cursor_pos_callback);
-
-    glfwSetInputMode(glfw_win, GLFW_LOCK_KEY_MODS, GLFW_FALSE);
 }
 
 intern void init_mem_arenas(const platform_memory_init_info *info, platform_memory *mem)
@@ -274,6 +165,171 @@ intern void terminate_mem_arenas(platform_memory *mem)
     mem_set_global_frame_lin_arena(nullptr);
 }
 
+intern void log_display_info()
+{
+    int count;
+    auto ids = SDL_GetDisplays(&count);
+    ilog("Got %d displays", count);
+    for (int i = 0; i < count; ++i) {
+        SDL_Rect r;
+        auto props = SDL_GetDisplayBounds(ids[i], &r);
+        srect sr = {r.x, r.y, r.w, r.h};
+        ilog("Display %s - rect x:%d y:%d w:%d h:%d", SDL_GetDisplayName(ids[i]), r.x, r.y, r.w, r.h);
+    }
+}
+
+intern u32 get_sdl_window_flags(u32 platform_win_flags)
+{
+    return platform_win_flags;
+}
+
+intern input_kmcode map_sdl_key(SDL_Keycode sdl_key)
+{
+    u16 ret{0};
+    if (sdl_key <= SDLK_PLUSMINUS) {
+        ret = sdl_key;
+    }
+    else if (sdl_key <= SDLK_RHYPER) {
+        int offset = sdl_key - SDLK_LEFT_TAB;
+        ret = KMCODE_KEY_LEFT_TAB + offset;
+    }
+    else if (sdl_key <= SDLK_PAGEUP) {
+        int offset = sdl_key - SDLK_CAPSLOCK;
+        ret = KMCODE_KEY_CAPSLOCK + offset;
+    }
+    else if (sdl_key <= SDLK_VOLUMEDOWN) {
+        int offset = sdl_key - SDLK_END;
+        ret = KMCODE_KEY_END + offset;
+    }
+    else if (sdl_key <= SDLK_KP_EQUALSAS400) {
+        int offset = sdl_key - SDLK_KP_COMMA;
+        ret = KMCODE_KEY_KP_COMMA + offset;
+    }
+    else if (sdl_key <= SDLK_EXSEL) {
+        int offset = sdl_key - SDLK_ALTERASE;
+        ret = KMCODE_KEY_ALTERASE + offset;
+    }
+    else if (sdl_key <= SDLK_KP_HEXADECIMAL) {
+        int offset = sdl_key - SDLK_KP_00;
+        ret = KMCODE_KEY_KP_00 + offset;
+    }
+    else if (sdl_key <= SDLK_RGUI) {
+        int offset = sdl_key - SDLK_LCTRL;
+        ret = KMCODE_KEY_LCTRL + offset;
+    }
+    else if (sdl_key <= SDLK_ENDCALL) {
+        int offset = sdl_key - SDLK_MODE;
+        ret = KMCODE_KEY_MODE + offset;
+    }
+    else {
+        wlog("Unhandled SDL key code %u", sdl_key);
+    }
+    return (input_kmcode)ret;
+}
+
+intern input_kmcode map_sdl_mbutton(u8 sdl_mbutton)
+{
+    u16 ret{sdl_mbutton};
+    return (input_kmcode)ret;
+}
+
+intern u16 map_sdl_mods(SDL_Keymod mods)
+{
+    // Nothing needs to be done to map these
+    return mods;
+}
+
+intern u16 map_sdl_mouse_state(SDL_MouseButtonFlags mods)
+{
+    // Nothing needs to be done to map these
+    return (u16)mods;
+}
+
+intern void handle_sdl_key_event(platform_ctxt *ctxt, platform_event *event, const SDL_KeyboardEvent &ev)
+{
+    event->type = EVENT_TYPE_INPUT_KEY;
+    event->timestamp = ev.timestamp;
+    event->win_id = ev.windowID;
+    event->ie.kmcode = map_sdl_key(ev.key);
+    event->ie.keymods = map_sdl_mods(ev.mod);
+    event->ie.mbutton_mask = map_sdl_mouse_state(SDL_GetMouseState(nullptr, nullptr));
+
+    event->ie.key.action = (ev.repeat) ? INPUT_ACTION_REPEAT : ((ev.down) ? INPUT_ACTION_PRESS : INPUT_ACTION_RELEASE);
+    event->ie.key.scancode = ev.scancode;
+    event->ie.key.raw_scancode = ev.raw;
+    event->ie.key.keyboard_id = ev.which;
+}
+
+intern void handle_sdl_mbutton_event(platform_ctxt *ctxt, platform_event *event, const SDL_MouseButtonEvent &ev)
+{
+    event->type = EVENT_TYPE_INPUT_MBUTTON;
+    event->timestamp = ev.timestamp;
+    event->win_id = ev.windowID;
+    event->ie.kmcode = map_sdl_mbutton(ev.button);
+    event->ie.keymods = map_sdl_mods(SDL_GetModState());
+    event->ie.mbutton_mask = map_sdl_mouse_state(SDL_GetMouseState(nullptr, nullptr));
+
+    vec2 win_sz = get_window_pixel_size(get_window(ev.windowID));
+    event->ie.mbutton.action = (ev.down) ? INPUT_ACTION_PRESS : INPUT_ACTION_RELEASE;
+    event->ie.mbutton.mpos = {ev.x, ev.y};
+    event->ie.mbutton.norm_mpos = event->ie.mbutton.mpos / win_sz;
+    event->ie.mbutton.mouse_id = ev.which;
+}
+
+intern void handle_sdl_mmotion_event(platform_ctxt *ctxt, platform_event *event, const SDL_MouseMotionEvent &ev)
+{
+    event->type = EVENT_TYPE_INPUT_MMOTION;
+    event->timestamp = ev.timestamp;
+    event->win_id = ev.windowID;
+    event->ie.kmcode = KMCODE_MMOTION;
+    event->ie.keymods = map_sdl_mods(SDL_GetModState());
+    event->ie.mbutton_mask = map_sdl_mouse_state(SDL_GetMouseState(nullptr, nullptr));
+
+    vec2 win_sz = get_window_pixel_size(get_window(ev.windowID));
+    event->ie.mmotion.mpos = {ev.x, ev.y};
+    event->ie.mmotion.norm_mpos = event->ie.mbutton.mpos / win_sz;
+    event->ie.mmotion.delta = {ev.xrel, ev.yrel};
+    event->ie.mmotion.norm_delta = event->ie.mmotion.delta / win_sz;
+    event->ie.mmotion.mouse_id = ev.which;
+}
+
+intern void handle_sdl_mwheel_event(platform_ctxt *ctxt, platform_event *event, const SDL_MouseWheelEvent &ev)
+{
+    event->type = EVENT_TYPE_INPUT_MWHEEL;
+    event->timestamp = ev.timestamp;
+    event->win_id = ev.windowID;
+    event->ie.kmcode = KMCODE_MWHEEL;
+    event->ie.keymods = map_sdl_mods(SDL_GetModState());
+    event->ie.mbutton_mask = map_sdl_mouse_state(SDL_GetMouseState(nullptr, nullptr));
+
+    vec2 win_sz = get_window_pixel_size(get_window(ev.windowID));
+    event->ie.mwheel.mpos = {ev.x, ev.y};
+    event->ie.mwheel.norm_mpos = event->ie.mbutton.mpos / win_sz;
+    event->ie.mwheel.delta = {ev.x, ev.y};
+    event->ie.mwheel.idelta = {ev.integer_x, ev.integer_y};
+    event->ie.mwheel.mouse_id = ev.which;
+}
+
+intern void handle_sdl_window_geom_with_prev(platform_ctxt *ctxt,
+                                             platform_event *event,
+                                             const ivec2 &prev,
+                                             platform_event_type et,
+                                             const SDL_WindowEvent &ev)
+{
+    event->type = et;
+    event->timestamp = ev.timestamp;
+    event->win_id = ev.windowID;
+    event->we.data = {prev, {ev.data1, ev.data2}};
+}
+
+intern void handle_sdl_window_event(platform_ctxt *ctxt, platform_event *event, int data, platform_event_type et, const SDL_WindowEvent &ev)
+{
+    event->type = et;
+    event->timestamp = ev.timestamp;
+    event->win_id = ev.windowID;
+    event->we.idata = data;
+}
+
 void *platform_alloc(sizet byte_size)
 {
     return malloc(byte_size);
@@ -292,102 +348,229 @@ void *platform_realloc(void *ptr, sizet byte_size)
 int init_platform(const platform_init_info *settings, platform_ctxt *ctxt)
 {
     ilog("Platform init version %d.%d.%d", NSLIB_VERSION_MAJOR, NSLIB_VERSION_MINOR, NSLIB_VERSION_PATCH);
-    glfwSetErrorCallback(glfw_error_callback);
-
-    if (!glfwInit()) {
-        elog("GLFW init failed - closing");
+    SDL_SetLogOutputFunction(sdl_log_callback, nullptr);
+    if (!SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO)) {
+        elog("Could not initialize SDL");
         return err_code::PLATFORM_INIT_FAIL;
     }
+    ilog("Initialized SDL");
 
-    ctxt->win_hndl = create_platform_window(&settings->wind);
+    ctxt->win_hndl = create_window(&settings->wind, &ctxt->display_scale);
     if (!ctxt->win_hndl) {
-        elog("Failed to create window");
+        log_any_sdl_error("Failed to create window");
         return err_code::PLATFORM_INIT_FAIL;
     }
-
-    glfwGetFramebufferSize((GLFWwindow *)ctxt->win_hndl, &ctxt->fwind.fb_size.x, &ctxt->fwind.fb_size.y);
-    glfwGetWindowSize((GLFWwindow *)ctxt->win_hndl, &ctxt->fwind.win_size.x, &ctxt->fwind.win_size.y);
-    glfwGetWindowPos((GLFWwindow *)ctxt->win_hndl, &ctxt->fwind.pos.x, &ctxt->fwind.pos.y);
-
-    set_glfw_callbacks(ctxt);
+    auto props = SDL_GetWindowProperties((SDL_Window *)ctxt->win_hndl);
+    if (props == 0) {
+        log_any_sdl_error("Failed to get window props");
+    }
+    else {
+        if (!SDL_SetPointerProperty(props, "platform", ctxt)) {
+            log_any_sdl_error("Failed to set platform ptr in window props");
+        }
+    }
+    SDL_SetWindowPosition((SDL_Window *)ctxt->win_hndl, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
 
     // Seed random number generator
     srand((u32)time(NULL));
 
-    auto mon = glfwGetPrimaryMonitor();
-    vec2 scale;
-    glfwGetMonitorContentScale(mon, &scale.x, &scale.y);
-    ilog("Monitor scale is {%f %f}", scale.x, scale.y);
-
     set_logging_level(GLOBAL_LOGGER, settings->default_log_level);
     init_mem_arenas(&settings->mem, &ctxt->arenas);
+    ctxt->running = true;
     return err_code::PLATFORM_NO_ERROR;
 }
 
 int terminate_platform(platform_ctxt *ctxt)
 {
     ilog("Platform terminate");
+    SDL_DestroyWindow((SDL_Window *)ctxt->win_hndl);
+    SDL_Quit();
+    ilog("Terminated SDL");
     terminate_mem_arenas(&ctxt->arenas);
     return err_code::PLATFORM_NO_ERROR;
 }
 
-void *create_platform_window(const platform_window_init_info *settings)
+void set_platform_sdl_event_hook(void *window, const platform_sdl_event_hook &hook)
 {
-    assert(settings);
+    platform_ctxt *pf = platform_window_ptr(window);
+    pf->feventq.sdl_hook = hook;
+}
 
-    GLFWmonitor *monitor = glfwGetPrimaryMonitor();
-    const GLFWvidmode *mode = glfwGetVideoMode(monitor);
+void *create_window(const platform_window_init_info *settings, float *display_scale)
+{
+    asrt(settings);
 
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RED_BITS, mode->redBits);
-    glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
-    glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
-    glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
+    log_display_info();
+
     ivec2 sz = settings->resolution;
+    auto sdl_flags = get_sdl_window_flags(settings->win_flags);
 
-    if (test_flags(settings->win_flags, platform_window_flags::SCALE_TO_MONITOR)) {
-        vec2 scale;
-        glfwGetMonitorContentScale(monitor, &scale.x, &scale.y);
-        sz = vec2(sz) * scale;
+    auto primary = SDL_GetPrimaryDisplay();
+    f32 scale = SDL_GetDisplayContentScale(primary);
+    if (display_scale) {
+        *display_scale = scale;
     }
-
-    bool fullsreen = false;
-    if (test_flags(settings->win_flags, platform_window_flags::FULLSCREEN)) {
-        glfwWindowHint(GLFW_AUTO_ICONIFY, (int)test_flags(settings->win_flags, platform_window_flags::FULLSCREEN_AUTO_ICONIFTY));
-        glfwWindowHint(GLFW_CENTER_CURSOR, (int)test_flags(settings->win_flags, platform_window_flags::FULLSCREEN_CENTER_CURSOR));
+    if (test_flags(settings->win_flags, WINDOW_ALLOW_HIGHDPI)) {
+        sz = sz * scale;
+        ilog("Display scaling set to %.2f - adjusted resolution from %s to %s", scale, js(settings->resolution), js(sz));
     }
-    else {
-        glfwWindowHint(GLFW_VISIBLE, (int)test_flags(settings->win_flags, platform_window_flags::VISIBLE));
-        glfwWindowHint(GLFW_DECORATED, (int)test_flags(settings->win_flags, platform_window_flags::DECORATED));
-        glfwWindowHint(GLFW_MAXIMIZED, (int)test_flags(settings->win_flags, platform_window_flags::MAXIMIZE));
-        glfwWindowHint(GLFW_FLOATING, (int)test_flags(settings->win_flags, platform_window_flags::ALWAYS_ON_TOP));
-        monitor = nullptr;
-    }
-    return glfwCreateWindow(sz.x, sz.y, settings->title, monitor, nullptr);
+    return SDL_CreateWindow(settings->title, sz.w, sz.h, sdl_flags);
 }
 
-void process_platform_window_input(platform_ctxt *pf)
+const char *event_type_to_string(platform_event_type type)
 {
-    arr_clear(&pf->finp.events);
-    arr_clear(&pf->fwind.events);
-    glfwPollEvents();
+    switch (type) {
+    case EVENT_TYPE_INPUT_KEY:
+        return "key";
+    case EVENT_TYPE_INPUT_MBUTTON:
+        return "mbutton";
+    case EVENT_TYPE_INPUT_MWHEEL:
+        return "mwheel";
+    case EVENT_TYPE_INPUT_MMOTION:
+        return "mmotion";
+    case EVENT_TYPE_WINDOW_RESIZE:
+        return "win_resize";
+    case EVENT_TYPE_WINDOW_PIXEL_SIZE_CHANGE:
+        return "win_pixel_size_change";
+    case EVENT_TYPE_WINDOW_MOVE:
+        return "win_move";
+    case EVENT_TYPE_WINDOW_FOCUS:
+        return "win_focus";
+    case EVENT_TYPE_WINDOW_MOUSE:
+        return "win_mouse";
+    case EVENT_TYPE_WINDOW_FULLSCREEN:
+        return "win_fullscreen";
+    case EVENT_TYPE_WINDOW_VIEWSTATE:
+        return "win_viewstate";
+    case EVENT_TYPE_WINDOW_VISIBILITY:
+        return "win_visibility";
+    default:
+        return "invalid";
+    }
 }
 
-bool platform_window_should_close(void *window_hndl)
+void process_platform_events(platform_ctxt *pf)
 {
-    return glfwWindowShouldClose((GLFWwindow *)window_hndl);
+    // Get prev sz and pos for any window resize/move events
+    ivec2 prev_win_sz_screen_coords = get_window_size(pf->win_hndl);
+    ivec2 prev_win_sz_pixels = get_window_pixel_size(pf->win_hndl);
+    ivec2 prev_win_pos = get_window_pos(pf->win_hndl);
+
+    arr_clear(&pf->feventq.events);
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        if (pf->feventq.sdl_hook.cb && pf->feventq.sdl_hook.cb(&event, pf->feventq.sdl_hook.user)) {
+            dlog("Skip");
+            continue;
+        }
+        platform_event ev{};
+        switch (event.type) {
+        case SDL_EVENT_QUIT:
+            pf->running = false;
+            break;
+        case SDL_EVENT_KEY_DOWN:
+            handle_sdl_key_event(pf, &ev, event.key);
+            break;
+        case SDL_EVENT_KEY_UP:
+            handle_sdl_key_event(pf, &ev, event.key);
+            break;
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+            handle_sdl_mbutton_event(pf, &ev, event.button);
+            break;
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            handle_sdl_mbutton_event(pf, &ev, event.button);
+            break;
+        case SDL_EVENT_MOUSE_MOTION:
+            handle_sdl_mmotion_event(pf, &ev, event.motion);
+            break;
+        case SDL_EVENT_MOUSE_WHEEL:
+            handle_sdl_mwheel_event(pf, &ev, event.wheel);
+            break;
+        case SDL_EVENT_WINDOW_RESIZED:
+            handle_sdl_window_geom_with_prev(pf, &ev, prev_win_sz_screen_coords, EVENT_TYPE_WINDOW_RESIZE, event.window);
+            break;
+        case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+            handle_sdl_window_geom_with_prev(pf, &ev, prev_win_sz_pixels, EVENT_TYPE_WINDOW_PIXEL_SIZE_CHANGE, event.window);
+            break;
+        case SDL_EVENT_WINDOW_MOVED:
+            handle_sdl_window_geom_with_prev(pf, &ev, prev_win_pos, EVENT_TYPE_WINDOW_MOVE, event.window);
+            break;
+        case SDL_EVENT_WINDOW_FOCUS_GAINED:
+            handle_sdl_window_event(pf, &ev, 1, EVENT_TYPE_WINDOW_FOCUS, event.window);
+            break;
+        case SDL_EVENT_WINDOW_FOCUS_LOST:
+            handle_sdl_window_event(pf, &ev, 0, EVENT_TYPE_WINDOW_FOCUS, event.window);
+            break;
+        case SDL_EVENT_WINDOW_MOUSE_ENTER:
+            handle_sdl_window_event(pf, &ev, 1, EVENT_TYPE_WINDOW_MOUSE, event.window);
+            break;
+        case SDL_EVENT_WINDOW_MOUSE_LEAVE:
+            handle_sdl_window_event(pf, &ev, 0, EVENT_TYPE_WINDOW_MOUSE, event.window);
+            break;
+        case SDL_EVENT_WINDOW_ENTER_FULLSCREEN:
+            handle_sdl_window_event(pf, &ev, 1, EVENT_TYPE_WINDOW_FULLSCREEN, event.window);
+            break;
+        case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
+            handle_sdl_window_event(pf, &ev, 0, EVENT_TYPE_WINDOW_FULLSCREEN, event.window);
+            break;
+        case SDL_EVENT_WINDOW_MINIMIZED:
+            handle_sdl_window_event(pf, &ev, -1, EVENT_TYPE_WINDOW_VIEWSTATE, event.window);
+            break;
+        case SDL_EVENT_WINDOW_MAXIMIZED:
+            handle_sdl_window_event(pf, &ev, 1, EVENT_TYPE_WINDOW_VIEWSTATE, event.window);
+            break;
+        case SDL_EVENT_WINDOW_RESTORED:
+            handle_sdl_window_event(pf, &ev, 0, EVENT_TYPE_WINDOW_VIEWSTATE, event.window);
+            break;
+        case SDL_EVENT_WINDOW_SHOWN:
+            handle_sdl_window_event(pf, &ev, 1, EVENT_TYPE_WINDOW_VISIBILITY, event.window);
+            break;
+        case SDL_EVENT_WINDOW_HIDDEN:
+            handle_sdl_window_event(pf, &ev, 0, EVENT_TYPE_WINDOW_VISIBILITY, event.window);
+            break;
+        default:
+            // do nothing yet
+            break;
+        }
+
+        if (ev.type != EVENT_TYPE_INVALID) {
+            // tlog("Got %s event: %s", event_type_to_string(ev.type), js(ev));
+            asrt(pf->feventq.events.size < pf->feventq.events.capacity);
+            arr_push_back(&pf->feventq.events, ev);
+        }
+    }
+}
+
+void *get_window(u32 id)
+{
+    return SDL_GetWindowFromID(id);
 }
 
 ivec2 get_window_size(void *win)
 {
-    platform_ctxt *pf = platform_ptr((GLFWwindow *)win);
-    return pf->fwind.win_size;
+    ivec2 ret;
+    if (!SDL_GetWindowSize((SDL_Window *)win, &ret.w, &ret.h)) {
+        log_any_sdl_error();
+    }
+    return ret;
 }
 
-ivec2 get_framebuffer_size(void *win)
+ivec2 get_window_pixel_size(void *win)
 {
-    platform_ctxt *pf = platform_ptr((GLFWwindow *)win);
-    return pf->fwind.fb_size;
+    ivec2 ret;
+    if (!SDL_GetWindowSizeInPixels((SDL_Window *)win, &ret.w, &ret.h)) {
+        log_any_sdl_error();
+    }
+    return ret;
+}
+
+ivec2 get_window_pos(void *win)
+{
+    ivec2 ret;
+    if (!SDL_GetWindowPosition((SDL_Window *)win, &ret.w, &ret.h)) {
+        log_any_sdl_error();
+    }
+    return ret;
 }
 
 u64 get_thread_id()
@@ -399,35 +582,30 @@ u64 get_thread_id()
 #endif
 }
 
-vec2 get_cursor_pos(void *window_hndl)
+vec2 get_mouse_pos()
 {
-    GLFWwindow *glfw_win = (GLFWwindow *)(window_hndl);
-    dvec2 ret;
-    glfwGetCursorPos(glfw_win, &ret.x, &ret.y);
+    vec2 ret;
+    SDL_GetMouseState(&ret.x, &ret.y);
     return ret;
 }
 
-vec2 get_normalized_cursor_pos(void *window_hndl)
+bool window_resized_this_frame(void *win_hndl)
 {
-    return get_cursor_pos(window_hndl) / vec2(get_framebuffer_size(window_hndl));
-}
-
-bool platform_framebuffer_resized(void *win_hndl)
-{
-    platform_ctxt *pf = platform_ptr((GLFWwindow *)win_hndl);
-    return frame_has_event_type(platform_window_event_type::FB_RESIZE, &pf->fwind);
-}
-
-bool platform_window_resized(void *win_hndl)
-{
-    platform_ctxt *pf = platform_ptr((GLFWwindow *)win_hndl);
-    return frame_has_event_type(platform_window_event_type::WIN_RESIZE, &pf->fwind);
+    platform_ctxt *pf = platform_window_ptr(win_hndl);
+    for (sizet evind{0}; evind < pf->feventq.events.size; ++evind) {
+        if (pf->feventq.events[evind].type == EVENT_TYPE_WINDOW_RESIZE ||
+            pf->feventq.events[evind].type == EVENT_TYPE_WINDOW_PIXEL_SIZE_CHANGE ||
+            pf->feventq.events[evind].type == EVENT_TYPE_WINDOW_FULLSCREEN || pf->feventq.events[evind].type == EVENT_TYPE_WINDOW_VIEWSTATE) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void start_platform_frame(platform_ctxt *ctxt)
 {
     ptimer_split(&ctxt->time_pts);
-    process_platform_window_input(ctxt);
+    process_platform_events(ctxt);
     mem_reset_arena(&ctxt->arenas.frame_linear);
 }
 
@@ -471,7 +649,7 @@ ftell_fail:
     return ret;
 }
 
-sizet file_size(const char *fname, platform_file_err_desc *err)
+sizet get_file_size(const char *fname, platform_file_err_desc *err)
 {
     sizet ret{0};
     FILE *f = fopen(fname, "r");

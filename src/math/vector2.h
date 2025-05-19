@@ -46,6 +46,7 @@ struct vector2
             T u;
             T v;
         };
+        
     };
 };
 
@@ -54,7 +55,6 @@ pup_func_tt(vector2)
     pup_member(x);
     pup_member(y);
 }    
-
 
 // Enable type trait
 template<class U>
@@ -105,6 +105,7 @@ using u8vec2 = vector2<u8>;
 using u16vec2 = vector2<u16>;
 using uvec2 = vector2<u32>;
 using u64vec2 = vector2<u64>;
-using vec2 = vector2<float>;
-using dvec2 = vector2<double>;
+using vec2 = vector2<f32>;
+using f64vec2 = vector2<f64>;
+
 } // namespace nslib

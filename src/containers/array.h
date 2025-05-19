@@ -1,7 +1,6 @@
 #pragma once
 
 #include <utility>
-#include <new>
 #include <algorithm>
 
 #include "../archive_common.h"
@@ -238,7 +237,7 @@ void arr_reserve(array<T> *arr, sizet capacity)
 template<class T>
 void arr_shrink_to_fit(array<T> *arr)
 {
-    assert(arr->size <= arr->capacity);
+    asrt(arr->size <= arr->capacity);
     if (arr->size < arr->capacity) {
         arr_set_capacity(arr, arr->size);
     }
@@ -256,7 +255,7 @@ T *arr_push_back(array<T> *arr, const T &item)
 template<class T, sizet N>
 T *arr_push_back(static_array<T, N> *arr, const T &item)
 {
-    assert(arr->size < arr->capacity);
+    asrt(arr->size < arr->capacity);
     sizet sz = arr->size;
     ++arr->size;
     arr->data[sz] = item;
@@ -318,16 +317,18 @@ void arr_pop_back(T *bufobj)
 template<class T>
 typename T::value_type *arr_back(T *bufobj)
 {
-    if (bufobj->size > 0)
+    if (bufobj->size > 0) {
         return &bufobj->data[bufobj->size - 1];
+    }
     return {};
 }
 
 template<class T>
 typename T::value_type *arr_front(T *bufobj)
 {
-    if (bufobj->size > 0)
+    if (bufobj->size > 0) {
         return &bufobj->data[0];
+    }
     return {};
 }
 
@@ -344,7 +345,7 @@ array<T> *arr_resize(array<T> *arr, sizet new_size, Args &&...args)
         return arr;
 
     // Make sure our current size doesn't exceed the capacity - it shouldnt that would definitely be a bug if it did.
-    assert(arr->size <= arr->capacity);
+    asrt(arr->size <= arr->capacity);
     sizet cap = arr->capacity;
     if (new_size > cap) {
         if (cap < 1) {
@@ -364,7 +365,7 @@ array<T> *arr_resize(array<T> *arr, sizet new_size, Args &&...args)
 template<class T, sizet N, class... Args>
 static_array<T, N> *arr_resize(static_array<T, N> *arr, sizet new_size, Args &&...args)
 {
-    assert(new_size <= N);
+    asrt(new_size <= N);
     for (sizet i = arr->size; i < new_size; ++i) {
         new (&arr->data[i]) T(std::forward<Args>(args)...);
     }

@@ -44,19 +44,20 @@ struct quaternion
             T a;
         };
 
-        struct
-        {
-            T i;
-            T j;
-            T k;
-            T alpha;
-        };
-
 #if NOBLE_STEED_SIMD
         _simd_type _v4;
 #endif
     };
 };
+
+pup_func_tt(quaternion)
+{
+    pup_member(b);
+    pup_member(c);
+    pup_member(z);
+    pup_member(z);
+}    
+
 
 // Enable type trait
 template<class U>
@@ -352,5 +353,5 @@ quaternion<T> operator/(const quaternion<T> &lhs, const quaternion<T> &rhs)
 }
 
 using quat = quaternion<f32>;
-using dquat = quaternion<f64>;
+using f64quat = quaternion<f64>;
 } // namespace nslib

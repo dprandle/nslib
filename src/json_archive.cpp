@@ -30,17 +30,17 @@ void init_jsa(json_archive *jsa, archive_opmode mode, json_obj *root)
     }
 }
 
-string jsa_to_json_string(json_archive *jsa, bool pretty_format)
+string jsa_to_json_string(const json_archive &jsa, bool pretty_format)
 {
     string ret{};
-    if (jsa->stack.size > 0) {
+    if (jsa.stack.size > 0) {
         // Get the json string - this allocates
         char *src{};
         if (pretty_format) {
-            src = json_print(arr_front(&jsa->stack)->current);
+            src = json_print(arr_front(&jsa.stack)->current);
         }
         else {
-            src = json_print_unformatted(arr_front(&jsa->stack)->current);
+            src = json_print_unformatted(arr_front(&jsa.stack)->current);
         }
 
         // Copy the string in to the ret string

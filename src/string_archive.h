@@ -1,11 +1,10 @@
 #pragma once
 
 #include "archive_common.h"
+#include "rid.h"
 #include "containers/string.h"
 #include "containers/hmap.h"
 #include "containers/hset.h"
-#include "rid.h"
-//#include "robj_common.h"
 
 namespace nslib
 {

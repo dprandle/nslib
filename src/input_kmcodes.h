@@ -4,161 +4,312 @@
 
 namespace nslib
 {
-/* The unknown key */
-inline const s16 KEY_UNKNOWN = -1;
+enum input_kmcode : u16
+{
+    KMCODE_UNKNOWN, // 0
+    KMCODE_MBUTTON_LEFT,
+    KMCODE_MBUTTON_MIDDLE,
+    KMCODE_MBUTTON_RIGHT,
+    KMCODE_MBUTTON_X1,
+    KMCODE_MBUTTON_X2,
+    KMCODE_MWHEEL,
+    KMCODE_MMOTION,
+    KMCODE_KEY_RETURN = '\r',       // '\r'
+    KMCODE_KEY_ESCAPE = '\x1B',     // '\x1B'
+    KMCODE_KEY_BACKSPACE = '\b',    // '\b'
+    KMCODE_KEY_TAB = '\t',          // '\t'
+    KMCODE_KEY_SPACE = ' ',         // ' '
+    KMCODE_KEY_EXCLAIM,             // '!'
+    KMCODE_KEY_DBLAPOSTROPHE,       // '"'
+    KMCODE_KEY_HASH,                // '#'
+    KMCODE_KEY_DOLLAR,              // '$'
+    KMCODE_KEY_PERCENT,             // '%'
+    KMCODE_KEY_AMPERSAND,           // '&'
+    KMCODE_KEY_APOSTROPHE,          // '\''
+    KMCODE_KEY_LEFTPAREN,           // '('
+    KMCODE_KEY_RIGHTPAREN,          // ')'
+    KMCODE_KEY_ASTERISK,            // '*'
+    KMCODE_KEY_PLUS,                // '+'
+    KMCODE_KEY_COMMA,               // ','
+    KMCODE_KEY_MINUS,               // '-'
+    KMCODE_KEY_PERIOD,              // '.'
+    KMCODE_KEY_SLASH,               // '/'
+    KMCODE_KEY_0,                   // '0'
+    KMCODE_KEY_1,                   // '1'
+    KMCODE_KEY_2,                   // '2'
+    KMCODE_KEY_3,                   // '3'
+    KMCODE_KEY_4,                   // '4'
+    KMCODE_KEY_5,                   // '5'
+    KMCODE_KEY_6,                   // '6'
+    KMCODE_KEY_7,                   // '7'
+    KMCODE_KEY_8,                   // '8'
+    KMCODE_KEY_9,                   // '9'
+    KMCODE_KEY_COLON,               // ':'
+    KMCODE_KEY_SEMICOLON,           // ';'
+    KMCODE_KEY_LESS,                // '<'
+    KMCODE_KEY_EQUALS,              // '='
+    KMCODE_KEY_GREATER,             // '>'
+    KMCODE_KEY_QUESTION,            // '?'
+    KMCODE_KEY_AT,                  // '@'
+    KMCODE_KEY_LEFTBRACKET = '[',   // '['
+    KMCODE_KEY_BACKSLASH,           // '\\'
+    KMCODE_KEY_RIGHTBRACKET,        // ']'
+    KMCODE_KEY_CARET,               // '^'
+    KMCODE_KEY_UNDERSCORE,          // '_'
+    KMCODE_KEY_GRAVE,               // '`'
+    KMCODE_KEY_A,                   // 'a'
+    KMCODE_KEY_B,                   // 'b'
+    KMCODE_KEY_C,                   // 'c'
+    KMCODE_KEY_D,                   // 'd'
+    KMCODE_KEY_E,                   // 'e'
+    KMCODE_KEY_F,                   // 'f'
+    KMCODE_KEY_G,                   // 'g'
+    KMCODE_KEY_H,                   // 'h'
+    KMCODE_KEY_I,                   // 'i'
+    KMCODE_KEY_J,                   // 'j'
+    KMCODE_KEY_K,                   // 'k'
+    KMCODE_KEY_L,                   // 'l'
+    KMCODE_KEY_M,                   // 'm'
+    KMCODE_KEY_N,                   // 'n'
+    KMCODE_KEY_O,                   // 'o'
+    KMCODE_KEY_P,                   // 'p'
+    KMCODE_KEY_Q,                   // 'q'
+    KMCODE_KEY_R,                   // 'r'
+    KMCODE_KEY_S,                   // 's'
+    KMCODE_KEY_T,                   // 't'
+    KMCODE_KEY_U,                   // 'u'
+    KMCODE_KEY_V,                   // 'v'
+    KMCODE_KEY_W,                   // 'w'
+    KMCODE_KEY_X,                   // 'x'
+    KMCODE_KEY_Y,                   // 'y'
+    KMCODE_KEY_Z,                   // 'z'
+    KMCODE_KEY_LEFTBRACE,           // '{'
+    KMCODE_KEY_PIPE,                // '|'
+    KMCODE_KEY_RIGHTBRACE,          // '}'
+    KMCODE_KEY_TILDE,               // '~'7
+    KMCODE_KEY_DELETE,              // '\x7F'
+    KMCODE_KEY_PLUSMINUS = 0x00b1u, // '\xB1'
+    KMCODE_KEY_CAPSLOCK,            // Now starting with non printable chars
+    KMCODE_KEY_F1,
+    KMCODE_KEY_F2,
+    KMCODE_KEY_F3,
+    KMCODE_KEY_F4,
+    KMCODE_KEY_F5,
+    KMCODE_KEY_F6,
+    KMCODE_KEY_F7,
+    KMCODE_KEY_F8,
+    KMCODE_KEY_F9,
+    KMCODE_KEY_F10,
+    KMCODE_KEY_F11,
+    KMCODE_KEY_F12,
+    KMCODE_KEY_PRINTSCREEN,
+    KMCODE_KEY_SCROLLLOCK,
+    KMCODE_KEY_PAUSE,
+    KMCODE_KEY_INSERT,
+    KMCODE_KEY_HOME,
+    KMCODE_KEY_PAGEUP,
+    KMCODE_KEY_END,
+    KMCODE_KEY_PAGEDOWN,
+    KMCODE_KEY_RIGHT,
+    KMCODE_KEY_LEFT,
+    KMCODE_KEY_DOWN,
+    KMCODE_KEY_UP,
+    KMCODE_KEY_NUMLOCKCLEAR,
+    KMCODE_KEY_KP_DIVIDE,
+    KMCODE_KEY_KP_MULTIPLY,
+    KMCODE_KEY_KP_MINUS,
+    KMCODE_KEY_KP_PLUS,
+    KMCODE_KEY_KP_ENTER,
+    KMCODE_KEY_KP_1,
+    KMCODE_KEY_KP_2,
+    KMCODE_KEY_KP_3,
+    KMCODE_KEY_KP_4,
+    KMCODE_KEY_KP_5,
+    KMCODE_KEY_KP_6,
+    KMCODE_KEY_KP_7,
+    KMCODE_KEY_KP_8,
+    KMCODE_KEY_KP_9,
+    KMCODE_KEY_KP_0,
+    KMCODE_KEY_KP_PERIOD,
+    KMCODE_KEY_APPLICATION,
+    KMCODE_KEY_POWER,
+    KMCODE_KEY_KP_EQUALS,
+    KMCODE_KEY_F13,
+    KMCODE_KEY_F14,
+    KMCODE_KEY_F15,
+    KMCODE_KEY_F16,
+    KMCODE_KEY_F17,
+    KMCODE_KEY_F18,
+    KMCODE_KEY_F19,
+    KMCODE_KEY_F20,
+    KMCODE_KEY_F21,
+    KMCODE_KEY_F22,
+    KMCODE_KEY_F23,
+    KMCODE_KEY_F24,
+    KMCODE_KEY_EXECUTE,
+    KMCODE_KEY_HELP,
+    KMCODE_KEY_MENU,
+    KMCODE_KEY_SELECT,
+    KMCODE_KEY_STOP,
+    KMCODE_KEY_AGAIN,
+    KMCODE_KEY_UNDO,
+    KMCODE_KEY_CUT,
+    KMCODE_KEY_COPY,
+    KMCODE_KEY_PASTE,
+    KMCODE_KEY_FIND,
+    KMCODE_KEY_MUTE,
+    KMCODE_KEY_VOLUMEUP,
+    KMCODE_KEY_VOLUMEDOWN,
+    KMCODE_KEY_KP_COMMA,
+    KMCODE_KEY_KP_EQUALSAS400,
+    KMCODE_KEY_ALTERASE,
+    KMCODE_KEY_SYSREQ,
+    KMCODE_KEY_CANCEL,
+    KMCODE_KEY_CLEAR,
+    KMCODE_KEY_PRIOR,
+    KMCODE_KEY_RETURN2,
+    KMCODE_KEY_SEPARATOR,
+    KMCODE_KEY_OUT,
+    KMCODE_KEY_OPER,
+    KMCODE_KEY_CLEARAGAIN,
+    KMCODE_KEY_CRSEL,
+    KMCODE_KEY_EXSEL,
+    KMCODE_KEY_KP_00,
+    KMCODE_KEY_KP_000,
+    KMCODE_KEY_THOUSANDSSEPARATOR,
+    KMCODE_KEY_DECIMALSEPARATOR,
+    KMCODE_KEY_CURRENCYUNIT,
+    KMCODE_KEY_CURRENCYSUBUNIT,
+    KMCODE_KEY_KP_LEFTPAREN,
+    KMCODE_KEY_KP_RIGHTPAREN,
+    KMCODE_KEY_KP_LEFTBRACE,
+    KMCODE_KEY_KP_RIGHTBRACE,
+    KMCODE_KEY_KP_TAB,
+    KMCODE_KEY_KP_BACKSPACE,
+    KMCODE_KEY_KP_A,
+    KMCODE_KEY_KP_B,
+    KMCODE_KEY_KP_C,
+    KMCODE_KEY_KP_D,
+    KMCODE_KEY_KP_E,
+    KMCODE_KEY_KP_F,
+    KMCODE_KEY_KP_XOR,
+    KMCODE_KEY_KP_POWER,
+    KMCODE_KEY_KP_PERCENT,
+    KMCODE_KEY_KP_LESS,
+    KMCODE_KEY_KP_GREATER,
+    KMCODE_KEY_KP_AMPERSAND,
+    KMCODE_KEY_KP_DBLAMPERSAND,
+    KMCODE_KEY_KP_VERTICALBAR,
+    KMCODE_KEY_KP_DBLVERTICALBAR,
+    KMCODE_KEY_KP_COLON,
+    KMCODE_KEY_KP_HASH,
+    KMCODE_KEY_KP_SPACE,
+    KMCODE_KEY_KP_AT,
+    KMCODE_KEY_KP_EXCLAM,
+    KMCODE_KEY_KP_MEMSTORE,
+    KMCODE_KEY_KP_MEMRECALL,
+    KMCODE_KEY_KP_MEMCLEAR,
+    KMCODE_KEY_KP_MEMADD,
+    KMCODE_KEY_KP_MEMSUBTRACT,
+    KMCODE_KEY_KP_MEMMULTIPLY,
+    KMCODE_KEY_KP_MEMDIVIDE,
+    KMCODE_KEY_KP_PLUSMINUS,
+    KMCODE_KEY_KP_CLEAR,
+    KMCODE_KEY_KP_CLEARENTRY,
+    KMCODE_KEY_KP_BINARY,
+    KMCODE_KEY_KP_OCTAL,
+    KMCODE_KEY_KP_DECIMAL,
+    KMCODE_KEY_KP_HEXADECIMAL,
+    KMCODE_KEY_LCTRL,
+    KMCODE_KEY_LSHIFT,
+    KMCODE_KEY_LALT,
+    KMCODE_KEY_LGUI,
+    KMCODE_KEY_RCTRL,
+    KMCODE_KEY_RSHIFT,
+    KMCODE_KEY_RALT,
+    KMCODE_KEY_RGUI,
+    KMCODE_KEY_MODE,
+    KMCODE_KEY_SLEEP,
+    KMCODE_KEY_WAKE,
+    KMCODE_KEY_CHANNEL_INCREMENT,
+    KMCODE_KEY_CHANNEL_DECREMENT,
+    KMCODE_KEY_MEDIA_PLAY,
+    KMCODE_KEY_MEDIA_PAUSE,
+    KMCODE_KEY_MEDIA_RECORD,
+    KMCODE_KEY_MEDIA_FAST_FORWARD,
+    KMCODE_KEY_MEDIA_REWIND,
+    KMCODE_KEY_MEDIA_NEXT_TRACK,
+    KMCODE_KEY_MEDIA_PREVIOUS_TRACK,
+    KMCODE_KEY_MEDIA_STOP,
+    KMCODE_KEY_MEDIA_EJECT,
+    KMCODE_KEY_MEDIA_PLAY_PAUSE,
+    KMCODE_KEY_MEDIA_SELECT,
+    KMCODE_KEY_AC_NEW,
+    KMCODE_KEY_AC_OPEN,
+    KMCODE_KEY_AC_CLOSE,
+    KMCODE_KEY_AC_EXIT,
+    KMCODE_KEY_AC_SAVE,
+    KMCODE_KEY_AC_PRINT,
+    KMCODE_KEY_AC_PROPERTIES,
+    KMCODE_KEY_AC_SEARCH,
+    KMCODE_KEY_AC_HOME,
+    KMCODE_KEY_AC_BACK,
+    KMCODE_KEY_AC_FORWARD,
+    KMCODE_KEY_AC_STOP,
+    KMCODE_KEY_AC_REFRESH,
+    KMCODE_KEY_AC_BOOKMARKS,
+    KMCODE_KEY_SOFTLEFT,
+    KMCODE_KEY_SOFTRIGHT,
+    KMCODE_KEY_CALL,
+    KMCODE_KEY_ENDCALL,
+    KMCODE_KEY_LEFT_TAB,          // Extended key Left Tab
+    KMCODE_KEY_LEVEL5_SHIFT,      // Extended key Level 5 Shift
+    KMCODE_KEY_MULTI_KEY_COMPOSE, // Extended key Multi-key Compose
+    KMCODE_KEY_LMETA,             // Extended key Left Meta
+    KMCODE_KEY_RMETA,             // Extended key Right Meta
+    KMCODE_KEY_LHYPER,            // Extended key Left Hyper
+    KMCODE_KEY_RHYPER             // Extended key Right Hyper
+};
 
-/* Printable */
-inline const s16 KEY_SPACE = 32;
-inline const s16 KEY_APOSTROPHE = 39 /* ' */;
-inline const s16 KEY_COMMA = 44 /* , */;
-inline const s16 KEY_MINUS = 45 /* - */;
-inline const s16 KEY_PERIOD = 46 /* . */;
-inline const s16 KEY_SLASH = 47 /* / */;
-inline const s16 KEY_N0 = 48;
-inline const s16 KEY_N1 = 49;
-inline const s16 KEY_N2 = 50;
-inline const s16 KEY_N3 = 51;
-inline const s16 KEY_N4 = 52;
-inline const s16 KEY_N5 = 53;
-inline const s16 KEY_N6 = 54;
-inline const s16 KEY_N7 = 55;
-inline const s16 KEY_N8 = 56;
-inline const s16 KEY_N9 = 57;
-inline const s16 KEY_SEMICOLON = 59 /* ; */;
-inline const s16 KEY_EQUAL = 61 /* = */;
-inline const s16 KEY_A = 65;
-inline const s16 KEY_B = 66;
-inline const s16 KEY_C = 67;
-inline const s16 KEY_D = 68;
-inline const s16 KEY_E = 69;
-inline const s16 KEY_F = 70;
-inline const s16 KEY_G = 71;
-inline const s16 KEY_H = 72;
-inline const s16 KEY_I = 73;
-inline const s16 KEY_J = 74;
-inline const s16 KEY_K = 75;
-inline const s16 KEY_L = 76;
-inline const s16 KEY_M = 77;
-inline const s16 KEY_N = 78;
-inline const s16 KEY_O = 79;
-inline const s16 KEY_P = 80;
-inline const s16 KEY_Q = 81;
-inline const s16 KEY_R = 82;
-inline const s16 KEY_S = 83;
-inline const s16 KEY_T = 84;
-inline const s16 KEY_U = 85;
-inline const s16 KEY_V = 86;
-inline const s16 KEY_W = 87;
-inline const s16 KEY_X = 88;
-inline const s16 KEY_Y = 89;
-inline const s16 KEY_Z = 90;
-inline const s16 KEY_LEFT_BRACKET = 91 /* [ */;
-inline const s16 KEY_BACKSLASH = 92 /* \ */;
-inline const s16 KEY_RIGHT_BRACKET = 93 /* ] */;
-inline const s16 KEY_GRAVE_ACCENT = 96 /* ` */;
-inline const s16 KEY_WORLD_1 = 161 /* non-US #1 */;
-inline const s16 KEY_WORLD_2 = 162 /* non-US #2 */;
+// Modifier Masks
+enum keymod : u16
+{
+    KEYMOD_NONE,
+    KEYMOD_LSHIFT = 1u << 0,
+    KEYMOD_RSHIFT = 1u << 1,
+    KEYMOD_LEVEL5 = 1u << 2,
+    KEYMOD_LCTRL = 1u << 3,
+    KEYMOD_RCTRL = 1u << 4,
+    KEYMOD_LALT = 1u << 5,
+    KEYMOD_RALT = 1u << 6,
+    KEYMOD_LGUI = 1u << 7,
+    KEYMOD_RGUI = 1u << 8,
+    KEYMOD_NUM = 1u << 9,
+    KEYMOD_CAPS = 1u << 10,
+    KEYMOD_MODE = 1u << 11,
+    KEYMOD_CTRL = KEYMOD_LCTRL | KEYMOD_RCTRL,
+    KEYMOD_SHIFT = KEYMOD_LSHIFT | KEYMOD_RSHIFT,
+    KEYMOD_ALT = KEYMOD_LALT | KEYMOD_RALT,
+    KEYMOD_GUI = KEYMOD_LGUI | KEYMOD_RGUI
+};
 
-/* */
-inline const s16 KEY_ESCAPE = 256;
-inline const s16 KEY_ENTER = 257;
-inline const s16 KEY_TAB = 258;
-inline const s16 KEY_BACKSPACE = 259;
-inline const s16 KEY_INSERT = 260;
-inline const s16 KEY_DELETE = 261;
-inline const s16 KEY_RIGHT = 262;
-inline const s16 KEY_LEFT = 263;
-inline const s16 KEY_DOWN = 264;
-inline const s16 KEY_UP = 265;
-inline const s16 KEY_PAGE_UP = 266;
-inline const s16 KEY_PAGE_DOWN = 267;
-inline const s16 KEY_HOME = 268;
-inline const s16 KEY_END = 269;
-inline const s16 KEY_CAPS_LOCK = 280;
-inline const s16 KEY_SCROLL_LOCK = 281;
-inline const s16 KEY_NUM_LOCK = 282;
-inline const s16 KEY_PRINT_SCREEN = 283;
-inline const s16 KEY_PAUSE = 284;
-inline const s16 KEY_F1 = 290;
-inline const s16 KEY_F2 = 291;
-inline const s16 KEY_F3 = 292;
-inline const s16 KEY_F4 = 293;
-inline const s16 KEY_F5 = 294;
-inline const s16 KEY_F6 = 295;
-inline const s16 KEY_F7 = 296;
-inline const s16 KEY_F8 = 297;
-inline const s16 KEY_F9 = 298;
-inline const s16 KEY_F10 = 299;
-inline const s16 KEY_F11 = 300;
-inline const s16 KEY_F12 = 301;
-inline const s16 KEY_F13 = 302;
-inline const s16 KEY_F14 = 303;
-inline const s16 KEY_F15 = 304;
-inline const s16 KEY_F16 = 305;
-inline const s16 KEY_F17 = 306;
-inline const s16 KEY_F18 = 307;
-inline const s16 KEY_F19 = 308;
-inline const s16 KEY_F20 = 309;
-inline const s16 KEY_F21 = 310;
-inline const s16 KEY_F22 = 311;
-inline const s16 KEY_F23 = 312;
-inline const s16 KEY_F24 = 313;
-inline const s16 KEY_F25 = 314;
-inline const s16 KEY_KP_0 = 320;
-inline const s16 KEY_KP_1 = 321;
-inline const s16 KEY_KP_2 = 322;
-inline const s16 KEY_KP_3 = 323;
-inline const s16 KEY_KP_4 = 324;
-inline const s16 KEY_KP_5 = 325;
-inline const s16 KEY_KP_6 = 326;
-inline const s16 KEY_KP_7 = 327;
-inline const s16 KEY_KP_8 = 328;
-inline const s16 KEY_KP_9 = 329;
-inline const s16 KEY_KP_DECIMAL = 330;
-inline const s16 KEY_KP_DIVIDE = 331;
-inline const s16 KEY_KP_MULTIPLY = 332;
-inline const s16 KEY_KP_SUBTRACT = 333;
-inline const s16 KEY_KP_ADD = 334;
-inline const s16 KEY_KP_ENTER = 335;
-inline const s16 KEY_KP_EQUAL = 336;
-inline const s16 KEY_LEFT_SHIFT = 340;
-inline const s16 KEY_LEFT_CONTROL = 341;
-inline const s16 KEY_LEFT_ALT = 342;
-inline const s16 KEY_LEFT_SUPER = 343;
-inline const s16 KEY_RIGHT_SHIFT = 344;
-inline const s16 KEY_RIGHT_CONTROL = 345;
-inline const s16 KEY_RIGHT_ALT = 346;
-inline const s16 KEY_RIGHT_SUPER = 347;
-inline const s16 KEY_MENU = 348;
+#define MBUTTON_MASK(X) (1u << ((X) - 1))
+enum mbutton_mask : u8
+{
+    MBUTTON_MASK_NONE,
+    MBUTTON_MASK_LEFT = MBUTTON_MASK(KMCODE_MBUTTON_LEFT),
+    MBUTTON_MASK_MIDDLE = MBUTTON_MASK(KMCODE_MBUTTON_MIDDLE),
+    MBUTTON_MASK_RIGHT = MBUTTON_MASK(KMCODE_MBUTTON_RIGHT),
+    MBUTTON_MASK_X1 = MBUTTON_MASK(KMCODE_MBUTTON_X1),
+    MBUTTON_MASK_X2 = MBUTTON_MASK(KMCODE_MBUTTON_X2),
+    MBUTTON_DOUBLE_CLICK = MBUTTON_MASK(KMCODE_MBUTTON_X2 + 1)
+};
 
-inline const s16 KEY_MOD_SHIFT = 0x0001;
-inline const s16 KEY_MOD_CONTROL = 0x0002;
-inline const s16 KEY_MOD_ALT = 0x0004;
-inline const s16 KEY_MOD_SUPER = 0x0008;
-inline const s16 KEY_MOD_CAPS_LOCK = 0x0010;
-inline const s16 KEY_MOD_NUM_LOCK = 0x0020;
-inline const s16 CURSOR_SCROLL_MOD_MOUSE_LEFT = 0x0040;
-inline const s16 CURSOR_SCROLL_MOD_MOUSE_RIGHT = 0x0080;
-inline const s16 CURSOR_SCROLL_MOD_MOUSE_MIDDLE = 0x0100;
-inline const s16 MOD_ANY = 0x0200;
-inline const s16 MOD_NONE = 0;
+enum input_action : u8
+{
+    INPUT_ACTION_PRESS = 1u << 0,
+    INPUT_ACTION_RELEASE = 1u << 1,
+    INPUT_ACTION_REPEAT = 1u << 2
+};
 
-inline const s16 MOUSE_BTN_1 = 0;
-inline const s16 MOUSE_BTN_2 = 1;
-inline const s16 MOUSE_BTN_3 = 2;
-inline const s16 MOUSE_BTN_4 = 3;
-inline const s16 MOUSE_BTN_5 = 4;
-inline const s16 MOUSE_BTN_6 = 5;
-inline const s16 MOUSE_BTN_7 = 6;
-inline const s16 MOUSE_BTN_8 = 7;
-inline const s16 MOUSE_BTN_LAST = MOUSE_BTN_8;
-inline const s16 MOUSE_BTN_LEFT = MOUSE_BTN_1;
-inline const s16 MOUSE_BTN_RIGHT = MOUSE_BTN_2;
-inline const s16 MOUSE_BTN_MIDDLE = MOUSE_BTN_3;
-inline const s16 SCROLL_CHANGE = 8;
-inline const s16 CURSOR_POS_CHANGE = 9;
-
-inline const s8 INPUT_ACTION_PRESS = 1;
-inline const s8 INPUT_ACTION_RELEASE = 0;
-inline const s8 INPUT_ACTION_REPEAT = 2;
 } // namespace nslib
