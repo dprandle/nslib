@@ -821,8 +821,6 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
     swap_create.imageColorSpace = (*formats)[desired_format_ind].colorSpace;
 
     // If mailbox is available then use it, otherwise use fifo
-    // TODO: This is arbitray - investigate these different modes to actually chose which one we want based off of
-    // something other than this tutorial
     swap_create.presentMode = VK_PRESENT_MODE_FIFO_KHR;
     for (int i = 0; i < pmodes->size; ++i) {
         if ((*pmodes)[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
@@ -1996,7 +1994,6 @@ void vkr_terminate_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
 
 void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
 {
-    // TODO: Make this wait on our semaphores and fences more explicitly
     ilog("Waiting for sync objects before terminating device...");
     vkDeviceWaitIdle(dev->hndl);
     ilog("Terminating vkr device");

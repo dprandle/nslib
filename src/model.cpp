@@ -55,7 +55,6 @@ void terminate_material(material *mat)
     hset_terminate(&mat->pipelines);
 }
 
-// TODO: Need to try this
 intern void make_cube_submesh(submesh *sm)
 {
     arr_copy(&sm->verts, CUBE_VERTS, 8);

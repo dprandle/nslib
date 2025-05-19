@@ -353,7 +353,6 @@ hset<Val>::iterator hset_insert_or_set(hset<Val> *hs, const Val &val, bool set_i
             head_bckt_ind = cur_bckt_ind;
         }
 
-        // TODO: Check if bitwise & is any faster
         cur_bckt_ind = (hashval + ++i) % hs->buckets.size;
     }
 

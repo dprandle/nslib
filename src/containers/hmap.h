@@ -356,7 +356,6 @@ hmap<Key, Val>::iterator hmap_insert_or_set(hmap<Key, Val> *hm, const Key &k, co
             head_bckt_ind = cur_bckt_ind;
         }
 
-        // TODO: Check if bitwise & is any faster
         cur_bckt_ind = (hashval + ++i) % hm->buckets.size;
     }
 
