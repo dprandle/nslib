@@ -37,7 +37,7 @@ intern constexpr u32 DEVICE_EXTENSION_COUNT = 1;
 intern constexpr const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 #endif
 
-intern constexpr f64 RESIZE_DEBOUNCE_FRAME_COUNT = 0.06; // 60 ms
+intern constexpr f64 RESIZE_DEBOUNCE_FRAME_COUNT = 0.1; // 100 ms
 intern const rid FWD_RPASS("forward");
 intern const rid PLINE_FWD_RPASS_S0_OPAQUE("forward-s0-opaque");
 intern VkPipelineLayout G_FRAME_PL_LAYOUT{};

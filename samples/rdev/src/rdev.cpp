@@ -36,7 +36,6 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app)
 
     cam_comp->fov = 60.0f;
     cam_comp->near_far = {0.1f, 1000.0f};
-    cam_comp->proj = (math::perspective(60.0f, (f32)sz.w / (f32)sz.h, 0.1f, 1000.0f));
     cam_comp->view = (math::look_at(vec3{0.0f, 10.0f, -5.0f}, vec3{0.0f}, vec3{0.0f, 1.0f, 0.0f}));
 
     cam_tcomp->cached = math::inverse(cam_comp->view);
