@@ -95,11 +95,17 @@ struct mem_arena
     };
 };
 
-void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment);
+void *mem_alloc(sizet size, mem_arena *arena, sizet alignment);
 
-void *mem_alloc(sizet bytes, mem_arena *arena);
+void *mem_alloc(sizet size, mem_arena *arena);
 
-void *mem_alloc(sizet bytes);
+void *mem_alloc(sizet size);
+
+void *mem_calloc(sizet nmemb, sizet memb, mem_arena *arena, sizet alignment);
+
+void *mem_calloc(sizet nmemb, sizet memb, mem_arena *arena);
+
+void *mem_calloc(sizet nmemb, sizet memb);
 
 void *mem_realloc(void *ptr, sizet size, mem_arena *arena, sizet alignment, bool free_ptr_after_cpy);
 

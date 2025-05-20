@@ -359,7 +359,6 @@ intern void mem_linear_free(mem_arena *, void *)
 void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment)
 {
     void *ret{nullptr};
-
     if (arena) {
         switch (arena->alloc_type) {
         case (mem_alloc_type::FREE_LIST):
@@ -380,9 +379,6 @@ void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment)
     else {
         ret = platform_alloc(bytes);
     }
-#if !defined(NDEBUG)
-    memset(ret, 0, bytes);
-#endif
     return ret;
 }
 
@@ -394,6 +390,24 @@ void *mem_alloc(sizet bytes, mem_arena *arena)
 void *mem_alloc(sizet bytes)
 {
     return mem_alloc(bytes, nullptr);
+}
+
+void *mem_calloc(sizet nmemb, sizet memb, mem_arena *arena, sizet alignment)
+{
+    sizet bytes = nmemb*memb;
+    auto ret = mem_alloc(bytes, arena, alignment);
+    memset(ret, 0, bytes);
+    return ret;
+}
+
+void *mem_calloc(sizet nmemb, sizet memb, mem_arena *arena)
+{
+    return mem_calloc(nmemb, memb, arena, DEFAULT_MIN_ALIGNMENT);
+}
+
+void *mem_calloc(sizet nmemb, sizet memb)
+{
+    return mem_calloc(nmemb, memb, nullptr);
 }
 
 sizet mem_block_size(void *ptr, mem_arena *arena)

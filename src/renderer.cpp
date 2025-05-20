@@ -37,7 +37,7 @@ intern constexpr u32 DEVICE_EXTENSION_COUNT = 1;
 intern constexpr const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 #endif
 
-intern constexpr f64 RESIZE_DEBOUNCE_FRAME_COUNT = 0.1; // 100 ms
+intern constexpr f64 RESIZE_DEBOUNCE_FRAME_COUNT = 0.15; // 100 ms
 intern const rid FWD_RPASS("forward");
 intern const rid PLINE_FWD_RPASS_S0_OPAQUE("forward-s0-opaque");
 intern VkPipelineLayout G_FRAME_PL_LAYOUT{};
@@ -851,7 +851,7 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
         return err;
     }
 
-    VkClearValue att_clear_vals[] = {{.color{{1.0f, 0.0f, 1.0f, 1.0f}}}, {.depthStencil{1.0f, 0}}};
+    VkClearValue att_clear_vals[] = {{.color{{0.05f, 0.05f, 0.05f, 1.0f}}}, {.depthStencil{1.0f, 0}}};
 
     // Bind the global vertex/index buffer/s
     VkBuffer vert_bufs[] = {vert_buf->hndl};
@@ -1369,6 +1369,17 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
         rndr->no_resize_frames += dt;
     }
 
+    // Get the next available swapchain image index or return if the
+    u32 im_ind{};
+    s32 err = acquire_swapchain_image(rndr, cur_frame, &im_ind);
+    if (err != err_code::RENDER_NO_ERROR) {
+        ImGui::EndFrame();
+        if (err != err_code::RENDER_ACQUIRE_IMAGE_FAIL) {
+            return err_code::RENDER_NO_ERROR;
+        }
+        return err;
+    }
+
     // Recreating the swapchain here before even acquiring images gives us the smoothest resizing, but we still need to
     // handle recreation for other things that might happen so keep the acquire image and present image recreations
     // based on return value
@@ -1379,16 +1390,6 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
             cam->vp_size = sz;
             cam->proj = (math::perspective(cam->fov, (f32)cam->vp_size.w / (f32)cam->vp_size.h, cam->near_far.x, cam->near_far.y));
         }
-    }
-
-    // Get the next available swapchain image index or return if the
-    u32 im_ind{};
-    s32 err = acquire_swapchain_image(rndr, cur_frame, &im_ind);
-    if (err != err_code::RENDER_NO_ERROR) {
-        if (err != err_code::RENDER_ACQUIRE_IMAGE_FAIL) {
-            return err_code::RENDER_NO_ERROR;
-        }
-        return err;
     }
 
     // Here we reset the fence for the current frame.. we wait for it to be signaled in render_frame_begin before

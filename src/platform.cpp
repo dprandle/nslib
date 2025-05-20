@@ -180,10 +180,9 @@ intern void log_display_info()
 
 f32 get_window_display_scale(void *window_hndl)
 {
-    auto disp_id = SDL_GetDisplayForWindow((SDL_Window*)window_hndl);
+    auto disp_id = SDL_GetDisplayForWindow((SDL_Window *)window_hndl);
     return SDL_GetDisplayContentScale(disp_id);
 }
-
 
 intern u32 get_sdl_window_flags(u32 platform_win_flags)
 {
@@ -337,6 +336,26 @@ intern void handle_sdl_window_event(platform_ctxt *ctxt, platform_event *event, 
     event->we.idata = data;
 }
 
+intern void *sdl_malloc(sizet size)
+{
+    return mem_alloc(size, mem_global_arena());
+}
+
+intern void *sdl_calloc(sizet nmemb, sizet memb)
+{
+    return mem_calloc(nmemb, memb, mem_global_arena());
+}
+
+intern void *sdl_realloc(void *ptr, sizet size)
+{
+    return mem_realloc(ptr, size, mem_global_arena());
+}
+
+intern void sdl_free(void *ptr)
+{
+    mem_free(ptr, mem_global_arena());
+}
+
 void *platform_alloc(sizet byte_size)
 {
     return malloc(byte_size);
@@ -354,7 +373,14 @@ void *platform_realloc(void *ptr, sizet byte_size)
 
 int init_platform(const platform_init_info *settings, platform_ctxt *ctxt)
 {
+    ilog("Size of void*: %u",sizeof(void*));
+    ilog("Alignment of void*: %u",alignof(void*));
+    
+    set_logging_level(GLOBAL_LOGGER, settings->default_log_level);
+    init_mem_arenas(&settings->mem, &ctxt->arenas);
+    
     ilog("Platform init version %d.%d.%d", NSLIB_VERSION_MAJOR, NSLIB_VERSION_MINOR, NSLIB_VERSION_PATCH);
+    SDL_SetMemoryFunctions(sdl_malloc, sdl_calloc, sdl_realloc, sdl_free);
     SDL_SetLogOutputFunction(sdl_log_callback, nullptr);
     if (!SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO)) {
         elog("Could not initialize SDL");
@@ -381,8 +407,6 @@ int init_platform(const platform_init_info *settings, platform_ctxt *ctxt)
     // Seed random number generator
     srand((u32)time(NULL));
 
-    set_logging_level(GLOBAL_LOGGER, settings->default_log_level);
-    init_mem_arenas(&settings->mem, &ctxt->arenas);
     ctxt->running = true;
     return err_code::PLATFORM_NO_ERROR;
 }
