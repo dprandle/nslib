@@ -27,7 +27,7 @@
     #define asrt(param) (!(param)) ? elog("Assertion: " #param " failed") : (void)0
     #define asrt_break(msg) elog("Assertion break: " #msg)
 #else
-    #define asrt(param) assert(param)
+    #define asrt assert
     #define asrt_break(msg) assert(!msg)
 #endif
 
