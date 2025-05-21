@@ -82,8 +82,7 @@ template<typename Key, typename Val>
 void hmap_init(hmap<Key, Val> *hm,
                hash_func<Key> *hashf = hash_type,
                mem_arena *arena = mem_global_arena(),
-               sizet initial_capacity = HMAP_DEFAULT_BUCKET_COUNT,
-               sizet mem_alignment = SIMD_MIN_ALIGNMENT)
+               sizet initial_capacity = HMAP_DEFAULT_BUCKET_COUNT)
 {
     hm->hashf = hashf;
     hm->seed0 = generate_rand_seed();
@@ -91,7 +90,7 @@ void hmap_init(hmap<Key, Val> *hm,
     hm->head = INVALID_IND;
     hm->load_factor = HMAP_DEFAULT_LOAD_FACTOR;
     hm->count = 0;
-    arr_init(&hm->buckets, arena, initial_capacity, mem_alignment);
+    arr_init(&hm->buckets, arena, initial_capacity);
     arr_resize(&hm->buckets, initial_capacity);
 }
 

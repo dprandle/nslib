@@ -74,8 +74,7 @@ template<typename Val>
 void hset_init(hset<Val> *hs,
                mem_arena *arena = mem_global_arena(),
                hash_func<Val> *hashf = hash_type,
-               sizet initial_capacity = HSET_DEFAULT_BUCKET_COUNT,
-               sizet mem_alignment = SIMD_MIN_ALIGNMENT)
+               sizet initial_capacity = HSET_DEFAULT_BUCKET_COUNT)
 {
     hs->hashf = hashf;
     hs->seed0 = generate_rand_seed();
@@ -83,7 +82,7 @@ void hset_init(hset<Val> *hs,
     hs->head = INVALID_IND;
     hs->load_factor = HSET_DEFAULT_LOAD_FACTOR;
     hs->count = 0;
-    arr_init(&hs->buckets, arena, initial_capacity, mem_alignment);
+    arr_init(&hs->buckets, arena, initial_capacity);
     arr_resize(&hs->buckets, initial_capacity);
 }
 

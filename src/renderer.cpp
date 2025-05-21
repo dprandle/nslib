@@ -1007,7 +1007,7 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
     auto mat_cache = get_cache<material>(cg);
     auto def_mat = add_robj(DEFAULT_MAT_ID, mat_cache);
     init_material(def_mat, rndr->upstream_fl_arena);
-    def_mat->col = vec4{0.5f, 0.2f, 0.8f, 1.0f};
+    //def_mat->col = vec4{0.5f, 0.2f, 0.8f, 1.0f};
     hset_set(&def_mat->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
 
     // Setup our indice and vert buffer sbuffer

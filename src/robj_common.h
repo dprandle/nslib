@@ -37,7 +37,6 @@ struct robj_cache
     // Resource id to pointer to resource obj
     hmap<rid, T *> rmap{};
     mem_arena arena{};
-    sizet mem_alignment{};
 };
 
 using mesh_cache = robj_cache<struct mesh>;
@@ -61,10 +60,9 @@ void terminate_cache_group_default_types(robj_cache_group *cg);
 
 // Initialize cache of type rtype with a mem pool of total size item_budget * sizeof(item_size)
 template<class T>
-void init_cache(robj_cache<T> *cache, sizet item_budget, sizet mem_alignment, mem_arena *upstream)
+void init_cache(robj_cache<T> *cache, sizet item_budget, mem_arena *upstream)
 {
-    cache->mem_alignment = mem_alignment;
-    hmap_init(&cache->rmap, hash_type, upstream);
+    hmap_init(&cache->rmap, hash_type, upstream, HMAP_DEFAULT_BUCKET_COUNT);
     mem_init_pool_arena(&cache->arena, sizeof(T), item_budget, upstream, T::type_str);
 }
 
@@ -84,24 +82,17 @@ void terminate_cache(robj_cache<T> *cache)
 
 // Add and initialize a cache to the passed in cache group
 template<class T>
-robj_cache<T> *add_cache(sizet item_budget, sizet mem_alignment, robj_cache_group *cg)
+robj_cache<T> *add_cache(sizet item_budget, robj_cache_group *cg)
 {
     if ((T::type_id + 1) > cg->caches.size) {
         arr_resize(&cg->caches, T::type_id + 1);
     }
     if (!cg->caches[T::type_id]) {
-        auto cache = mem_alloc<robj_cache<T>>(cg->caches.arena);
-        memset(cache, 0, sizeof(robj_cache<T>));
-        init_cache(cache, item_budget, mem_alignment, cg->caches.arena);
+        auto cache = mem_calloc<robj_cache<T>>(1, cg->caches.arena);
+        init_cache(cache, item_budget, cg->caches.arena);
         cg->caches[T::type_id] = cache;
     }
     return (robj_cache<T> *)cg->caches[T::type_id];
-}
-
-template<class T>
-robj_cache<T> *add_cache(sizet item_budget, robj_cache_group *cg)
-{
-    return add_cache<T>(item_budget, DEFAULT_MIN_ALIGNMENT, cg);
 }
 
 template<class T>
@@ -189,8 +180,8 @@ bool remove_cache(robj_cache_group *cg)
 template<class T>
 T *add_robj(const rid &id, robj_cache<T> *cache)
 {
-    T *ret = (T *)mem_alloc(cache->arena.mpool.chunk_size, &cache->arena, cache->mem_alignment);
-    memset(ret, 0, cache->arena.mpool.chunk_size);
+    asrt(sizeof(T)==cache->arena.mpool.chunk_size);
+    T *ret = mem_calloc<T>(1, &cache->arena);
     ret->id = id;
     auto item = hmap_insert(&cache->rmap, id, ret);
     if (!item) {

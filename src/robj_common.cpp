@@ -49,7 +49,6 @@ void init_cache_group_default_types(robj_cache_group *cg, mem_arena *arena)
     // NOTE: Manually update this on adding differe resource types
     add_cache<mesh>(ROBJ_TYPE_DEFAULT_BUDGET[mesh::type_id], cg);
     add_cache<material>(ROBJ_TYPE_DEFAULT_BUDGET[material::type_id], cg);
-    
 }
 
 void terminate_cache_group_default_types(robj_cache_group *cg)
@@ -64,7 +63,7 @@ void terminate_cache_group_default_types(robj_cache_group *cg)
 void terminate_cache_group(robj_cache_group *cg)
 {
     for (int i = 0; i < cg->caches.size; ++i) {
-        mem_free(cg->caches[i]);
+        mem_free(cg->caches[i], cg->caches.arena);
         cg->caches[i] = {};
     }
     arr_terminate(&cg->caches);

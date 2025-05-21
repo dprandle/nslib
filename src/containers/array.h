@@ -40,16 +40,15 @@ struct array
     T *data{};
     sizet size{};
     sizet capacity{};
-    sizet mem_alignment{};
 
-    array(mem_arena *arena = mem_global_arena(), sizet initial_capacity = 0, sizet mem_alignment = DEFAULT_MIN_ALIGNMENT)
+    array(mem_arena *arena = mem_global_arena(), sizet initial_capacity = 0)
     {
-        arr_init(this, arena, initial_capacity, mem_alignment);
+        arr_init(this, arena, initial_capacity);
     }
 
     array(const array &copy)
     {
-        arr_init(this, copy.arena, copy.capacity, copy.mem_alignment);
+        arr_init(this, copy.arena, copy.capacity);
         arr_copy(this, &copy);
     }
 
@@ -84,10 +83,9 @@ void swap(array<T> *lhs, array<T> *rhs)
 }
 
 template<class T>
-void arr_init(array<T> *arr, mem_arena *arena = mem_global_arena(), sizet initial_capacity = 0, sizet mem_alignment = DEFAULT_MIN_ALIGNMENT)
+void arr_init(array<T> *arr, mem_arena *arena = mem_global_arena(), sizet initial_capacity = 0)
 {
     arr->arena = arena;
-    arr->mem_alignment = mem_alignment;
     arr_set_capacity(arr, initial_capacity);
 }
 
@@ -217,7 +215,7 @@ void arr_set_capacity(array<T> *arr, sizet new_cap)
         while (new_cap * sizeof(T) < sizeof(mem_node)) {
             ++new_cap;
         }
-        arr->data = (T *)mem_realloc(arr->data, new_cap * sizeof(T), arr->arena, arr->mem_alignment);
+        arr->data = (T *)mem_realloc(arr->data, new_cap * sizeof(T), arr->arena, alignof(T));
     }
     else if (arr->data) {
         mem_free(arr->data, arr->arena);

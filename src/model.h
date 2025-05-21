@@ -7,9 +7,9 @@
 namespace nslib
 {
 
-const sizet JOINTS_PER_VERTEX = 4;
-const sizet MAX_SUBMESH_COUNT = 16;
-const sizet TEXTURE_SLOT_COUNT = 8;
+inline constexpr sizet JOINTS_PER_VERTEX = 4;
+inline constexpr sizet MAX_SUBMESH_COUNT = 16;
+inline constexpr sizet TEXTURE_SLOT_COUNT = 8;
 using ind_t = u16;
 
 struct texture
@@ -22,16 +22,16 @@ struct texture
 struct material
 {
     ROBJ(MATERIAL);
+    vec4 col;
     hset<rid> pipelines;
     static_array<rid,TEXTURE_SLOT_COUNT> textures;
-    vec4 col;
 };
 
 pup_func(material)
 {
+    pup_member(col);
     pup_member(pipelines);
     pup_member(textures);
-    pup_member(col);
 }
 
 struct vertex

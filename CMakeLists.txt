@@ -18,10 +18,13 @@ set(DEPS_DIR ${CMAKE_SOURCE_DIR}/deps)
 
 if(${CMAKE_BUILD_TYPE} STREQUAL Release)
   set(BUILD_DIR ${CMAKE_SOURCE_DIR}/build/release)
+  message("Building release")
 elseif(${CMAKE_BUILD_TYPE} STREQUAL RelWithDebInfo)
   set(BUILD_DIR ${CMAKE_SOURCE_DIR}/build/relwdeb)
+  message("Building release with debug info")
 else()
   set(BUILD_DIR ${CMAKE_SOURCE_DIR}/build/debug)
+  message("Building debug")
 endif()
 
 find_package(Vulkan REQUIRED)

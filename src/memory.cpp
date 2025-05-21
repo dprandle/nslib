@@ -382,54 +382,12 @@ void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment)
     return ret;
 }
 
-void *mem_alloc(sizet bytes, mem_arena *arena)
-{
-    return mem_alloc(bytes, arena, DEFAULT_MIN_ALIGNMENT);
-}
-
-void *mem_alloc(sizet bytes)
-{
-    return mem_alloc(bytes, nullptr);
-}
-
 void *mem_calloc(sizet nmemb, sizet memb, mem_arena *arena, sizet alignment)
 {
     sizet bytes = nmemb*memb;
     auto ret = mem_alloc(bytes, arena, alignment);
     memset(ret, 0, bytes);
     return ret;
-}
-
-void *mem_calloc(sizet nmemb, sizet memb, mem_arena *arena)
-{
-    return mem_calloc(nmemb, memb, arena, DEFAULT_MIN_ALIGNMENT);
-}
-
-void *mem_calloc(sizet nmemb, sizet memb)
-{
-    return mem_calloc(nmemb, memb, nullptr);
-}
-
-sizet mem_block_size(void *ptr, mem_arena *arena)
-{
-    if (arena->alloc_type == mem_alloc_type::FREE_LIST || arena->alloc_type == mem_alloc_type::LINEAR) {
-        return mem_free_list_linear_block_size(ptr);
-    }
-    else if (arena->alloc_type == mem_alloc_type::POOL) {
-        return mem_pool_block_size(arena, ptr);
-    }
-    return 0;
-}
-
-sizet mem_block_user_size(void *ptr, mem_arena *arena)
-{
-    if (arena->alloc_type == mem_alloc_type::FREE_LIST || arena->alloc_type == mem_alloc_type::LINEAR) {
-        return mem_free_list_linear_block_user_size(ptr);
-    }
-    else if (arena->alloc_type == mem_alloc_type::POOL) {
-        return mem_pool_block_size(arena, ptr);
-    }
-    return 0;
 }
 
 void *mem_realloc(void *ptr, sizet new_size, mem_arena *arena, sizet alignment, bool free_ptr_after_copy)
@@ -461,19 +419,27 @@ void *mem_realloc(void *ptr, sizet new_size, mem_arena *arena, sizet alignment, 
     }
 }
 
-void *mem_realloc(void *ptr, sizet size, mem_arena *arena, sizet alignment)
+
+sizet mem_block_size(void *ptr, mem_arena *arena)
 {
-    return mem_realloc(ptr, size, arena, alignment, true);
+    if (arena->alloc_type == mem_alloc_type::FREE_LIST || arena->alloc_type == mem_alloc_type::LINEAR) {
+        return mem_free_list_linear_block_size(ptr);
+    }
+    else if (arena->alloc_type == mem_alloc_type::POOL) {
+        return mem_pool_block_size(arena, ptr);
+    }
+    return 0;
 }
 
-void *mem_realloc(void *ptr, sizet size, mem_arena *arena)
+sizet mem_block_user_size(void *ptr, mem_arena *arena)
 {
-    return mem_realloc(ptr, size, arena, DEFAULT_MIN_ALIGNMENT);
-}
-
-void *mem_realloc(void *ptr, sizet size)
-{
-    return mem_realloc(ptr, size, nullptr);
+    if (arena->alloc_type == mem_alloc_type::FREE_LIST || arena->alloc_type == mem_alloc_type::LINEAR) {
+        return mem_free_list_linear_block_user_size(ptr);
+    }
+    else if (arena->alloc_type == mem_alloc_type::POOL) {
+        return mem_pool_block_size(arena, ptr);
+    }
+    return 0;
 }
 
 void mem_free(void *ptr, mem_arena *arena)
@@ -500,11 +466,6 @@ void mem_free(void *ptr, mem_arena *arena)
     else {
         platform_free(ptr);
     }
-}
-
-void mem_free(void *item)
-{
-    mem_free(item, nullptr);
 }
 
 void mem_reset_arena(mem_arena *arena)

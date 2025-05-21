@@ -93,9 +93,9 @@ struct sim_region
 };
 
 template<class T>
-void init_comp_tbl(comp_table<T> *tbl, mem_arena *arena, sizet initial_capacity, sizet mem_alignment)
+void init_comp_tbl(comp_table<T> *tbl, mem_arena *arena, sizet initial_capacity)
 {
-    arr_init(&tbl->entries, arena, initial_capacity, mem_alignment);
+    arr_init(&tbl->entries, arena, initial_capacity);
     hmap_init(&tbl->entc_hm, hash_type, arena);
 }
 
@@ -107,15 +107,14 @@ void terminate_comp_tbl(comp_table<T> *tbl)
 }
 
 template<class T>
-comp_table<T> *add_comp_tbl(comp_db *cdb, sizet initial_capacity = 64, sizet mem_alignment = DEFAULT_MIN_ALIGNMENT)
+comp_table<T> *add_comp_tbl(comp_db *cdb, sizet initial_capacity = 64)
 {
     if ((T::type_id + 1) > cdb->comp_tables.size) {
         arr_resize(&cdb->comp_tables, T::type_id + 1);
     }
     if (!cdb->comp_tables[T::type_id]) {
-        auto ctbl = mem_alloc<comp_table<T>>(cdb->comp_tables.arena);
-        memset(ctbl, 0, sizeof(comp_table<T>));
-        init_comp_tbl(ctbl, cdb->comp_tables.arena, initial_capacity, mem_alignment);
+        auto ctbl = mem_calloc<comp_table<T>>(1, cdb->comp_tables.arena);
+        init_comp_tbl(ctbl, cdb->comp_tables.arena, initial_capacity);
         cdb->comp_tables[T::type_id] = ctbl;
     }
     return (comp_table<T> *)cdb->comp_tables[T::type_id];

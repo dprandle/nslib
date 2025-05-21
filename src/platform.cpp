@@ -338,17 +338,17 @@ intern void handle_sdl_window_event(platform_ctxt *ctxt, platform_event *event, 
 
 intern void *sdl_malloc(sizet size)
 {
-    return mem_alloc(size, mem_global_arena());
+    return mem_alloc(size, mem_global_arena(), SIMD_MIN_ALIGNMENT);
 }
 
 intern void *sdl_calloc(sizet nmemb, sizet memb)
 {
-    return mem_calloc(nmemb, memb, mem_global_arena());
+    return mem_calloc(nmemb, memb, mem_global_arena(), SIMD_MIN_ALIGNMENT);
 }
 
 intern void *sdl_realloc(void *ptr, sizet size)
 {
-    return mem_realloc(ptr, size, mem_global_arena());
+    return mem_realloc(ptr, size, mem_global_arena(), SIMD_MIN_ALIGNMENT);
 }
 
 intern void sdl_free(void *ptr)
@@ -373,9 +373,6 @@ void *platform_realloc(void *ptr, sizet byte_size)
 
 int init_platform(const platform_init_info *settings, platform_ctxt *ctxt)
 {
-    ilog("Size of void*: %u",sizeof(void*));
-    ilog("Alignment of void*: %u",alignof(void*));
-    
     set_logging_level(GLOBAL_LOGGER, settings->default_log_level);
     init_mem_arenas(&settings->mem, &ctxt->arenas);
     

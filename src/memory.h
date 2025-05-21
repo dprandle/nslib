@@ -95,45 +95,37 @@ struct mem_arena
     };
 };
 
-void *mem_alloc(sizet size, mem_arena *arena, sizet alignment);
-
-void *mem_alloc(sizet size, mem_arena *arena);
-
-void *mem_alloc(sizet size);
-
-void *mem_calloc(sizet nmemb, sizet memb, mem_arena *arena, sizet alignment);
-
-void *mem_calloc(sizet nmemb, sizet memb, mem_arena *arena);
-
-void *mem_calloc(sizet nmemb, sizet memb);
-
-void *mem_realloc(void *ptr, sizet size, mem_arena *arena, sizet alignment, bool free_ptr_after_cpy);
-
-void *mem_realloc(void *ptr, sizet size, mem_arena *arena, sizet alignment);
-
-void *mem_realloc(void *ptr, sizet size, mem_arena *arena);
-
-void *mem_realloc(void *ptr, sizet size);
-
 // The size of the allocated block including padding and header
 sizet mem_block_size(void *ptr, mem_arena *arena);
 
 // The size of the allocated block the user requested and got back
 sizet mem_block_user_size(void *ptr, mem_arena *arena);
 
+void *mem_alloc(sizet size, mem_arena *arena, sizet alignment = DEFAULT_MIN_ALIGNMENT);
+
 template<class T>
-T *mem_alloc(mem_arena *arena, sizet alignment = 8)
+T *mem_alloc(mem_arena *arena)
 {
-    return (T *)mem_alloc(sizeof(T), arena, alignment);
+    return (T *)mem_alloc(sizeof(T), arena, alignof(T));
 }
 
-template<class T, class... Args>
-T *mem_new(mem_arena *arena, sizet alignment, Args &&...args)
+void *mem_calloc(sizet nmemb, sizet memb, mem_arena *arena, sizet alignment = DEFAULT_MIN_ALIGNMENT);
+
+template<class T>
+T *mem_calloc(sizet nmemb, mem_arena *arena)
 {
-    T *item = mem_alloc<T>(arena, alignment);
-    new (item) T(std::forward<Args>(args)...);
-    return item;
+    return (T *)mem_calloc(nmemb, sizeof(T), arena, alignof(T));
 }
+
+void *mem_realloc(void *ptr, sizet size, mem_arena *arena, sizet alignment = DEFAULT_MIN_ALIGNMENT, bool free_ptr_after_cpy = true);
+
+template<class T>
+T *mem_realloc(T *ptr, mem_arena *arena, bool free_ptr_after_cpy)
+{
+    return (T *)mem_realloc(ptr, sizeof(T), arena, alignof(T), free_ptr_after_cpy);
+}
+
+void mem_free(void *item, mem_arena *arena);
 
 template<class T, class... Args>
 T *mem_new(mem_arena *arena, Args &&...args)
@@ -142,10 +134,6 @@ T *mem_new(mem_arena *arena, Args &&...args)
     new (item) T(std::forward<Args>(args)...);
     return item;
 }
-
-void mem_free(void *item, mem_arena *arena);
-
-void mem_free(void *item);
 
 template<class T>
 void mem_delete(T *item, mem_arena *arena)

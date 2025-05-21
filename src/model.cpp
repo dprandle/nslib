@@ -85,8 +85,8 @@ void make_cube(mesh *msh)
 
 void init_submesh(submesh *sm, mem_arena *arena)
 {
-    arr_init(&sm->verts, arena, SIMD_MIN_ALIGNMENT);
-    arr_init(&sm->cjoints, arena, SIMD_MIN_ALIGNMENT);
+    arr_init(&sm->verts, arena);
+    arr_init(&sm->cjoints, arena);
     arr_init(&sm->inds, arena);
 }
 
