@@ -253,7 +253,7 @@ T *arr_push_back(array<T> *arr, const T &item)
 template<class T, sizet N>
 T *arr_push_back(static_array<T, N> *arr, const T &item)
 {
-    asrt(arr->size < arr->capacity);
+    asrt(arr->size <= arr->capacity);
     sizet sz = arr->size;
     ++arr->size;
     arr->data[sz] = item;

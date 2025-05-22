@@ -42,6 +42,8 @@ struct static_model
 {
     COMP(STATIC_MODEL)
     rid mesh_id;
+    // This is fixed to max submesh arraty so that each ind in this array matches an ind in the submesh array
+    // We might have some of the submeshes with no materials for example, for those the rid will be 0
     static_array<rid, MAX_SUBMESH_COUNT> mat_ids{{}, MAX_SUBMESH_COUNT};
 };
 

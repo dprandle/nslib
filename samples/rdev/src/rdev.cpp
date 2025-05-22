@@ -116,6 +116,15 @@ int init(platform_ctxt *ctxt, void *user_data)
     make_rect(rect_msh);
     make_cube(cube_msh);
 
+    // Create 3 materials of different colors
+    auto mat_cache = get_cache<material>(&app->cg);
+    auto mat1 = add_robj(mat_cache);
+    mat1->col = {1.0, 0.0, 0.0, 1.0};
+    auto mat2 = add_robj(mat_cache);
+    mat2->col = {0.0, 1.0, 0.0, 1.0};
+    auto mat3 = add_robj(mat_cache);
+    mat3->col = {0.0, 0.0, 1.0, 1.0};
+
     ilog("Rect mesh submesh count %d and vert count %d and ind count %d",
          rect_msh->submeshes.size,
          rect_msh->submeshes[0].verts.size,
@@ -146,6 +155,16 @@ int init(platform_ctxt *ctxt, void *user_data)
                 else {
                     sc->mesh_id = rect_msh->id;
                     ent->name = to_str("rect-%d", ent_ind);
+                }
+                auto m = (zind * yind * xind);
+                if ((m % 3) == 0) {
+                    sc->mat_ids[0] = mat1->id;
+                }
+                else if ((m % 3) == 1) {
+                    sc->mat_ids[0] = mat2->id;
+                }
+                else {
+                    sc->mat_ids[0] = mat3->id;
                 }
                 tfcomp->world_pos = vec3{xind * 2.0f, yind * 2.0f, zind * 2.0f};
                 tfcomp->cached = math::model_tform(tfcomp->world_pos, tfcomp->orientation, tfcomp->scale);
