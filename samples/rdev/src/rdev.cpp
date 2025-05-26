@@ -5,6 +5,7 @@
 #include "sim_region.h"
 #include "vk_context.h"
 #include "basic_types.h"
+#include "json_archive.h"
 #include "imgui/imgui.h"
 using namespace nslib;
 
@@ -111,18 +112,27 @@ int init(platform_ctxt *ctxt, void *user_data)
     auto mc = get_cache<mesh>(&app->cg);
     auto cube_msh = add_robj(mc);
     auto rect_msh = add_robj(mc);
-    init_mesh(cube_msh, mem_global_arena());
-    init_mesh(rect_msh, mem_global_arena());
+    init_mesh(cube_msh, "cube", mem_global_arena());
+    init_mesh(rect_msh, "rect", mem_global_arena());
     make_rect(rect_msh);
     make_cube(cube_msh);
 
     // Create 3 materials of different colors
     auto mat_cache = get_cache<material>(&app->cg);
+
     auto mat1 = add_robj(mat_cache);
+    init_material(mat1, "mat1", mem_global_arena());
+    hset_insert(&mat1->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
     mat1->col = {1.0, 0.0, 0.0, 1.0};
+
     auto mat2 = add_robj(mat_cache);
+    init_material(mat2, "mat2", mem_global_arena());
+    hset_insert(&mat2->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
     mat2->col = {0.0, 1.0, 0.0, 1.0};
+
     auto mat3 = add_robj(mat_cache);
+    init_material(mat3, "mat3", mem_global_arena());
+    hset_insert(&mat3->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
     mat3->col = {0.0, 0.0, 1.0, 1.0};
 
     ilog("Rect mesh submesh count %d and vert count %d and ind count %d",
@@ -156,7 +166,10 @@ int init(platform_ctxt *ctxt, void *user_data)
                     sc->mesh_id = rect_msh->id;
                     ent->name = to_str("rect-%d", ent_ind);
                 }
-                auto m = (zind * yind * xind);
+                tfcomp->world_pos = vec3{xind * 2.0f, yind * 2.0f, zind * 2.0f};
+                tfcomp->cached = math::model_tform(tfcomp->world_pos, tfcomp->orientation, tfcomp->scale);
+
+                auto m = (zind * width * len + yind * width + xind);
                 if ((m % 3) == 0) {
                     sc->mat_ids[0] = mat1->id;
                 }
@@ -166,8 +179,6 @@ int init(platform_ctxt *ctxt, void *user_data)
                 else {
                     sc->mat_ids[0] = mat3->id;
                 }
-                tfcomp->world_pos = vec3{xind * 2.0f, yind * 2.0f, zind * 2.0f};
-                tfcomp->cached = math::model_tform(tfcomp->world_pos, tfcomp->orientation, tfcomp->scale);
             }
         }
     }
@@ -217,6 +228,7 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
 
     // Spin some entities
     ptimer_restart(&pt);
+
     auto tform_tbl = get_comp_tbl<transform>(&app->rgn.cdb);
     auto mat_cache = get_cache<material>(&app->cg);
     auto msh_cache = get_cache<mesh>(&app->cg);
@@ -244,7 +256,7 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
     update_tm += pt.dt;
 
     // Draw some imgui stuff
-    ImGui::ShowDebugLogWindow();
+    // ImGui::ShowDebugLogWindow();
 
     res = end_render_frame(&app->rndr, cam, ctxt->time_pts.dt);
     ptimer_split(&pt);
@@ -254,7 +266,7 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
     double elapsed = nanos_to_sec(ptimer_elapsed_dt(&ctxt->time_pts));
     if (elapsed > counter) {
         double tot_factor = 100 / (update_tm + render_tm);
-        double update_factor = 100 / (update_tm);
+        double render_factor = 100 / render_tm;
 
         ilog("Average FPS: %.02f  Update:%.02f%%  Render:%.02f%%",
              ctxt->finished_frames / elapsed,
@@ -294,4 +306,4 @@ int configure_platform(platform_init_info *settings, app_data *app)
     return err_code::PLATFORM_NO_ERROR;
 }
 
-DEFINE_APPLICATION_MAIN(app_data, configure_platform);
+DEFINE_APPLICATION_MAIN_STATIC(app_data, configure_platform);

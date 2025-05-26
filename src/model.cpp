@@ -92,16 +92,18 @@ intern const ind_t CUBE_INDS_POINTS[] = {
     7,
 };
 
-void init_texture(texture *tex, mem_arena *arena)
+void init_texture(texture *tex, const string &name, mem_arena *arena)
 {
+    tex->name = name;
     tex->arena = arena;
 }
 
 void terminate_texture(texture *tex)
 {}
 
-void init_material(material *mat, mem_arena *arena)
+void init_material(material *mat, const string &name, mem_arena *arena)
 {
+    mat->name = name;
     asrt(!mat->pipelines.hashf);
     asrt(mat->textures.size == 0);
     hset_init(&mat->pipelines, arena);
@@ -154,8 +156,9 @@ void terminate_submesh(submesh *sm)
     arr_terminate(&sm->inds);
 }
 
-void init_mesh(mesh *msh, mem_arena *arena)
+void init_mesh(mesh *msh, const string &name, mem_arena *arena)
 {
+    msh->name = name;
     asrt(msh->submeshes.size == 0);
     msh->arena = arena;
 }

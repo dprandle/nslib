@@ -24,7 +24,7 @@ struct material
     ROBJ(MATERIAL);
     vec4 col;
     hset<rid> pipelines;
-    static_array<rid,TEXTURE_SLOT_COUNT> textures;
+    static_array<rid, TEXTURE_SLOT_COUNT> textures;
 };
 
 pup_func(material)
@@ -67,17 +67,17 @@ pup_func(mesh)
     pup_member(submeshes);
 }
 
-void init_texture(texture *tex, mem_arena *arena);
+void init_texture(texture *tex, const string &name, mem_arena *arena);
 void terminate_texture(texture *tex);
 
-void init_material(material *mat, mem_arena *arena);
+void init_material(material *mat, const string &name, mem_arena *arena);
 void terminate_material(material *mat);
 
 void init_submesh(submesh *sm, mem_arena *arena);
 void terminate_submesh(submesh *sm);
 void make_rect(mesh *msh);
 void make_cube(mesh *msh);
-void init_mesh(mesh *msh, mem_arena *arena);
+void init_mesh(mesh *msh, const string &name, mem_arena *arena);
 void terminate_mesh(mesh *msh);
 
 inline void terminate_robj(material *mat)

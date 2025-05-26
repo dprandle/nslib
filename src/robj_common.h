@@ -21,6 +21,7 @@ const sizet ROBJ_TYPE_DEFAULT_BUDGET[ROBJ_TYPE_USER] = {256, 256, 256};
     static constexpr const char *type_str = #type;                                                                                         \
     static constexpr const u32 type_id = ROBJ_TYPE_##type;                                                                                 \
     rid id;                                                                                                                                \
+    string name;                                                                                                                           \
     u64 flags;
 
 #define PUP_ROBJ                                                                                                                           \
@@ -180,7 +181,7 @@ bool remove_cache(robj_cache_group *cg)
 template<class T>
 T *add_robj(const rid &id, robj_cache<T> *cache)
 {
-    asrt(sizeof(T)==cache->arena.mpool.chunk_size);
+    asrt(sizeof(T) == cache->arena.mpool.chunk_size);
     T *ret = mem_calloc<T>(1, &cache->arena);
     ret->id = id;
     auto item = hmap_insert(&cache->rmap, id, ret);

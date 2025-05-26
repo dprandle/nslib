@@ -1,6 +1,7 @@
 #include "sim_region.h"
 #include "containers/string.h"
 #include "containers/linked_list.h"
+#include "json_archive.h"
 #include "stb_image.h"
 #include "platform.h"
 #include "vk_context.h"
@@ -38,8 +39,6 @@ intern constexpr const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR
 #endif
 
 intern constexpr f64 RESIZE_DEBOUNCE_FRAME_COUNT = 0.15; // 100 ms
-intern const rid FWD_RPASS("forward");
-intern const rid PLINE_FWD_RPASS_S0_OPAQUE("forward-s0-opaque");
 intern VkPipelineLayout G_FRAME_PL_LAYOUT{};
 
 enum descriptor_set_layout
@@ -64,6 +63,7 @@ struct material_draw_group
 {
     const material *mat;
     sizet set_ind;
+    sizet dc_offset;
     array<draw_call> dcs;
 };
 
@@ -905,10 +905,11 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
 
                 for (u32 dci = 0; dci < mat_iter->val->dcs.size; ++dci) {
                     const draw_call *cur_dc = &mat_iter->val->dcs[dci];
-
                     auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->val->oset].hndl;
                     sizet obj_ubo_item_size = vkr_uniform_buffer_offset_alignment(&rndr->vk, sizeof(obj_ubo_data));
-                    u32 dyn_offset = dci * (u32)obj_ubo_item_size;
+                    // Our dynamic offset in to our singlestoring all of our transforms is computed by adding
+                    // the material base draw call offset (computed each frame).
+                    u32 dyn_offset = (mat_iter->val->dc_offset + dci) * (u32)obj_ubo_item_size;
                     vkCmdBindDescriptorSets(cmd_buf->hndl,
                                             VK_PIPELINE_BIND_POINT_GRAPHICS,
                                             pipeline->layout_hndl,
@@ -1006,8 +1007,8 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
     // Create a default material for submeshes without materials
     auto mat_cache = get_cache<material>(cg);
     auto def_mat = add_robj(DEFAULT_MAT_ID, mat_cache);
-    init_material(def_mat, rndr->upstream_fl_arena);
-    //def_mat->col = vec4{0.5f, 0.2f, 0.8f, 1.0f};
+    init_material(def_mat, "default", rndr->upstream_fl_arena);
+    // def_mat->col = vec4{0.5f, 0.2f, 0.8f, 1.0f};
     hset_set(&def_mat->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
 
     // Setup our indice and vert buffer sbuffer
@@ -1120,12 +1121,9 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
     static auto default_mat = get_robj(DEFAULT_MAT_ID, mat_cache);
     asrt(rmesh);
 
-    // First iterate through all submeshes and associated materials
-    // TODO: Create a default material to fall back on in the case that a submesh does not have a material
     auto msh = get_robj(sm->mesh_id, msh_cache);
     asrt(msh);
     asrt(rmesh->val.submesh_entrees.size == msh->submeshes.size);
-    sizet cur_desc_ind = cur_frame->desc_pool.desc_sets.size;
 
     for (int i = 0; i < msh->submeshes.size; ++i) {
         auto mat = default_mat;
@@ -1150,22 +1148,20 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
             // If the render pass has not yet been added to our renderer's push list, add it now
             auto push_rp_fiter = hmap_find(&rndr->dcs.rpasses, rp_fiter->key);
             if (!push_rp_fiter) {
-                auto rpdg = mem_alloc<render_pass_draw_group>(&rndr->frame_fl);
-                memset(rpdg, 0, sizeof(render_pass_draw_group));
+                auto rpdg = mem_calloc<render_pass_draw_group>(1, &rndr->frame_fl);
+
                 rpdg->rpinfo = &rp_fiter->val;
                 arr_init(&rpdg->desc_updates, &rndr->frame_fl);
                 arr_init(&rpdg->sets_to_make, &rndr->frame_fl);
                 hmap_init(&rpdg->plines, hash_type, &rndr->frame_fl);
 
                 // Add the frame rpass descriptor set;
+                rpdg->fset = rpdg->sets_to_make.size;
                 arr_emplace_back(&rpdg->sets_to_make, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_FRAME]);
-                rpdg->fset = cur_desc_ind;
-                ++cur_desc_ind;
 
                 // Add the obj rpass descriptor set
+                rpdg->oset = rpdg->sets_to_make.size;
                 arr_emplace_back(&rpdg->sets_to_make, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_OBJECT]);
-                rpdg->oset = cur_desc_ind;
-                ++cur_desc_ind;
 
                 push_rp_fiter = hmap_insert(&rndr->dcs.rpasses, rp_fiter->key, rpdg);
             }
@@ -1174,16 +1170,14 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
             // If the pipeline has not yey been added to our render pass' push list, add it now
             auto push_pl_fiter = hmap_find(&push_rp_fiter->val->plines, pl_fiter->key);
             if (!push_pl_fiter) {
-                auto pldg = mem_alloc<pipeline_draw_group>(&rndr->frame_fl);
-                memset(pldg, 0, sizeof(pipeline_draw_group));
+                auto pldg = mem_calloc<pipeline_draw_group>(1, &rndr->frame_fl);
 
                 pldg->plinfo = &pl_fiter->val;
                 hmap_init(&pldg->mats, hash_type, &rndr->frame_fl);
 
                 // Add the pipeline discriptor set
+                pldg->set_ind = push_rp_fiter->val->sets_to_make.size;
                 arr_emplace_back(&push_rp_fiter->val->sets_to_make, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_PIPELINE]);
-                pldg->set_ind = cur_desc_ind;
-                ++cur_desc_ind;
 
                 push_pl_fiter = hmap_insert(&push_rp_fiter->val->plines, pl_fiter->key, pldg);
             }
@@ -1192,17 +1186,14 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
             // Now create the material set, if it doesn't exist
             auto push_mat_fiter = hmap_find(&push_pl_fiter->val->mats, mat->id);
             if (!push_mat_fiter) {
-                auto matdg = mem_alloc<material_draw_group>(&rndr->frame_fl);
-                memset(matdg, 0, sizeof(material_draw_group));
+                auto matdg = mem_calloc<material_draw_group>(1, &rndr->frame_fl);
 
                 matdg->mat = mat;
                 arr_init(&matdg->dcs, &rndr->frame_fl);
 
                 // Add the material discriptor set
-                // Add the pipeline discriptor set
+                matdg->set_ind = push_rp_fiter->val->sets_to_make.size;
                 arr_emplace_back(&push_rp_fiter->val->sets_to_make, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_MATERIAL]);
-                matdg->set_ind = cur_desc_ind;
-                ++cur_desc_ind;
 
                 push_mat_fiter = hmap_insert(&push_pl_fiter->val->mats, mat->id, matdg);
             }
@@ -1263,8 +1254,10 @@ int begin_render_frame(renderer *rndr, int finished_frame_count)
 intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
 {
     auto dev = &rndr->vk.inst.device;
-    // Update all descriptor sets
+
+    // We have a single buffer for all obj transforms, so this index is to keep track of our position in that buffer
     sizet total_dci{0};
+
     auto rp_iter = hmap_begin(&rndr->dcs.rpasses);
     while (rp_iter) {
         vkr_add_result desc_ind =
@@ -1317,6 +1310,9 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
             sizet mati{0};
             auto mat_iter = hmap_begin(&pl_iter->val->mats);
             while (mat_iter) {
+                // Update our base draw call offset
+                mat_iter->val->dc_offset = total_dci;
+
                 // Now update our material ubo with this mat data
                 material_ubo_data mat_ubo{};
                 mat_ubo.color = mat_iter->val->mat->col;
@@ -1390,6 +1386,12 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
             cam->vp_size = sz;
             cam->proj = (math::perspective(cam->fov, (f32)cam->vp_size.w / (f32)cam->vp_size.h, cam->near_far.x, cam->near_far.y));
         }
+
+        // Update our main pipeline view_proj with the cam transform update. This should be done every frame because the
+        // camera is dynamic
+        auto pline_to_update = hmap_find(&rndr->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
+        asrt(pline_to_update);
+        pline_to_update->val.proj_view = cam->proj * cam->view;
     }
 
     // Here we reset the fence for the current frame.. we wait for it to be signaled in render_frame_begin before
@@ -1401,14 +1403,8 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
         return err_code::RENDER_RESET_FENCE_FAIL;
     }
 
-    // Update our main pipeline view_proj with the cam transform update
-    if (cam) {
-        auto pline_to_update = hmap_find(&rndr->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
-        asrt(pline_to_update);
-        pline_to_update->val.proj_view = cam->proj * cam->view;
-    }
-
     // Update all uniform buffers and write the descriptor set updates for them
+    // This takes about %20 of the run frame
     err = update_uniform_descriptors(rndr, cur_frame);
     if (err != err_code::RENDER_NO_ERROR) {
         return err;
@@ -1425,7 +1421,8 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
     auto fb = &dev->framebuffers[im_ind];
 
     // We have the acquired image index, though we don't know when it will be ready to have ops submitted, we can record
-    // the ops in the command buffer and submit once it is readyy
+    // the ops in the command buffer and submit once it is ready
+    // This takes about %80 of the run frame
     err = record_command_buffer(rndr, fb, cur_frame, cmd_buf);
     if (err != err_code::RENDER_NO_ERROR) {
         return err;
@@ -1436,8 +1433,8 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
     if (err != err_code::RENDER_NO_ERROR) {
         return err;
     }
-
-    return present_image(rndr, cur_frame, im_ind);
+    auto ret = present_image(rndr, cur_frame, im_ind);
+    return ret;
 }
 
 void terminate_renderer(renderer *rndr)

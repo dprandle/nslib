@@ -12,6 +12,9 @@ namespace nslib
 {
 #define INVALID_IND ((sizet) - 1)
 
+inline const rid FWD_RPASS("forward");
+inline const rid PLINE_FWD_RPASS_S0_OPAQUE("forward-s0-opaque");
+
 struct vkr_context;
 struct sim_region;
 struct camera;
@@ -124,6 +127,7 @@ struct rmesh_info
 };
 struct render_pass_draw_group;
 struct imgui_ctxt;
+struct profile_timepoints;
 
 struct frame_draw_info
 {
