@@ -823,8 +823,7 @@ intern void add_desc_write_update(renderer *rndr,
                                   VkDescriptorType type)
 {
     // Add a write descriptor set to update our obj descriptor to point at this portion of our unifrom buffer
-    auto buffer_info = mem_alloc<VkDescriptorBufferInfo>(&rndr->frame_fl);
-    memset(buffer_info, 0, sizeof(VkDescriptorBufferInfo));
+    auto buffer_info = mem_calloc<VkDescriptorBufferInfo>(1, &rndr->frame_linear);
     buffer_info->offset = offset;
     buffer_info->range = range;
     buffer_info->buffer = rndr->vk.inst.device.buffers[buf_ind].hndl;
@@ -965,11 +964,13 @@ int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_aren
     asrt(fl_arena->alloc_type == mem_alloc_type::FREE_LIST);
     rndr->upstream_fl_arena = fl_arena;
     mem_init_fl_arena(&rndr->vk_free_list, 100 * MB_SIZE, fl_arena, "vk");
-    mem_init_fl_arena(&rndr->frame_fl, 100 * MB_SIZE, fl_arena, "frame");
+    mem_init_lin_arena(&rndr->frame_linear, 10 * KB_SIZE, fl_arena, "frame");
     mem_init_lin_arena(&rndr->vk_frame_linear, 10 * MB_SIZE, mem_global_stack_arena(), "vk-frame");
 
     hmap_init(&rndr->rpasses, hash_type, fl_arena);
     hmap_init(&rndr->pipelines, hash_type, fl_arena);
+
+    mem_init_lin_arena(&rndr->dcs.dc_linear, 100 * MB_SIZE, fl_arena, "dcs");
 
     // Set up our draw call list render pass hashmap with frame linear memory
     vkr_descriptor_cfg desc_cfg{};
@@ -1112,7 +1113,12 @@ intern s32 present_image(renderer *rndr, vkr_frame *cur_frame, u32 image_ind)
     return err_code::RENDER_NO_ERROR;
 }
 
-int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const mesh_cache *msh_cache, const material_cache *mat_cache)
+void clear_static_models(renderer *rndr)
+{
+    hmap_clear(&rndr->dcs.rpasses);
+}
+
+int add_static_model(renderer *rndr, const static_model *sm, const transform *tf, const mesh_cache *msh_cache, const material_cache *mat_cache)
 {
     auto dev = &rndr->vk.inst.device;
     auto cur_frame = get_current_frame(rndr);
@@ -1148,12 +1154,12 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
             // If the render pass has not yet been added to our renderer's push list, add it now
             auto push_rp_fiter = hmap_find(&rndr->dcs.rpasses, rp_fiter->key);
             if (!push_rp_fiter) {
-                auto rpdg = mem_calloc<render_pass_draw_group>(1, &rndr->frame_fl);
+                auto rpdg = mem_calloc<render_pass_draw_group>(1, &rndr->dcs.dc_linear);
 
                 rpdg->rpinfo = &rp_fiter->val;
-                arr_init(&rpdg->desc_updates, &rndr->frame_fl);
-                arr_init(&rpdg->sets_to_make, &rndr->frame_fl);
-                hmap_init(&rpdg->plines, hash_type, &rndr->frame_fl);
+                arr_init(&rpdg->desc_updates, &rndr->dcs.dc_linear);
+                arr_init(&rpdg->sets_to_make, &rndr->dcs.dc_linear);
+                hmap_init(&rpdg->plines, hash_type, &rndr->dcs.dc_linear);
 
                 // Add the frame rpass descriptor set;
                 rpdg->fset = rpdg->sets_to_make.size;
@@ -1170,10 +1176,10 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
             // If the pipeline has not yey been added to our render pass' push list, add it now
             auto push_pl_fiter = hmap_find(&push_rp_fiter->val->plines, pl_fiter->key);
             if (!push_pl_fiter) {
-                auto pldg = mem_calloc<pipeline_draw_group>(1, &rndr->frame_fl);
+                auto pldg = mem_calloc<pipeline_draw_group>(1, &rndr->dcs.dc_linear);
 
                 pldg->plinfo = &pl_fiter->val;
-                hmap_init(&pldg->mats, hash_type, &rndr->frame_fl);
+                hmap_init(&pldg->mats, hash_type, &rndr->dcs.dc_linear);
 
                 // Add the pipeline discriptor set
                 pldg->set_ind = push_rp_fiter->val->sets_to_make.size;
@@ -1186,10 +1192,10 @@ int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const 
             // Now create the material set, if it doesn't exist
             auto push_mat_fiter = hmap_find(&push_pl_fiter->val->mats, mat->id);
             if (!push_mat_fiter) {
-                auto matdg = mem_calloc<material_draw_group>(1, &rndr->frame_fl);
+                auto matdg = mem_calloc<material_draw_group>(1, &rndr->dcs.dc_linear);
 
                 matdg->mat = mat;
-                arr_init(&matdg->dcs, &rndr->frame_fl);
+                arr_init(&matdg->dcs, &rndr->dcs.dc_linear);
 
                 // Add the material discriptor set
                 matdg->set_ind = push_rp_fiter->val->sets_to_make.size;
@@ -1219,13 +1225,14 @@ int begin_render_frame(renderer *rndr, int finished_frame_count)
 {
     auto dev = &rndr->vk.inst.device;
 
+    mem_reset_arena(&rndr->vk_frame_linear);
+    mem_reset_arena(&rndr->frame_linear);
+
     // Clear our frame rendering entries
     hmap_terminate(&rndr->dcs.rpasses);
+    mem_reset_arena(&rndr->dcs.dc_linear);
 
-    mem_reset_arena(&rndr->vk_frame_linear);
-    mem_reset_arena(&rndr->frame_fl);
-
-    hmap_init(&rndr->dcs.rpasses, hash_type, &rndr->frame_fl);
+    hmap_init(&rndr->dcs.rpasses, hash_type, &rndr->dcs.dc_linear);
 
     // Update finished frames which is used to get the current frame
     rndr->finished_frames = finished_frame_count;
@@ -1251,6 +1258,7 @@ int begin_render_frame(renderer *rndr, int finished_frame_count)
     return err_code::VKR_NO_ERROR;
 }
 
+// This currently not only creates/updates the descriptors, but is also updating the underlying buffers..
 intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
 {
     auto dev = &rndr->vk.inst.device;
@@ -1441,7 +1449,8 @@ void terminate_renderer(renderer *rndr)
 {
     hmap_terminate(&rndr->dcs.rpasses);
     mem_reset_arena(&rndr->vk_frame_linear);
-    mem_reset_arena(&rndr->frame_fl);
+    mem_reset_arena(&rndr->frame_linear);
+    mem_reset_arena(&rndr->dcs.dc_linear);
 
     // These are stack arenas so must go in this order
     hmap_terminate(&rndr->rmi.meshes);
@@ -1451,9 +1460,10 @@ void terminate_renderer(renderer *rndr)
     vkr_device_wait_idle(&rndr->vk.inst.device);
     terminate_imgui(rndr);
     vkr_terminate(&rndr->vk);
+    mem_terminate_arena(&rndr->dcs.dc_linear);
     mem_terminate_arena(&rndr->vk_free_list);
     mem_terminate_arena(&rndr->vk_frame_linear);
-    mem_terminate_arena(&rndr->frame_fl);
+    mem_terminate_arena(&rndr->frame_linear);
 
     hmap_terminate(&rndr->rpasses);
     hmap_terminate(&rndr->pipelines);

@@ -129,9 +129,10 @@ struct render_pass_draw_group;
 struct imgui_ctxt;
 struct profile_timepoints;
 
-struct frame_draw_info
+struct static_model_draw_info
 {
     hmap<rid, render_pass_draw_group *> rpasses;
+    mem_arena dc_linear;
 };
 // What we really want to do is have a big SSAO with all transforms for entire scene right?
 
@@ -169,7 +170,7 @@ struct renderer
     mem_arena vk_free_list;
 
     mem_arena vk_frame_linear;
-    mem_arena frame_fl;
+    mem_arena frame_linear;
 
     // Pipeline indices referenced by ids
     hmap<rid, pipeline_info> pipelines{};
@@ -184,7 +185,7 @@ struct renderer
     imgui_ctxt imgui{};
 
     // All frame draw call info
-    frame_draw_info dcs;
+    static_model_draw_info dcs;
 
     // Contains all info about meshes and where they are in the vert/ind buffers
     rmesh_info rmi;
@@ -203,7 +204,9 @@ struct renderer
     sizet swapchain_fb_depth_stencil_im_ind{INVALID_IND};
 };
 
-int rpush_sm(renderer *rndr, const static_model *sm, const transform *tf, const mesh_cache *msh_cache, const material_cache *mat_cache);
+
+void clear_static_models(renderer *rndr);
+int add_static_model(renderer *rndr, const static_model *sm, const transform *tf, const mesh_cache *msh_cache, const material_cache *mat_cache);
 
 // NOTE: All of these mesh operations kind of need to wait on all rendering operations to complete as they modify the
 // vertex and index buffers - not sure yet if this is better done within the functions or in the caller. Also these should be done at the

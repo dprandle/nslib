@@ -248,7 +248,7 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
         }
         auto sm = get_comp<static_model>(tform_tbl->entries[i].ent_id, &app->rgn.cdb);
         if (sm) {
-            rpush_sm(&app->rndr, sm, curtf, msh_cache, mat_cache);
+            add_static_model(&app->rndr, sm, curtf, msh_cache, mat_cache);
         }
     }
 
