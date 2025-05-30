@@ -249,10 +249,10 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
     ptimer_restart(&pt);
 
     auto tform_tbl = get_comp_tbl<transform>(&app->rgn.cdb);
-    // auto mat_cache = get_cache<material>(&app->cg);
-    // auto msh_cache = get_cache<mesh>(&app->cg);
-    for (sizet i = 0; i < tform_tbl->entries.size/4; ++i) {
-        auto curtf = &tform_tbl->entries[i*4];
+    auto mat_cache = get_cache<material>(&app->cg);
+    auto msh_cache = get_cache<mesh>(&app->cg);
+    for (sizet i = 0; i < tform_tbl->entries.size; ++i) {
+        auto curtf = &tform_tbl->entries[i];
         if (curtf->ent_id != app->cam_id) {
             if (i % 3 == 0) {
                 curtf->orientation *= math::orientation(vec4{1.0, 0.0, 0.0, (f32)ctxt->time_pts.dt});
@@ -264,10 +264,10 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
                 curtf->orientation *= math::orientation(vec4{0.0, 0.0, 1.0, (f32)ctxt->time_pts.dt});
             }
             curtf->cached = math::model_tform(curtf->world_pos, curtf->orientation, curtf->scale);
-            post_transform_ubo_update(&app->rndr, curtf, tform_tbl);
+            //post_transform_ubo_update(&app->rndr, curtf, tform_tbl);
         }
     }
-    //post_transform_ubo_update_all(&app->rndr, tform_tbl);
+    post_transform_ubo_update_all(&app->rndr, tform_tbl);
 
     ptimer_split(&pt);
     update_tm += pt.dt;
