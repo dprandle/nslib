@@ -132,6 +132,15 @@ comp_table<T> *get_comp_tbl(comp_db *cdb)
 }
 
 template<class T>
+const comp_table<T> *get_comp_tbl(const comp_db *cdb)
+{
+    if (T::type_id < cdb->comp_tables.size) {
+        return (comp_table<T> *)cdb->comp_tables[T::type_id];
+    }
+    return nullptr;
+}
+
+template<class T>
 bool remove_comp_tbl(comp_db *cdb)
 {
     auto ctbl = get_comp_tbl<T>(cdb);
@@ -195,6 +204,18 @@ template<class T>
 T *get_comp(entity *ent)
 {
     return get_comp<T>(ent->id, ent->cdb);
+}
+
+template<class T>
+sizet get_comp_ind(const T *comp, const comp_table<T> *ctbl)
+{
+    return (comp - ctbl->entries.data);
+}
+
+template<class T>
+sizet get_comp_ind(const T *comp, const comp_db *cdb)
+{
+    return get_comp_ind(comp, get_comp_tbl<T>(cdb));
 }
 
 sizet add_entities(sizet count, sim_region *reg);

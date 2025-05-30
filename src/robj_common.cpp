@@ -12,17 +12,31 @@ namespace nslib
 
 intern const sizet ROBJ_TYPE_SIZE[ROBJ_TYPE_USER] = {sizeof(mesh)};
 
-rid::rid(const string &_str) : str(_str), id(hash_type(str, 0, 0))
-{}
-
-rid::rid(const char *_str) : str(_str), id(hash_type(str, 0, 0))
-{}
-
-string to_str(const rid &rid)
+void set_rid(rid *id, const string &str)
 {
-    string ret;
-    ret += "\nrid {\nid:" + to_str(rid.id) + "\nstr:" + rid.str + "\n}";
-    return ret;
+    id->str = str;
+    id->id = hash_type(id->str, 0, 0);
+}
+
+void set_rid(rid *id, const char *str)
+{
+    id->str = str;
+    id->id = hash_type(id->str, 0, 0);
+}
+
+rid make_rid(const string &str)
+{
+    return {.str{str}, .id = hash_type(str, 0, 0)};
+}
+
+rid make_rid(const char *str)
+{
+    return {.str{str}, .id = hash_type(str, 0, 0)};
+}
+
+const string &to_str(const rid &rid)
+{
+    return rid.str;
 }
 
 rid generate_id()

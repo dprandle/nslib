@@ -298,6 +298,7 @@ struct platform_memory
     mem_arena free_list{};
     mem_arena stack{};
     mem_arena frame_linear{};
+    mem_arena sdl_fl{};
 };
 
 struct platform_ctxt

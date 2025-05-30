@@ -64,6 +64,7 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app)
         camt->orientation = math::orientation(vertical) * math::orientation(horizontal) * camt->orientation;
         camt->cached = math::model_tform(camt->world_pos, camt->orientation, camt->scale);
         camc->view = math::inverse(camt->cached);
+        post_pipeline_ubo_update_all(&app->rndr);
     };
     auto ins = add_input_trigger_func(&app->stack, "cam-turn", {cam_turn_func, app});
     asrt(ins);
@@ -109,9 +110,9 @@ int init(platform_ctxt *ctxt, void *user_data)
     init_cache_group_default_types(&app->cg, mem_global_arena());
 
     // Create meshes
-    auto mc = get_cache<mesh>(&app->cg);
-    auto cube_msh = add_robj(mc);
-    auto rect_msh = add_robj(mc);
+    auto msh_cache = get_cache<mesh>(&app->cg);
+    auto cube_msh = add_robj(msh_cache);
+    auto rect_msh = add_robj(msh_cache);
     init_mesh(cube_msh, "cube", mem_global_arena());
     init_mesh(rect_msh, "rect", mem_global_arena());
     make_rect(rect_msh);
@@ -119,6 +120,12 @@ int init(platform_ctxt *ctxt, void *user_data)
 
     // Create 3 materials of different colors
     auto mat_cache = get_cache<material>(&app->cg);
+
+    // Create a default material for submeshes without materials
+    auto def_mat = add_robj(mat_cache);
+    init_material(def_mat, "default", mem_global_arena());
+    def_mat->col = vec4{0.5f, 0.2f, 0.8f, 1.0f};
+    hset_insert(&def_mat->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
 
     auto mat1 = add_robj(mat_cache);
     init_material(mat1, "mat1", mem_global_arena());
@@ -144,19 +151,41 @@ int init(platform_ctxt *ctxt, void *user_data)
          cube_msh->submeshes[0].verts.size,
          cube_msh->submeshes[0].inds.size);
 
+    // Initialize our renderer - fail early if init fails
+    int ret = init_renderer(&app->rndr, def_mat, ctxt->win_hndl, &ctxt->arenas.free_list);
+    if (ret != err_code::RENDER_NO_ERROR) {
+        return ret;
+    }
+
+    // Upload our meshes
+    upload_to_gpu(cube_msh, &app->rndr);
+    upload_to_gpu(rect_msh, &app->rndr);
+
     // Create our sim region aka scene
     init_sim_region(&app->rgn, mem_global_arena());
+    
+    // Create input map
+    init_keymap_stack(&app->stack, &ctxt->arenas.free_list);
+    init_keymap(&app->movement_km, "movement", &ctxt->arenas.free_list);
+    init_keymap(&app->global_km, "global", &ctxt->arenas.free_list);
+
+    push_keymap(&app->stack, &app->movement_km);
+    push_keymap(&app->stack, &app->global_km);
+
+    // Create and setup input for camera
+    setup_camera_controller(ctxt, app);
 
     // Create a grid of entities with odd ones being cubes and even being rectangles
-    int len = 10, width = 10, height = 10;
-    add_entities(len * width * height, &app->rgn);
+    int len = 10, width = 100, height = 100;
+    auto ent_offset = add_entities(len * width * height, &app->rgn);
 
-    for (int zind = 0; zind < height; ++zind) {
-        for (int yind = 0; yind < len; ++yind) {
-            for (int xind = 0; xind < width; ++xind) {
-                int ent_ind = zind * (width * len) + yind * width + xind;
+    auto tf_tbl = get_comp_tbl<transform>(&app->rgn.cdb);
+    for (sizet zind = 0; zind < height; ++zind) {
+        for (sizet yind = 0; yind < len; ++yind) {
+            for (sizet xind = 0; xind < width; ++xind) {
+                int ent_ind = zind * (width * len) + yind * width + xind + ent_offset;
                 auto ent = &app->rgn.ents[ent_ind];
-                auto tfcomp = add_comp<transform>(ent);
+                auto tfcomp = add_comp<transform>(ent->id, tf_tbl);
                 auto sc = add_comp<static_model>(ent);
                 if (xind % 2) {
                     sc->mesh_id = cube_msh->id;
@@ -179,26 +208,15 @@ int init(platform_ctxt *ctxt, void *user_data)
                 else {
                     sc->mat_ids[0] = mat3->id;
                 }
+                
+                // Add the model to our renderer
+                add_static_model(&app->rndr, sc, get_comp_ind(tfcomp, ent->cdb), msh_cache, mat_cache);
             }
         }
     }
+    post_ubo_update_all(&app->rndr, tf_tbl);
 
-    // Create input map
-    init_keymap_stack(&app->stack, &ctxt->arenas.free_list);
-    init_keymap(&app->movement_km, "movement", &ctxt->arenas.free_list);
-    init_keymap(&app->global_km, "global", &ctxt->arenas.free_list);
 
-    push_keymap(&app->stack, &app->movement_km);
-    push_keymap(&app->stack, &app->global_km);
-
-    // Create and setup input for camera
-    setup_camera_controller(ctxt, app);
-
-    int ret = init_renderer(&app->rndr, &app->cg, ctxt->win_hndl, &ctxt->arenas.free_list);
-    if (ret == err_code::RENDER_NO_ERROR) {
-        upload_to_gpu(cube_msh, &app->rndr);
-        upload_to_gpu(rect_msh, &app->rndr);
-    }
     return ret;
 }
 
@@ -222,6 +240,7 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
         cam_tform->world_pos += (right * app->movement.x + target * app->movement.y) * ctxt->time_pts.dt * 10;
         cam_tform->cached = math::model_tform(cam_tform->world_pos, cam_tform->orientation, cam_tform->scale);
         cam->view = math::inverse(cam_tform->cached);
+        post_pipeline_ubo_update_all(&app->rndr);
     }
     static double update_tm = 0.0;
     static double render_tm = 0.0;
@@ -230,10 +249,10 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
     ptimer_restart(&pt);
 
     auto tform_tbl = get_comp_tbl<transform>(&app->rgn.cdb);
-    auto mat_cache = get_cache<material>(&app->cg);
-    auto msh_cache = get_cache<mesh>(&app->cg);
-    for (sizet i = 0; i < tform_tbl->entries.size; ++i) {
-        auto curtf = &tform_tbl->entries[i];
+    // auto mat_cache = get_cache<material>(&app->cg);
+    // auto msh_cache = get_cache<mesh>(&app->cg);
+    for (sizet i = 0; i < tform_tbl->entries.size/4; ++i) {
+        auto curtf = &tform_tbl->entries[i*4];
         if (curtf->ent_id != app->cam_id) {
             if (i % 3 == 0) {
                 curtf->orientation *= math::orientation(vec4{1.0, 0.0, 0.0, (f32)ctxt->time_pts.dt});
@@ -245,12 +264,10 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
                 curtf->orientation *= math::orientation(vec4{0.0, 0.0, 1.0, (f32)ctxt->time_pts.dt});
             }
             curtf->cached = math::model_tform(curtf->world_pos, curtf->orientation, curtf->scale);
-        }
-        auto sm = get_comp<static_model>(tform_tbl->entries[i].ent_id, &app->rgn.cdb);
-        if (sm) {
-            add_static_model(&app->rndr, sm, curtf, msh_cache, mat_cache);
+            post_transform_ubo_update(&app->rndr, curtf, tform_tbl);
         }
     }
+    //post_transform_ubo_update_all(&app->rndr, tform_tbl);
 
     ptimer_split(&pt);
     update_tm += pt.dt;
@@ -294,7 +311,7 @@ int terminate(platform_ctxt *ctxt, void *user_data)
 
 int configure_platform(platform_init_info *settings, app_data *app)
 {
-    settings->wind.resolution = {800, 600};
+    settings->wind.resolution = {1000, 800};
     settings->wind.title = "RDev";
     settings->wind.win_flags = WINDOW_RESIZABLE | WINDOW_INPUT_FOCUS | WINDOW_VULKAN | WINDOW_SHOWN | WINDOW_ALLOW_HIGHDPI;
     settings->default_log_level = LOG_DEBUG;

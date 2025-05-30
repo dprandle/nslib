@@ -26,6 +26,8 @@
 namespace nslib
 {
 
+intern mem_arena *g_sdl_arena{};
+
 intern platform_ctxt *platform_window_ptr(void *win)
 {
     auto props = SDL_GetWindowProperties((SDL_Window *)win);
@@ -139,11 +141,14 @@ intern void init_mem_arenas(const platform_memory_init_info *info, platform_memo
     mem_init_fl_arena(&mem->free_list, info->free_list_size, nullptr, "global");
     mem_init_stack_arena(&mem->stack, info->stack_size, nullptr, "global");
     mem_init_lin_arena(&mem->frame_linear, info->frame_linear_size, nullptr, "global");
+    // 213 KB is about the min needed for SDL - we'll give it 500 to be safe
+    mem_init_fl_arena(&mem->sdl_fl, 500*KB_SIZE, &mem->free_list, "sdl");
 
     // Then these become our global mem arenas
     mem_set_global_arena(&mem->free_list);
     mem_set_global_stack_arena(&mem->stack);
     mem_set_global_frame_lin_arena(&mem->frame_linear);
+    g_sdl_arena = &mem->sdl_fl;
 
     // Set up our json alloc and free funcs
     json_hooks hooks;
@@ -157,9 +162,11 @@ intern void init_mem_arenas(const platform_memory_init_info *info, platform_memo
 
 intern void terminate_mem_arenas(platform_memory *mem)
 {
+    mem_terminate_arena(&mem->sdl_fl);
     mem_terminate_arena(&mem->stack);
     mem_terminate_arena(&mem->frame_linear);
     mem_terminate_arena(&mem->free_list);
+    g_sdl_arena = nullptr;
     mem_set_global_arena(nullptr);
     mem_set_global_stack_arena(nullptr);
     mem_set_global_frame_lin_arena(nullptr);
@@ -338,22 +345,22 @@ intern void handle_sdl_window_event(platform_ctxt *ctxt, platform_event *event, 
 
 intern void *sdl_malloc(sizet size)
 {
-    return mem_alloc(size, mem_global_arena(), SIMD_MIN_ALIGNMENT);
+    return mem_alloc(size, g_sdl_arena, SIMD_MIN_ALIGNMENT);
 }
 
 intern void *sdl_calloc(sizet nmemb, sizet memb)
 {
-    return mem_calloc(nmemb, memb, mem_global_arena(), SIMD_MIN_ALIGNMENT);
+    return mem_calloc(nmemb, memb, g_sdl_arena, SIMD_MIN_ALIGNMENT);
 }
 
 intern void *sdl_realloc(void *ptr, sizet size)
 {
-    return mem_realloc(ptr, size, mem_global_arena(), SIMD_MIN_ALIGNMENT);
+    return mem_realloc(ptr, size, g_sdl_arena, SIMD_MIN_ALIGNMENT);
 }
 
 intern void sdl_free(void *ptr)
 {
-    mem_free(ptr, mem_global_arena());
+    mem_free(ptr, g_sdl_arena);
 }
 
 void *platform_alloc(sizet byte_size)
@@ -379,6 +386,7 @@ int init_platform(const platform_init_info *settings, platform_ctxt *ctxt)
     ilog("Platform init version %d.%d.%d", NSLIB_VERSION_MAJOR, NSLIB_VERSION_MINOR, NSLIB_VERSION_PATCH);
     SDL_SetMemoryFunctions(sdl_malloc, sdl_calloc, sdl_realloc, sdl_free);
     SDL_SetLogOutputFunction(sdl_log_callback, nullptr);
+    SDL_SetAppMetadata("Rdev", "1.0.0", "rdev");
     if (!SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO)) {
         elog("Could not initialize SDL");
         return err_code::PLATFORM_INIT_FAIL;
@@ -412,6 +420,7 @@ int terminate_platform(platform_ctxt *ctxt)
 {
     ilog("Platform terminate");
     SDL_DestroyWindow((SDL_Window *)ctxt->win_hndl);
+    SDL_QuitSubSystem(SDL_INIT_AUDIO | SDL_INIT_VIDEO);
     SDL_Quit();
     ilog("Terminated SDL");
     terminate_mem_arenas(&ctxt->arenas);

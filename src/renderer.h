@@ -4,6 +4,7 @@
 #include "math/matrix4.h"
 #include "containers/array.h"
 #include "containers/hmap.h"
+#include "sim_region.h"
 #include "vk_context.h"
 
 struct ImGuiContext;
@@ -16,7 +17,6 @@ inline const rid FWD_RPASS("forward");
 inline const rid PLINE_FWD_RPASS_S0_OPAQUE("forward-s0-opaque");
 
 struct vkr_context;
-struct sim_region;
 struct camera;
 struct static_model;
 struct transform;
@@ -42,8 +42,7 @@ const sizet MAX_PIPELINE_COUNT = 1024;
 const sizet MAX_MATERIAL_COUNT = 4096;
 // Maximum number of objects
 const sizet MAX_OBJECT_COUNT = 1000000;
-// Default material
-const rid DEFAULT_MAT_ID = rid("default");
+
 
 namespace err_code
 {
@@ -136,9 +135,16 @@ struct static_model_draw_info
 };
 // What we really want to do is have a big SSAO with all transforms for entire scene right?
 
+struct material_info
+{
+    const material *mat{};
+    sizet ubo_offset{};
+};
+
 struct pipeline_info
 {
     sizet plind{};
+    sizet ubo_offset{};
     rid id{};
     rid rpass_id{};
     mat4 proj_view{};
@@ -160,6 +166,64 @@ struct imgui_ctxt
     mem_arena fl;
 };
 
+enum update_buffer_event_type
+{
+    UPDATE_BUFFER_EVENT_TYPE_TRANSFORM,
+    UPDATE_BUFFER_EVENT_TYPE_ALL_TRANSFORMS,
+    UPDATE_BUFFER_EVENT_TYPE_MATERIAL,
+    UPDATE_BUFFER_EVENT_TYPE_ALL_MATERIALS,
+    UPDATE_BUFFER_EVENT_TYPE_PIPELINE,
+    UPDATE_BUFFER_EVENT_TYPE_ALL_PIPELINES,
+};
+
+struct transform_ubo_update_event
+{
+    const transform *tform;
+    sizet ubo_offset;
+};
+
+struct transform_ubo_update_all_event
+{
+    const comp_table<transform> *transforms;
+};
+
+struct material_ubo_update_event
+{
+    const material_info *mi;
+};
+
+struct material_ubo_update_all_event
+{};
+
+struct pipeline_ubo_update_event
+{
+    const pipeline_info *plinfo;
+};
+
+struct pipeline_ubo_update_all_event
+{};
+
+struct update_ubo_buffer_event
+{
+    u32 type{};
+    union
+    {
+        transform_ubo_update_event tf;
+        transform_ubo_update_all_event tfall;
+        material_ubo_update_event mat;
+        material_ubo_update_all_event matall;
+        pipeline_ubo_update_event pl;
+        pipeline_ubo_update_all_event plall;
+    };
+};
+
+struct renderer_fif_data
+{
+    // Set of updates that will occur once we have our fence - these updates get posted to each frame
+    array<update_ubo_buffer_event> buffer_updates;
+    vkr_frame *vkf;
+};
+
 struct renderer
 {
     // Passed in
@@ -172,11 +236,14 @@ struct renderer
     mem_arena vk_frame_linear;
     mem_arena frame_linear;
 
+    // Render pass indices referenced by ids
+    hmap<rid, rpass_info> rpasses{};
+
     // Pipeline indices referenced by ids
     hmap<rid, pipeline_info> pipelines{};
 
-    // Render pass indices referenced by ids
-    hmap<rid, rpass_info> rpasses{};
+    // Info needed for material rendering
+    hmap<rid, material_info> materials{};
 
     // A mapping between framebuffers and render passes
     // hmap<sizet, array<rid> *> fb_rpasses;
@@ -196,6 +263,12 @@ struct renderer
     // This is incremented every frame there are no resize events
     f64 no_resize_frames;
 
+    // Default material for submeshes missing materials
+    material *default_mat{};
+
+    // There is a set of this stuff for each frame in flight
+    static_array<renderer_fif_data, MAX_FRAMES_IN_FLIGHT> per_frame_data{.size = MAX_FRAMES_IN_FLIGHT};
+
     sizet default_image_ind;
     sizet default_image_view_ind;
     sizet default_sampler_ind;
@@ -204,9 +277,16 @@ struct renderer
     sizet swapchain_fb_depth_stencil_im_ind{INVALID_IND};
 };
 
-
 void clear_static_models(renderer *rndr);
-int add_static_model(renderer *rndr, const static_model *sm, const transform *tf, const mesh_cache *msh_cache, const material_cache *mat_cache);
+int add_static_model(renderer *rndr, const static_model *sm, sizet transform_ind, const mesh_cache *msh_cache, const material_cache *mat_cache);
+
+void post_transform_ubo_update(renderer *rndr, const transform *tf, const comp_table<transform> *ctbl);
+void post_transform_ubo_update_all(renderer *rndr, const comp_table<transform> *ctbl);
+void post_material_ubo_update(renderer *rndr, const rid &mat_id);
+void post_material_ubo_update_all(renderer *rndr);
+void post_pipeline_ubo_update(renderer *rndr, const rid *plid);
+void post_pipeline_ubo_update_all(renderer *rndr);
+void post_ubo_update_all(renderer *rndr, const comp_table<transform> *ctbl);
 
 // NOTE: All of these mesh operations kind of need to wait on all rendering operations to complete as they modify the
 // vertex and index buffers - not sure yet if this is better done within the functions or in the caller. Also these should be done at the
@@ -221,7 +301,7 @@ bool upload_to_gpu(mesh *msh, renderer *rdnr);
 // removes the mesh from our mesh entry list. It does not do any actual gpu uploading
 bool remove_from_gpu(mesh *msh, renderer *rndr);
 
-int init_renderer(renderer *rndr, robj_cache_group *cg, void *win_hndl, mem_arena *fl_arena);
+int init_renderer(renderer *rndr, material *default_mat, void *win_hndl, mem_arena *fl_arena);
 
 int begin_render_frame(renderer *rndr, int finished_frames);
 

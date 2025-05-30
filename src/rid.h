@@ -6,14 +6,15 @@ namespace nslib
 {
 struct rid
 {
-    rid()
-    {}
-    explicit rid(const string &str);
-    explicit rid(const char *str);
-
     string str;
     u64 id{0};
 };
+
+void set_rid(rid *id, const string &str);
+void set_rid(rid *id, const char *str);
+
+rid make_rid(const string &str);
+rid make_rid(const char *str);
 
 pup_func(rid)
 {
@@ -23,7 +24,7 @@ pup_func(rid)
     }
 }
 
-string to_str(const rid &rid);
+const string &to_str(const rid &rid);
 
 inline u64 hash_type(const rid &id, u64, u64)
 {
@@ -41,5 +42,5 @@ inline bool operator!=(const rid &lhs, const rid &rhs)
 {
     return !(lhs == rhs);
 }
-    
-}    
+
+} // namespace nslib
