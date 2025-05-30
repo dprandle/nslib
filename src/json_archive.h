@@ -506,7 +506,7 @@ void pack_unpack(json_archive *ar, hmap<rid, T> &val, const pack_var_info &vinfo
         asrt(cur_frame);
         auto obj = cur_frame->current->child;
         while (obj) {
-            auto key = rid(obj->string);
+            auto key = make_rid(obj->string);
             auto item = hmap_find_or_insert(&val, key);
             pup_var(ar, item->val, {obj->string});
             obj = obj->next;

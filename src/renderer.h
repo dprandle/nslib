@@ -13,8 +13,8 @@ namespace nslib
 {
 #define INVALID_IND ((sizet) - 1)
 
-inline const rid FWD_RPASS("forward");
-inline const rid PLINE_FWD_RPASS_S0_OPAQUE("forward-s0-opaque");
+inline const rid FWD_RPASS = make_rid("forward");
+inline const rid PLINE_FWD_RPASS_S0_OPAQUE = make_rid("forward-s0-opaque");
 
 struct vkr_context;
 struct camera;

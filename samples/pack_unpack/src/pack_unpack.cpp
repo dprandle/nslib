@@ -107,7 +107,7 @@ pup_func(data_to_pup)
 void seed_data(data_to_pup *data)
 {
     ilog("Seeding data");
-    data->robj.id = rid("sample_id");
+    data->robj.id = make_rid("sample_id");
     data->fs = {"str1_text", "str2_text", {"choice1", "choice2", "choice3", "choice4", "choice5"}};
     data->v2_sa = {{2, 3, 4.4f, 9.1f, 2.3f}, 2};
     data->v4 = {4, 3, 2, 1};
@@ -154,9 +154,9 @@ void seed_data(data_to_pup *data)
     hmap_insert(&data->hm_i8, (s8)3, 2);
     hmap_insert(&data->hm_i8, (s8)4, 3);
 
-    hmap_insert(&data->hm_no_simp, rid("key1"), 1);
-    hmap_insert(&data->hm_no_simp, rid("key2"), 2);
-    hmap_insert(&data->hm_no_simp, rid("key3"), 3);
+    hmap_insert(&data->hm_no_simp, make_rid("key1"), 1);
+    hmap_insert(&data->hm_no_simp, make_rid("key2"), 2);
+    hmap_insert(&data->hm_no_simp, make_rid("key3"), 3);
 
     hset_insert(&data->hs, string("key1"));
     hset_insert(&data->hs, string("key2"));
@@ -194,9 +194,9 @@ void seed_data(data_to_pup *data)
     hset_insert(&data->hs_i8, (s8)3);
     hset_insert(&data->hs_i8, (s8)4);
 
-    hset_insert(&data->hs_no_simp, rid("key1"));
-    hset_insert(&data->hs_no_simp, rid("key2"));
-    hset_insert(&data->hs_no_simp, rid("key3"));
+    hset_insert(&data->hs_no_simp, make_rid("key1"));
+    hset_insert(&data->hs_no_simp, make_rid("key2"));
+    hset_insert(&data->hs_no_simp, make_rid("key3"));
 }
 
 void clear_data(data_to_pup *data)
