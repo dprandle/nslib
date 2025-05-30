@@ -183,7 +183,7 @@ int init(platform_ctxt *ctxt, void *user_data)
     for (sizet zind = 0; zind < height; ++zind) {
         for (sizet yind = 0; yind < len; ++yind) {
             for (sizet xind = 0; xind < width; ++xind) {
-                int ent_ind = zind * (width * len) + yind * width + xind + ent_offset;
+                sizet ent_ind = zind * (width * len) + yind * width + xind + ent_offset;
                 auto ent = &app->rgn.ents[ent_ind];
                 auto tfcomp = add_comp<transform>(ent->id, tf_tbl);
                 auto sc = add_comp<static_model>(ent);
@@ -269,6 +269,7 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
     }
     post_transform_ubo_update_all(&app->rndr, tform_tbl);
 
+    
     ptimer_split(&pt);
     update_tm += pt.dt;
 
