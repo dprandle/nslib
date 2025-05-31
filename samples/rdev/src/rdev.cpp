@@ -176,7 +176,7 @@ int init(platform_ctxt *ctxt, void *user_data)
     setup_camera_controller(ctxt, app);
 
     // Create a grid of entities with odd ones being cubes and even being rectangles
-    int len = 10, width = 100, height = 100;
+    int len = 10, width = 10, height = 10;
     auto ent_offset = add_entities(len * width * height, &app->rgn);
 
     auto tf_tbl = get_comp_tbl<transform>(&app->rgn.cdb);
@@ -264,17 +264,17 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
                 curtf->orientation *= math::orientation(vec4{0.0, 0.0, 1.0, (f32)ctxt->time_pts.dt});
             }
             curtf->cached = math::model_tform(curtf->world_pos, curtf->orientation, curtf->scale);
-            //post_transform_ubo_update(&app->rndr, curtf, tform_tbl);
+            post_transform_ubo_update(&app->rndr, curtf, tform_tbl);
         }
     }
-    post_transform_ubo_update_all(&app->rndr, tform_tbl);
-
+    //post_transform_ubo_update_all(&app->rndr, tform_tbl);
+    ImGui::ShowDebugLogWindow();
     
     ptimer_split(&pt);
     update_tm += pt.dt;
 
     // Draw some imgui stuff
-    // ImGui::ShowDebugLogWindow();
+
 
     res = end_render_frame(&app->rndr, cam, ctxt->time_pts.dt);
     ptimer_split(&pt);
