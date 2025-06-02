@@ -365,6 +365,7 @@ void *mem_alloc(sizet bytes, mem_arena *arena, sizet alignment)
             ret = mem_free_list_alloc(arena, bytes, alignment);
             break;
         case (mem_alloc_type::POOL):
+            bytes = (bytes >= sizeof(mem_node)) ? bytes : sizeof(mem_node);
             asrt(bytes == arena->mpool.chunk_size);
             ret = mem_pool_alloc(arena);
             break;
@@ -542,8 +543,9 @@ void mem_init_lin_arena(mem_arena *arena, sizet total_size, mem_arena *upstream,
 
 void mem_init_pool_arena(mem_arena *arena, sizet chunk_size, sizet chunk_count, mem_arena *upstream, const char *name)
 {
-    arena->mpool.chunk_size = chunk_size;
-    mem_init_arena(arena, chunk_size * chunk_count, mem_alloc_type::POOL, upstream, name);
+    auto min_sz = sizeof(mem_node);
+    arena->mpool.chunk_size = chunk_size >= min_sz ? chunk_size : min_sz; 
+    mem_init_arena(arena, arena->mpool.chunk_size * chunk_count, mem_alloc_type::POOL, upstream, name);
 }
 
 void mem_terminate_arena(mem_arena *arena)

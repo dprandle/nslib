@@ -64,6 +64,8 @@ inline u64 hash_type(const T &key, u64, u64) {
     return (T)key;
 }
 
+u64 hash_type(const void*, u64, u64);
+
 u64 hash_type(const cstr&, u64, u64);
 
 

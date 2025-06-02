@@ -111,34 +111,32 @@ int init(platform_ctxt *ctxt, void *user_data)
 
     // Create meshes
     auto msh_cache = get_cache<mesh>(&app->cg);
-    auto cube_msh = add_robj(msh_cache);
-    auto rect_msh = add_robj(msh_cache);
-    init_mesh(cube_msh, "cube", mem_global_arena());
-    init_mesh(rect_msh, "rect", mem_global_arena());
-    make_rect(rect_msh);
-    make_cube(cube_msh);
+    auto cube_msh = add_robj(msh_cache, terminate_mesh);
+    auto rect_msh = add_robj(msh_cache, terminate_mesh);
+    make_rect(rect_msh.ptr, "rect", mem_global_arena());
+    make_cube(cube_msh.ptr, "cube", mem_global_arena());
 
     // Create 3 materials of different colors
     auto mat_cache = get_cache<material>(&app->cg);
 
     // Create a default material for submeshes without materials
-    auto def_mat = add_robj(mat_cache);
-    init_material(def_mat, "default", mem_global_arena());
+    auto def_mat = add_robj(mat_cache, terminate_material);
+    init_material(def_mat.ptr, "default", mem_global_arena());
     def_mat->col = vec4{0.5f, 0.2f, 0.8f, 1.0f};
     hset_insert(&def_mat->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
 
-    auto mat1 = add_robj(mat_cache);
-    init_material(mat1, "mat1", mem_global_arena());
+    auto mat1 = add_robj(mat_cache, terminate_material);
+    init_material(mat1.ptr, "mat1", mem_global_arena());
     hset_insert(&mat1->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
     mat1->col = {1.0, 0.0, 0.0, 1.0};
 
-    auto mat2 = add_robj(mat_cache);
-    init_material(mat2, "mat2", mem_global_arena());
+    auto mat2 = add_robj(mat_cache, terminate_material);
+    init_material(mat2.ptr, "mat2", mem_global_arena());
     hset_insert(&mat2->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
     mat2->col = {0.0, 1.0, 0.0, 1.0};
 
-    auto mat3 = add_robj(mat_cache);
-    init_material(mat3, "mat3", mem_global_arena());
+    auto mat3 = add_robj(mat_cache, terminate_material);
+    init_material(mat3.ptr, "mat3", mem_global_arena());
     hset_insert(&mat3->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
     mat3->col = {0.0, 0.0, 1.0, 1.0};
 
@@ -158,8 +156,8 @@ int init(platform_ctxt *ctxt, void *user_data)
     }
 
     // Upload our meshes
-    upload_to_gpu(cube_msh, &app->rndr);
-    upload_to_gpu(rect_msh, &app->rndr);
+    upload_to_gpu(cube_msh.ptr, &app->rndr);
+    upload_to_gpu(rect_msh.ptr, &app->rndr);
 
     // Create our sim region aka scene
     init_sim_region(&app->rgn, mem_global_arena());

@@ -23,6 +23,25 @@
 
 #define SMALL_STR_LEN 24
 
+#define op_eq_func(type) inline bool operator==(const type &lhs, const type &rhs)
+
+#define op_neq_func(type)                                                                                                                  \
+    inline bool operator!=(const type &lhs, const type &rhs)                                                                               \
+    {                                                                                                                                      \
+        return !(lhs == rhs);                                                                                                              \
+    }
+
+#define op_eq_func_tt(type)                                                                                                                \
+    template<class T>                                                                                                                      \
+    inline bool operator==(const type<T> &lhs, const type<T> &rhs)
+
+#define op_neq_func_tt(type)                                                                                                               \
+    template<class T>                                                                                                                      \
+    inline bool operator!=(const type<T> &lhs, const type<T> &rhs)                                                                         \
+    {                                                                                                                                      \
+        return !(lhs == rhs);                                                                                                              \
+    }
+
 #if defined(NDEBUG)
     #define asrt(param) (!(param)) ? elog("Assertion: " #param " failed") : (void)0
     #define asrt_break(msg) elog("Assertion break: " #msg)

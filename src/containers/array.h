@@ -201,7 +201,7 @@ void arr_set_capacity(array<T> *arr, sizet new_cap)
     if (new_cap == arr->capacity) {
         return;
     }
-    
+
     // Shrink the old size if its greater than the new capacity calling dtor on each item
     if (arr->size > new_cap) {
         for (sizet i = new_cap; i < arr->size; ++i) {
@@ -215,7 +215,9 @@ void arr_set_capacity(array<T> *arr, sizet new_cap)
         while (new_cap * sizeof(T) < sizeof(mem_node)) {
             ++new_cap;
         }
-        arr->data = (T *)mem_realloc(arr->data, new_cap * sizeof(T), arr->arena, alignof(T));
+        auto alignment = alignof(T);
+        arr->data = (T *)mem_realloc(
+            arr->data, new_cap * sizeof(T), arr->arena, alignment > DEFAULT_MIN_ALIGNMENT ? alignment : DEFAULT_MIN_ALIGNMENT);
     }
     else if (arr->data) {
         mem_free(arr->data, arr->arena);

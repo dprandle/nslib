@@ -137,7 +137,7 @@ struct static_model_draw_info
 
 struct material_info
 {
-    const material *mat{};
+    handle<material> mat{};
     sizet ubo_offset{};
 };
 
@@ -264,7 +264,7 @@ struct renderer
     f64 no_resize_frames;
 
     // Default material for submeshes missing materials
-    material *default_mat{};
+    handle<material> default_mat{};
 
     // There is a set of this stuff for each frame in flight
     static_array<renderer_fif_data, MAX_FRAMES_IN_FLIGHT> per_frame_data{.size = MAX_FRAMES_IN_FLIGHT};
@@ -301,7 +301,7 @@ bool upload_to_gpu(mesh *msh, renderer *rdnr);
 // removes the mesh from our mesh entry list. It does not do any actual gpu uploading
 bool remove_from_gpu(mesh *msh, renderer *rndr);
 
-int init_renderer(renderer *rndr, material *default_mat, void *win_hndl, mem_arena *fl_arena);
+int init_renderer(renderer *rndr, const handle<material> &default_mat, void *win_hndl, mem_arena *fl_arena);
 
 int begin_render_frame(renderer *rndr, int finished_frames);
 

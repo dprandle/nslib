@@ -106,7 +106,8 @@ void *mem_alloc(sizet size, mem_arena *arena, sizet alignment = DEFAULT_MIN_ALIG
 template<class T>
 T *mem_alloc(mem_arena *arena)
 {
-    return (T *)mem_alloc(sizeof(T), arena, alignof(T));
+    auto alignment = alignof(T);
+    return (T *)mem_alloc(sizeof(T), arena, (alignment > DEFAULT_MIN_ALIGNMENT) ? alignment : DEFAULT_MIN_ALIGNMENT);
 }
 
 void *mem_calloc(sizet nmemb, sizet memb, mem_arena *arena, sizet alignment = DEFAULT_MIN_ALIGNMENT);
@@ -114,7 +115,8 @@ void *mem_calloc(sizet nmemb, sizet memb, mem_arena *arena, sizet alignment = DE
 template<class T>
 T *mem_calloc(sizet nmemb, mem_arena *arena)
 {
-    return (T *)mem_calloc(nmemb, sizeof(T), arena, alignof(T));
+    auto alignment = alignof(T);
+    return (T *)mem_calloc(nmemb, sizeof(T), arena, (alignment > DEFAULT_MIN_ALIGNMENT) ? alignment : DEFAULT_MIN_ALIGNMENT);
 }
 
 void *mem_realloc(void *ptr, sizet size, mem_arena *arena, sizet alignment = DEFAULT_MIN_ALIGNMENT, bool free_ptr_after_cpy = true);
@@ -122,7 +124,9 @@ void *mem_realloc(void *ptr, sizet size, mem_arena *arena, sizet alignment = DEF
 template<class T>
 T *mem_realloc(T *ptr, mem_arena *arena, bool free_ptr_after_cpy)
 {
-    return (T *)mem_realloc(ptr, sizeof(T), arena, alignof(T), free_ptr_after_cpy);
+    auto alignment = alignof(T);
+    return (T *)mem_realloc(
+        ptr, sizeof(T), arena, (alignment > DEFAULT_MIN_ALIGNMENT) ? alignment : DEFAULT_MIN_ALIGNMENT, free_ptr_after_cpy);
 }
 
 void mem_free(void *item, mem_arena *arena);

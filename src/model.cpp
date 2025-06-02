@@ -126,16 +126,18 @@ intern void make_rect_submesh(submesh *sm)
     arr_copy(&sm->inds, RECT_INDS_TRI_LIST, sizeof(RECT_INDS_TRI_LIST) / sizeof(ind_t));
 }
 
-void make_rect(mesh *msh)
+void make_rect(mesh *msh, const string &name, mem_arena *arena)
 {
-    asrt(msh->submeshes.size == 0);
+    init_mesh(msh, name, arena);
+    asrt(msh->submeshes.size == 0);    
     arr_resize(&msh->submeshes, 1);
     init_submesh(msh->submeshes.data, msh->arena);
     make_rect_submesh(msh->submeshes.data);
 }
 
-void make_cube(mesh *msh)
+void make_cube(mesh *msh, const string &name, mem_arena *arena)
 {
+    init_mesh(msh, name, arena);
     asrt(msh->submeshes.size == 0);
     arr_resize(&msh->submeshes, 1);
     init_submesh(msh->submeshes.data, msh->arena);

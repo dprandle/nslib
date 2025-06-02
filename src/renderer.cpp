@@ -968,7 +968,7 @@ intern renderer_fif_data *get_previous_frame(renderer *rndr)
     return &rndr->per_frame_data[prev_frame_ind];
 }
 
-int init_renderer(renderer *rndr, material *default_mat, void *win_hndl, mem_arena *fl_arena)
+int init_renderer(renderer *rndr, const handle<material> &default_mat, void *win_hndl, mem_arena *fl_arena)
 {
     asrt(fl_arena->alloc_type == mem_alloc_type::FREE_LIST);
     rndr->upstream_fl_arena = fl_arena;
@@ -1403,14 +1403,14 @@ int add_static_model(renderer *rndr, const static_model *sm, sizet transform_ind
     auto rmesh = hmap_find(&rndr->rmi.meshes, sm->mesh_id);
     asrt(rmesh);
 
-    auto msh = get_robj(sm->mesh_id, msh_cache);
+    auto msh = get_robj(msh_cache, sm->mesh_id);
     asrt(msh);
     asrt(rmesh->val.submesh_entrees.size == msh->submeshes.size);
 
     for (int i = 0; i < msh->submeshes.size; ++i) {
         auto mat = rndr->default_mat;
         if (sm->mat_ids[i].id != 0) {
-            auto mato = get_robj(sm->mat_ids[i], mat_cache);
+            auto mato = get_robj(mat_cache, sm->mat_ids[i]);
             if (mato) {
                 mat = mato;
             }

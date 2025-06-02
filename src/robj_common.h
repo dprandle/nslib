@@ -2,6 +2,7 @@
 
 #include "archive_common.h"
 #include "rid.h"
+#include "handle.h"
 #include "containers/hmap.h"
 
 namespace nslib
@@ -32,12 +33,13 @@ template<class T>
 struct robj_cache
 {
     using robj_type = T;
-    using iterator = hmap<rid, T *>::iterator;
-    using const_iterator = hmap<rid, T *>::const_iterator;
+    using iterator = hmap<rid, handle<T>>::iterator;
+    using const_iterator = hmap<rid, handle<T>>::const_iterator;
 
     // Resource id to pointer to resource obj
-    hmap<rid, T *> rmap{};
+    hmap<rid, handle<T>> rmap{};
     mem_arena arena{};
+    mem_arena handle_arena{};
 };
 
 using mesh_cache = robj_cache<struct mesh>;
@@ -64,21 +66,19 @@ template<class T>
 void init_cache(robj_cache<T> *cache, sizet item_budget, mem_arena *upstream)
 {
     hmap_init(&cache->rmap, hash_type, upstream, HMAP_DEFAULT_BUCKET_COUNT);
-    mem_init_pool_arena(&cache->arena, sizeof(T), item_budget, upstream, T::type_str);
+    mem_init_pool_arena<T>(&cache->arena, item_budget, upstream, T::type_str);
+    mem_init_pool_arena<ref_counter>(&cache->handle_arena, item_budget, upstream, T::type_str);
 }
 
 template<class T>
 void terminate_cache(robj_cache<T> *cache)
 {
-    // NOTE: We might want to call terminate on each robj here
-    auto iter = cache_begin(cache);
-    while (iter) {
-        terminate_robj(iter->val);
-        mem_free(iter->val, &cache->arena);
-        iter = cache_next(cache, iter);
-    }
-    mem_terminate_arena(&cache->arena);
     hmap_terminate(&cache->rmap);
+    // This will invalidate any handles we have for this cache
+    asrt(cache->arena.used == 0 && "Terminating cache with handles in use");
+    asrt(cache->handle_arena.used == 0 && "Terminating cache with handles in use");
+    mem_terminate_arena(&cache->arena);
+    mem_terminate_arena(&cache->handle_arena);
 }
 
 // Add and initialize a cache to the passed in cache group
@@ -175,88 +175,57 @@ bool remove_cache(robj_cache_group *cg)
     return remove_cache(cache, cg);
 }
 
-// Allocate a new object and insert it in to the cache. If inserting fails, we free the item. This assumes most of the
-// time that the user of this function will know the insertion will succeed. On failure, we needlessly create/destroy
-// the obj, but this allows not checking if the item is there before creating it.
 template<class T>
-T *add_robj(const rid &id, robj_cache<T> *cache)
+handle<T> add_robj(robj_cache<T> *cache, handle_obj_terminate_func<T> *on_obj_terminated, const rid &id = generate_id())
 {
     asrt(sizeof(T) == cache->arena.mpool.chunk_size);
     T *ret = mem_calloc<T>(1, &cache->arena);
     ret->id = id;
-    auto item = hmap_insert(&cache->rmap, id, ret);
-    if (!item) {
-        mem_free(ret, &cache->arena);
-        ret = nullptr;
+    auto hndl = make_handle(ret, on_obj_terminated, cache, &cache->arena, &cache->handle_arena);
+    auto item = hmap_insert(&cache->rmap, id, hndl);
+    if (item) {
+        return item->val;
     }
-    return ret;
+    return {};
 }
 
-// This will add a new robj to the cache, zero it out, set it to the copy, and then set the id to copy_id
 template<class T>
-T *add_robj(const T &copy, const rid &copy_id, robj_cache<T> *cache)
+handle<T> add_robj(robj_cache<T> *cache, handle_obj_terminate_func<T> *on_obj_terminated, const T &copy, const rid &new_id = generate_id())
 {
-    auto cpy = add_robj<T>(cache, copy_id);
+    auto cpy = add_robj<T>(cache, on_obj_terminated, new_id);
     if (cpy) {
         *cpy = copy;
-        cpy->id = copy_id;
+        cpy->id = new_id;
     }
     return cpy;
 }
 
-// This will add a new robj to the cache, zero it out, then set the id of it
 template<class T>
-T *add_robj(robj_cache<T> *cache)
-{
-    return add_robj<T>(generate_id(), cache);
-}
-
-// This will add a new robj to the cache, zero it out, set it to the copy, and then set the id to a generated id
-template<class T>
-T *add_robj(const T &copy, robj_cache<T> *cache)
-{
-    return add_robj<T>(copy, generate_id(), cache);
-}
-
-template<class T>
-T *get_robj(const rid &id, const robj_cache<T> *cache)
+handle<T> get_robj(const robj_cache<T> *cache, const rid &id)
 {
     auto item = hmap_find(&cache->rmap, id);
     if (item) {
         return item->val;
     }
-    return nullptr;
+    return {};
 }
 
 template<class T>
-T *get_robj(const rid &id, const robj_cache_group *cg)
+handle<T> get_robj(const robj_cache_group *cg, const rid &id)
 {
     auto cache = get_cache<T>(cg);
-    return get_robj(id, cache);
+    return get_robj(cache, id);
 }
 
 template<class T>
-bool remove_robj(const rid &id, robj_cache<T> *cache)
+bool remove_robj(robj_cache<T> *cache, const rid &id)
 {
-    auto obj = get_robj(id, cache);
-    return remove_robj(obj, cache);
+    return hmap_remove(id, &cache->rmam);
 }
 
 template<class T>
 bool remove_robj(const T &item, robj_cache<T> *cache)
 {
-    if (item) {
-        hmap_remove(&cache->rmap, item->id);
-        mem_free(item, &cache->arena);
-        return true;
-    }
-    return false;
+    return remove_robj(cache, item.id);
 }
-
-template<class T>
-void terminate_robj(T *robj)
-{
-    ilog("Teminate %s id %s", robj->type_str, str_cstr(robj->id.str));
-}
-
 } // namespace nslib
