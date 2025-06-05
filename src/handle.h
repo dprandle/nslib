@@ -96,7 +96,8 @@ handle<T> make_handle(T *ptr, handle_obj_terminate_func<T> *tfunc, void *owner, 
     ret.ptr = ptr;
     ret.tfunc = tfunc;
     ret.owner = owner;
-    ret.handle_ref = mem_calloc<ref_counter>(1, handle_arena);
+    ret.handle_ref = mem_alloc<ref_counter>(handle_arena);
+    ret.handle_ref->cnt = 1;
     ret.item_arena = item_arena;
     ret.handle_arena = handle_arena;
     return ret;

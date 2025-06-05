@@ -16,6 +16,7 @@ namespace nslib
 inline const rid FWD_RPASS = make_rid("forward");
 inline const rid PLINE_FWD_RPASS_S0_OPAQUE = make_rid("forward-s0-opaque");
 
+
 struct vkr_context;
 struct camera;
 struct static_model;

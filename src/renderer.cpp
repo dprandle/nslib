@@ -244,7 +244,7 @@ intern int setup_render_pass(renderer *rndr)
     return ret;
 }
 
-intern int setup_pipeline(renderer *rndr)
+intern int setup_color_mat_pipeline(renderer *rndr)
 {
     auto vk = &rndr->vk;
     vkr_pipeline_cfg info{};
@@ -406,7 +406,6 @@ intern int setup_pipeline(renderer *rndr)
         int code = vkr_init_pipeline(&vk->inst.device.pipelines[plinfo.plind], &info, vk);
         if (code == err_code::VKR_NO_ERROR) {
             hmap_set(&rndr->pipelines, plinfo.id, plinfo);
-
             // Set our global frame layout
             G_FRAME_PL_LAYOUT = vk->inst.device.pipelines[plinfo.plind].layout_hndl;
         }
@@ -741,7 +740,7 @@ intern int setup_rendering(renderer *rndr)
         return err;
     }
 
-    err = setup_pipeline(rndr);
+    err = setup_color_mat_pipeline(rndr);
     if (err != err_code::VKR_NO_ERROR) {
         elog("Failed to setup pipeline");
         return err;
@@ -982,6 +981,8 @@ int init_renderer(renderer *rndr, const handle<material> &default_mat, void *win
 
     mem_init_lin_arena(&rndr->dcs.dc_linear, 100 * MB_SIZE, fl_arena, "dcs");
     hmap_init(&rndr->dcs.rpasses);
+
+    rndr->default_mat = default_mat;
 
     // Set up our draw call list render pass hashmap with frame linear memory
     vkr_descriptor_cfg desc_cfg{};
@@ -1627,6 +1628,7 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
 
 void terminate_renderer(renderer *rndr)
 {
+    rndr->default_mat = {};
     for (int i = 0; i < rndr->per_frame_data.size; ++i) {
         arr_terminate(&rndr->per_frame_data[i].buffer_updates);
     }

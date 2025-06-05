@@ -262,10 +262,10 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
                 curtf->orientation *= math::orientation(vec4{0.0, 0.0, 1.0, (f32)ctxt->time_pts.dt});
             }
             curtf->cached = math::model_tform(curtf->world_pos, curtf->orientation, curtf->scale);
-            post_transform_ubo_update(&app->rndr, curtf, tform_tbl);
+            //post_transform_ubo_update(&app->rndr, curtf, tform_tbl);
         }
     }
-    //post_transform_ubo_update_all(&app->rndr, tform_tbl);
+    post_transform_ubo_update_all(&app->rndr, tform_tbl);
     ImGui::ShowDebugLogWindow();
     
     ptimer_split(&pt);
