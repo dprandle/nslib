@@ -1,3 +1,5 @@
+#include "platform.h"
+#include "stb_image.h"
 #include "model.h"
 
 namespace nslib
@@ -95,11 +97,45 @@ intern const ind_t CUBE_INDS_POINTS[] = {
 void init_texture(texture *tex, const string &name, mem_arena *arena)
 {
     tex->name = name;
-    tex->arena = arena;
+    arr_init(&tex->pixels, arena);
+}
+
+u32 get_texture_pixel_count(texture *tex)
+{
+    return tex->size.w * tex->size.h;
+}
+
+sizet get_texture_memsize(texture *tex)
+{
+    return get_texture_pixel_count(tex) * tex->channels;
+}
+
+bool load_texture(texture *tex, const char *path, cstr *err)
+{
+    
+    auto stb_pixels = stbi_load(path, (s32*)&tex->size.w, (s32*)&tex->size.h, (s32*)&tex->channels, STBI_rgb_alpha);
+    if (stb_pixels) {
+        if (tex->channels != STBI_rgb_alpha) {
+            ilog("Converted %s from %d to %d channels", path, tex->channels, STBI_rgb_alpha);
+            tex->channels = STBI_rgb_alpha;
+        }
+        auto sz = get_texture_memsize(tex);
+        arr_resize(&tex->pixels, sz); // 4 channels for RGBA
+
+        memcpy(tex->pixels.data, stb_pixels, sz);
+        stbi_image_free(stb_pixels);
+        return true;
+    }
+    else if (err) {
+        *err = stbi_failure_reason();
+    }
+    return false;
 }
 
 void terminate_texture(texture *tex)
-{}
+{
+    arr_terminate(&tex->pixels);
+}
 
 void init_material(material *mat, const string &name, mem_arena *arena)
 {
@@ -129,7 +165,7 @@ intern void make_rect_submesh(submesh *sm)
 void make_rect(mesh *msh, const string &name, mem_arena *arena)
 {
     init_mesh(msh, name, arena);
-    asrt(msh->submeshes.size == 0);    
+    asrt(msh->submeshes.size == 0);
     arr_resize(&msh->submeshes, 1);
     init_submesh(msh->submeshes.data, msh->arena);
     make_rect_submesh(msh->submeshes.data);

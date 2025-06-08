@@ -160,39 +160,29 @@ typename T::const_iterator arr_end(const T *arrobj)
 template<class T>
 void arr_copy(array<T> *dest, const array<T> *source)
 {
-    arr_resize(dest, source->size);
-    for (sizet i = 0; i < source->size; ++i) {
-        (*dest)[i] = (*source)[i];
-    }
+    arr_copy(dest, source->data, source->size);
 }
 
 template<class T>
 void arr_copy(array<T> *dest, const T *src, sizet src_size)
 {
     arr_resize(dest, src_size);
-    for (sizet i = 0; i < src_size; ++i) {
-        (*dest)[i] = src[i];
-    }
+    memcpy(dest->data, src, src_size*sizeof(T));
 }
 
 template<class T>
 void arr_append(array<T> *arr, const T *src, sizet src_size)
 {
-    sizet start_ind = arr->size;
-    arr_resize(arr, start_ind + src_size);
-    for (sizet i = 0; i < src_size; ++i) {
-        (*arr)[start_ind + i] = src[i];
-    }
+    sizet offset = arr->size;
+    arr_resize(arr, offset + src_size);
+    // Pointer arithmetic happens before converting pointer to void*
+    memcpy(arr->data+offset, src, src_size*sizeof(T));
 }
 
 template<class T>
 void arr_append(array<T> *arr, const array<T> *source)
 {
-    sizet start_ind = arr->size;
-    arr_resize(arr, start_ind + source->size);
-    for (sizet i = 0; i < source->size; ++i) {
-        (*arr)[start_ind + i] = (*source)[i];
-    }
+    arr_append(arr, source->data, source->size);
 }
 
 template<class T>

@@ -18,6 +18,7 @@ endfunction()
 
 function(add_copy_data_command TARGET_NAME)
   add_copy_data_dir_command(${TARGET_NAME} ${TARGET_NAME}/data bin/data)
+  add_copy_data_dir_command(${TARGET_NAME} ${TARGET_NAME}/import bin/import)
 endfunction()
 
 create_sample(basic_window)

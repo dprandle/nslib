@@ -1231,8 +1231,6 @@ int vkr_init_pipeline(vkr_pipeline *pipe_info, const vkr_pipeline_cfg *cfg, cons
     multisampling.alphaToCoverageEnable = cfg->multisampling.alpha_to_coverage_enable;
     multisampling.alphaToOneEnable = cfg->multisampling.alpha_to_one_enable;
 
-    // Depth/Stencil - Skip for now
-
     // Color blending
     VkPipelineColorBlendStateCreateInfo col_blend_state{};
     col_blend_state.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;

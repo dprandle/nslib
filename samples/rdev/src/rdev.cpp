@@ -118,27 +118,40 @@ int init(platform_ctxt *ctxt, void *user_data)
 
     // Create 3 materials of different colors
     auto mat_cache = get_cache<material>(&app->cg);
+    auto tex_cache = get_cache<texture>(&app->cg);
 
     // Create a default material for submeshes without materials
     auto def_mat = add_robj(mat_cache, terminate_material);
     init_material(def_mat.ptr, "default", mem_global_arena());
     def_mat->col = vec4{0.5f, 0.2f, 0.8f, 1.0f};
-    hset_insert(&def_mat->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
+    hset_insert(&def_mat->pipelines, PLINE_FWD_RPASS_S0_OPAQUE_COL);
 
     auto mat1 = add_robj(mat_cache, terminate_material);
     init_material(mat1.ptr, "mat1", mem_global_arena());
-    hset_insert(&mat1->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
+    hset_insert(&mat1->pipelines, PLINE_FWD_RPASS_S0_OPAQUE_COL);
     mat1->col = {1.0, 0.0, 0.0, 1.0};
 
     auto mat2 = add_robj(mat_cache, terminate_material);
     init_material(mat2.ptr, "mat2", mem_global_arena());
-    hset_insert(&mat2->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
+    hset_insert(&mat2->pipelines, PLINE_FWD_RPASS_S0_OPAQUE_COL);
     mat2->col = {0.0, 1.0, 0.0, 1.0};
 
-    auto mat3 = add_robj(mat_cache, terminate_material);
-    init_material(mat3.ptr, "mat3", mem_global_arena());
-    hset_insert(&mat3->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
-    mat3->col = {0.0, 0.0, 1.0, 1.0};
+    auto mat_daniel_face = add_robj(mat_cache, terminate_material);
+    init_material(mat_daniel_face.ptr, "daniel-face", mem_global_arena());
+    hset_insert(&mat_daniel_face->pipelines, PLINE_FWD_RPASS_S0_OPAQUE_DIFFUSE);
+    mat_daniel_face->col = {0.0, 0.0, 1.0, 1.0};
+
+    auto tex = add_robj(tex_cache, terminate_texture);
+    init_texture(tex.ptr, "daniel", mem_global_arena());
+    cstr err;
+    const char *path = "import/daniel.png";
+    if (load_texture(tex.ptr, path, &err)) {
+        ilog("Loaded %s from %s", to_cstr(tex->name), path);
+        arr_emplace_back(&mat_daniel_face->textures, tex->id);
+    }
+    else {
+        wlog("Failed to load texture %s from %s: %s", to_cstr(tex->name), path, err);
+    }
 
     ilog("Rect mesh submesh count %d and vert count %d and ind count %d",
          rect_msh->submeshes.size,
@@ -161,7 +174,7 @@ int init(platform_ctxt *ctxt, void *user_data)
 
     // Create our sim region aka scene
     init_sim_region(&app->rgn, mem_global_arena());
-    
+
     // Create input map
     init_keymap_stack(&app->stack, &ctxt->arenas.free_list);
     init_keymap(&app->movement_km, "movement", &ctxt->arenas.free_list);
@@ -204,16 +217,15 @@ int init(platform_ctxt *ctxt, void *user_data)
                     sc->mat_ids[0] = mat2->id;
                 }
                 else {
-                    sc->mat_ids[0] = mat3->id;
+                    sc->mat_ids[0] = mat_daniel_face->id;
                 }
-                
+
                 // Add the model to our renderer
                 add_static_model(&app->rndr, sc, get_comp_ind(tfcomp, ent->cdb), msh_cache, mat_cache);
             }
         }
     }
     post_ubo_update_all(&app->rndr, tf_tbl);
-
 
     return ret;
 }
@@ -262,17 +274,16 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
                 curtf->orientation *= math::orientation(vec4{0.0, 0.0, 1.0, (f32)ctxt->time_pts.dt});
             }
             curtf->cached = math::model_tform(curtf->world_pos, curtf->orientation, curtf->scale);
-            //post_transform_ubo_update(&app->rndr, curtf, tform_tbl);
+            // post_transform_ubo_update(&app->rndr, curtf, tform_tbl);
         }
     }
     post_transform_ubo_update_all(&app->rndr, tform_tbl);
     ImGui::ShowDebugLogWindow();
-    
+
     ptimer_split(&pt);
     update_tm += pt.dt;
 
     // Draw some imgui stuff
-
 
     res = end_render_frame(&app->rndr, cam, ctxt->time_pts.dt);
     ptimer_split(&pt);

@@ -15,7 +15,9 @@ using ind_t = u16;
 struct texture
 {
     ROBJ(TEXTURE);
-    mem_arena *arena;
+    byte_array pixels;
+    uvec2 size;
+    u8 channels;
 };
 
 // Material references textures and pipelines, which both must be uploaded to GPUa
@@ -68,6 +70,9 @@ pup_func(mesh)
 }
 
 void init_texture(texture *tex, const string &name, mem_arena *arena);
+sizet get_texture_memsize(texture *tex);
+u32 get_texture_pixel_count(texture *tex);
+bool load_texture(texture *tex, const char *path, cstr *err);
 void terminate_texture(texture *tex);
 
 void init_material(material *mat, const string &name, mem_arena *arena);

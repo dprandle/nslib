@@ -5,4 +5,5 @@
 #define STBI_FREE(ptr) nslib::mem_free(ptr, nslib::mem_global_arena())
 #define STBI_ASSERT asrt
 #define STB_IMAGE_IMPLEMENTATION
+#define STBI_FAILURE_USERMSG
 #include "stb_image.h"

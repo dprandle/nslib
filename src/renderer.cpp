@@ -49,6 +49,12 @@ enum descriptor_set_layout
     DESCRIPTOR_SET_LAYOUT_OBJECT,
 };
 
+enum descriptor_set_binding
+{
+    DESCRIPTOR_SET_BINDING_UNIFORM_BUFFER,
+    DESCRIPTOR_SET_BINDING_IMAGE_SAMPLER,
+};
+
 enum draw_call_flags
 {
     DRAW_CALL_FLAG_NONE = 0,
@@ -64,7 +70,6 @@ struct draw_call
     u32 first_instance;
     u32 flags{};
     sizet ubo_offset;
-    // const mat4 *tf;
 };
 
 struct material_draw_group
@@ -216,7 +221,6 @@ intern int setup_render_pass(renderer *rndr)
     att_ref.attachment = 1;
     att_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     subpass.depth_stencil_attachment = &att_ref;
-
     arr_push_back(&rp_cfg.subpasses, subpass);
 
     // Because we use this render pass each frame, this dependency makes it so that we won't begin our first subpass
@@ -244,6 +248,156 @@ intern int setup_render_pass(renderer *rndr)
     return ret;
 }
 
+intern int setup_diffuse_mat_pipeline(renderer *rndr)
+{
+    auto vk = &rndr->vk;
+    vkr_pipeline_cfg info{};
+
+    arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_VIEWPORT);
+    arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_SCISSOR);
+
+    // Descripitor Set Layouts - Just one layout for the moment with a binding at 0 for uniforms and a binding at 1 for
+    // image sampler
+    info.set_layouts.size = 4;
+
+    // Descriptor layouts
+    // Single Uniform buffer
+    VkDescriptorSetLayoutBinding b{};
+    b.binding = DESCRIPTOR_SET_BINDING_UNIFORM_BUFFER;
+    b.descriptorCount = 1;
+    b.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+
+    // Add uniform buffer binding to each set, and image sampler to material set as well
+    arr_push_back(&info.set_layouts[DESCRIPTOR_SET_LAYOUT_FRAME].bindings, b);
+    arr_push_back(&info.set_layouts[DESCRIPTOR_SET_LAYOUT_PIPELINE].bindings, b);
+    arr_push_back(&info.set_layouts[DESCRIPTOR_SET_LAYOUT_MATERIAL].bindings, b);
+
+    // Change descriptor type to dynamic descriptor for object - we bind it with an offset for each object
+    b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+    arr_push_back(&info.set_layouts[DESCRIPTOR_SET_LAYOUT_OBJECT].bindings, b);
+
+    // Add image sampler to material
+    b.binding = DESCRIPTOR_SET_BINDING_IMAGE_SAMPLER;
+    b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    arr_push_back(&info.set_layouts[DESCRIPTOR_SET_LAYOUT_MATERIAL].bindings, b);
+
+    // Setup our push constant
+    ++info.push_constant_ranges.size;
+    info.push_constant_ranges[0].offset = 0;
+    info.push_constant_ranges[0].size = sizeof(push_constants);
+    info.push_constant_ranges[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    // Vertex binding:
+    VkVertexInputBindingDescription binding_desc{};
+    binding_desc.binding = 0;
+    binding_desc.stride = sizeof(vertex);
+    binding_desc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    arr_push_back(&info.vert_binding_desc, binding_desc);
+
+    // Attribute Descriptions - so far we just have three
+    VkVertexInputAttributeDescription attrib_desc{};
+    attrib_desc.binding = 0;
+    attrib_desc.location = 0;
+    attrib_desc.format = VK_FORMAT_R32G32B32_SFLOAT;
+    attrib_desc.offset = offsetof(vertex, pos);
+    arr_push_back(&info.vert_attrib_desc, attrib_desc);
+
+    attrib_desc.binding = 0;
+    attrib_desc.location = 1;
+    attrib_desc.format = VK_FORMAT_R32G32_SFLOAT;
+    attrib_desc.offset = offsetof(vertex, tc);
+    arr_push_back(&info.vert_attrib_desc, attrib_desc);
+
+    attrib_desc.binding = 0;
+    attrib_desc.location = 2;
+    attrib_desc.format = VK_FORMAT_R8G8B8A8_UINT;
+    attrib_desc.offset = offsetof(vertex, color);
+    arr_push_back(&info.vert_attrib_desc, attrib_desc);
+
+    // Viewports and scissors
+    VkViewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = (float)vk->inst.device.swapchain.extent.width;
+    viewport.height = (float)vk->inst.device.swapchain.extent.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    arr_push_back(&info.viewports, viewport);
+
+    VkRect2D scissor{};
+    scissor.offset = {0, 0};
+    scissor.extent = vk->inst.device.swapchain.extent;
+    arr_push_back(&info.scissors, scissor);
+
+    // Input Assembly
+    info.input_assembly.primitive_topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    info.input_assembly.primitive_restart_enable = false;
+
+    // Raster options
+    info.raster.depth_clamp_enable = false;
+    info.raster.rasterizer_discard_enable = false;
+    info.raster.polygon_mode = VK_POLYGON_MODE_FILL;
+    info.raster.line_width = 1.0f;
+    info.raster.cull_mode = VK_CULL_MODE_BACK_BIT;
+    info.raster.front_face = VK_FRONT_FACE_CLOCKWISE;
+    info.raster.depth_bias_enable = false;
+    info.raster.depth_bias_constant_factor = 0.0f;
+    info.raster.depth_bias_clamp = 0.0f;
+    info.raster.depth_bias_slope_factor = 0.0f;
+
+    // Multisampling defaults are good
+
+    // Color blending - none for this pipeline
+    VkPipelineColorBlendAttachmentState col_blnd_att{};
+    col_blnd_att.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    col_blnd_att.blendEnable = false;
+    arr_push_back(&info.col_blend.attachments, col_blnd_att);
+
+    // Depth Stencil
+    info.depth_stencil.depth_test_enable = true;
+    info.depth_stencil.depth_write_enable = true;
+    info.depth_stencil.depth_compare_op = VK_COMPARE_OP_LESS;
+    info.depth_stencil.depth_bounds_test_enable = false;
+    info.depth_stencil.min_depth_bounds = 0.0f;
+    info.depth_stencil.max_depth_bounds = 1.0f;
+
+    // Our basic shaders
+    const char *fnames[] = {"data/shaders/fwd-diffuse.vert.spv", "data/shaders/fwd-diffuse.frag.spv"};
+    for (int i = 0; i <= VKR_SHADER_STAGE_FRAG; ++i) {
+        platform_file_err_desc err{};
+        arr_init(&info.shader_stages[i].code, &rndr->vk_frame_linear);
+        read_file(fnames[i], &info.shader_stages[i].code, 0, &err);
+        if (err.code != err_code::PLATFORM_NO_ERROR) {
+            wlog("Error reading file %s from disk (code %d): %s", fnames[i], err.code, err.str);
+            return err_code::RENDER_LOAD_SHADERS_FAIL;
+        }
+        info.shader_stages[i].entry_point = "main";
+    }
+
+    auto rpass_fiter = hmap_find(&rndr->rpasses, FWD_RPASS);
+    if (rpass_fiter) {
+        info.rpass = &vk->inst.device.render_passes[rpass_fiter->val.rpind];
+        pipeline_info plinfo{};
+        plinfo.id = PLINE_FWD_RPASS_S0_OPAQUE_DIFFUSE;
+        plinfo.ubo_offset = rndr->pipelines.count;
+        plinfo.plind = vkr_add_pipeline(&vk->inst.device, {});
+        plinfo.rpass_id = rpass_fiter->val.id;
+        int code = vkr_init_pipeline(&vk->inst.device.pipelines[plinfo.plind], &info, vk);
+        if (code == err_code::VKR_NO_ERROR) {
+            hmap_set(&rndr->pipelines, plinfo.id, plinfo);
+            // Set our global frame layout
+            G_FRAME_PL_LAYOUT = vk->inst.device.pipelines[plinfo.plind].layout_hndl;
+        }
+        return code;
+    }
+    else {
+        elog("Failed to find render pass %s", str_cstr(FWD_RPASS.str));
+    }
+    return err_code::RENDER_INIT_FAIL;
+}
+
 intern int setup_color_mat_pipeline(renderer *rndr)
 {
     auto vk = &rndr->vk;
@@ -256,36 +410,21 @@ intern int setup_color_mat_pipeline(renderer *rndr)
     // image sampler
     info.set_layouts.size = 4;
 
-    // Uniform buffer
-    info.set_layouts[0].bindings[0].binding = 0;
-    info.set_layouts[0].bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    info.set_layouts[0].bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    info.set_layouts[0].bindings[0].descriptorCount = 1;
-    info.set_layouts[0].bindings.size = 1;
+    // Single Uniform buffer
+    VkDescriptorSetLayoutBinding b{};
+    b.binding = DESCRIPTOR_SET_BINDING_UNIFORM_BUFFER;
+    b.descriptorCount = 1;
+    b.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 
-    info.set_layouts[1].bindings[0].binding = 0;
-    info.set_layouts[1].bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    info.set_layouts[1].bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    info.set_layouts[1].bindings[0].descriptorCount = 1;
-    info.set_layouts[1].bindings.size = 1;
+    // Add uniform buffer binding to each set
+    arr_push_back(&info.set_layouts[DESCRIPTOR_SET_LAYOUT_FRAME].bindings, b);
+    arr_push_back(&info.set_layouts[DESCRIPTOR_SET_LAYOUT_PIPELINE].bindings, b);
+    arr_push_back(&info.set_layouts[DESCRIPTOR_SET_LAYOUT_MATERIAL].bindings, b);
 
-    info.set_layouts[2].bindings[0].binding = 0;
-    info.set_layouts[2].bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    info.set_layouts[2].bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    info.set_layouts[2].bindings[0].descriptorCount = 1;
-    info.set_layouts[2].bindings.size = 1;
-
-    info.set_layouts[3].bindings[0].binding = 0;
-    info.set_layouts[3].bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    info.set_layouts[3].bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-    info.set_layouts[3].bindings[0].descriptorCount = 1;
-    info.set_layouts[3].bindings.size = 1;
-
-    // Image sampler
-    // info.set_layouts[0].bindings[1].binding = 1;
-    // info.set_layouts[0].bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    // info.set_layouts[0].bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    // info.set_layouts[0].bindings[1].descriptorCount = 1;
+    // Change descriptor type to dynamic descriptor for object so we only are binding it once per frame
+    b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+    arr_push_back(&info.set_layouts[DESCRIPTOR_SET_LAYOUT_OBJECT].bindings, b);
 
     // Setup our push constant
     ++info.push_constant_ranges.size;
@@ -356,23 +495,17 @@ intern int setup_color_mat_pipeline(renderer *rndr)
     // Color blending
     VkPipelineColorBlendAttachmentState col_blnd_att{};
     col_blnd_att.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    col_blnd_att.blendEnable = true;
-    col_blnd_att.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-    col_blnd_att.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-    col_blnd_att.colorBlendOp = VK_BLEND_OP_ADD;
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // This is to do alpha blending - though it seems it doesn't really matter about the src and dest alpha and alpha blend op //
-    // col_blnd_att.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
-    // VK_COLOR_COMPONENT_A_BIT; // col_blnd_att.blendEnable = true; // col_blnd_att.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA; //
-    // VK_BLEND_FACTOR_ONE;  // Optional                             // col_blnd_att.dstColorBlendFactor =
-    // VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA; // VK_BLEND_FACTOR_ZERO; // Optional                             // col_blnd_att.colorBlendOp =
-    // VK_BLEND_OP_ADD;                            // Optional                                                      //
-    // col_blnd_att.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;           // VK_BLEND_FACTOR_ONE;  // Optional //
-    // col_blnd_att.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA; // VK_BLEND_FACTOR_ZERO; // Optional //
-    // col_blnd_att.alphaBlendOp = VK_BLEND_OP_ADD;                            // Optional //
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+    col_blnd_att.blendEnable = false;
     arr_push_back(&info.col_blend.attachments, col_blnd_att);
+
+    // This is to do alpha blending - leaving here until we create a pipeline that uses it
+    // col_blnd_att.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
+    // VK_COLOR_COMPONENT_A_BIT; col_blnd_att.blendEnable = true; col_blnd_att.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    // col_blnd_att.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    // col_blnd_att.colorBlendOp = VK_BLEND_OP_ADD;
+    // col_blnd_att.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    // col_blnd_att.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    // col_blnd_att.alphaBlendOp = VK_BLEND_OP_ADD;
 
     // Depth Stencil
     info.depth_stencil.depth_test_enable = true;
@@ -383,7 +516,7 @@ intern int setup_color_mat_pipeline(renderer *rndr)
     info.depth_stencil.max_depth_bounds = 1.0f;
 
     // Our basic shaders
-    const char *fnames[] = {"./data/shaders/rdev.vert.spv", "./data/shaders/rdev.frag.spv"};
+    const char *fnames[] = {"data/shaders/fwd-color.vert.spv", "data/shaders/fwd-color.frag.spv"};
     for (int i = 0; i <= VKR_SHADER_STAGE_FRAG; ++i) {
         platform_file_err_desc err{};
         arr_init(&info.shader_stages[i].code, &rndr->vk_frame_linear);
@@ -399,7 +532,7 @@ intern int setup_color_mat_pipeline(renderer *rndr)
     if (rpass_fiter) {
         info.rpass = &vk->inst.device.render_passes[rpass_fiter->val.rpind];
         pipeline_info plinfo{};
-        plinfo.id = PLINE_FWD_RPASS_S0_OPAQUE;
+        plinfo.id = PLINE_FWD_RPASS_S0_OPAQUE_COL;
         plinfo.ubo_offset = rndr->pipelines.count;
         plinfo.plind = vkr_add_pipeline(&vk->inst.device, {});
         plinfo.rpass_id = rpass_fiter->val.id;
@@ -512,9 +645,14 @@ intern sbuffer_entry find_sbuffer_block(sbuffer_info *sbuf, sizet req_size)
     return ret_entry;
 }
 
+bool upload_to_gpu(const texture *texture, renderer *rdnr)
+{
+    return false;
+}
+
 // Upload mesh data to GPU using the shared indice/vertex buffer, also "registers" the mesh with the renderer so it can
 // be drawn
-bool upload_to_gpu(mesh *msh, renderer *rndr)
+bool upload_to_gpu(const mesh *msh, renderer *rndr)
 {
     auto fiter = hmap_find(&rndr->rmi.meshes, msh->id);
     if (fiter) {
@@ -740,6 +878,12 @@ intern int setup_rendering(renderer *rndr)
         return err;
     }
 
+    err = setup_diffuse_mat_pipeline(rndr);
+    if (err != err_code::VKR_NO_ERROR) {
+        elog("Failed to setup pipeline");
+        return err;
+    }
+
     err = setup_color_mat_pipeline(rndr);
     if (err != err_code::VKR_NO_ERROR) {
         elog("Failed to setup pipeline");
@@ -767,11 +911,6 @@ intern int setup_rendering(renderer *rndr)
     ////////////////////////////////////////////////////////////////////////////////
     // Create uniform buffers and descriptor sets pointing to them for each frame //
     ////////////////////////////////////////////////////////////////////////////////
-    auto pline = hmap_find(&rndr->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
-    asrt(pline);
-    if (!pline) {
-        return err_code::RENDER_INIT_FAIL;
-    }
     for (int i = 0; i < dev->rframes.size; ++i) {
         // Create a uniform buffers for each frame
 
@@ -1324,7 +1463,7 @@ void post_transform_ubo_update(renderer *rndr, const transform *tf, const comp_t
     update_ubo_buffer_event ev{};
     ev.type = UPDATE_BUFFER_EVENT_TYPE_TRANSFORM;
     ev.tf.ubo_offset = get_comp_ind(tf, ctbl);
-    ev.tf.tform= tf;
+    ev.tf.tform = tf;
     push_ubo_event(rndr, ev);
 }
 
@@ -1387,7 +1526,6 @@ void post_ubo_update_all(renderer *rndr, const comp_table<transform> *ctbl)
     // Post all pipelines
     post_pipeline_ubo_update_all(rndr);
 }
-
 
 void clear_static_models(renderer *rndr)
 {
@@ -1574,9 +1712,11 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
 
         // Update our main pipeline view_proj with the cam transform update. This should be done every frame because the
         // camera is dynamic
-        auto pline_to_update = hmap_find(&rndr->pipelines, PLINE_FWD_RPASS_S0_OPAQUE);
-        asrt(pline_to_update);
-        pline_to_update->val.proj_view = cam->proj * cam->view;
+        auto pl_iter = hmap_begin(&rndr->pipelines);
+        while (pl_iter) {
+            pl_iter->val.proj_view = cam->proj * cam->view;
+            pl_iter = hmap_next(&rndr->pipelines, pl_iter);
+        }
     }
 
     // Here we reset the fence for the current frame.. we wait for it to be signaled in render_frame_begin before

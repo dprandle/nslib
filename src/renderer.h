@@ -14,8 +14,8 @@ namespace nslib
 #define INVALID_IND ((sizet) - 1)
 
 inline const rid FWD_RPASS = make_rid("forward");
-inline const rid PLINE_FWD_RPASS_S0_OPAQUE = make_rid("forward-s0-opaque");
-
+inline const rid PLINE_FWD_RPASS_S0_OPAQUE_COL = make_rid("forward-s0-opaque-col");
+inline const rid PLINE_FWD_RPASS_S0_OPAQUE_DIFFUSE = make_rid("forward-s0-opaque-diffuse");
 
 struct vkr_context;
 struct camera;
@@ -296,7 +296,11 @@ void post_ubo_update_all(renderer *rndr, const comp_table<transform> *ctbl);
 
 // Upload mesh data to GPU using the shared indice/vertex buffer, also "registers" the mesh with the renderer so it can
 // be drawn
-bool upload_to_gpu(mesh *msh, renderer *rdnr);
+bool upload_to_gpu(const mesh *msh, renderer *rdnr);
+
+// Upload texture data to GPU using 
+bool upload_to_gpu(const texture *texture, renderer *rdnr);
+
 
 // Remove from gpu simply adds the meshes block to the free list, indicating that the block can be overwritten, and then
 // removes the mesh from our mesh entry list. It does not do any actual gpu uploading
