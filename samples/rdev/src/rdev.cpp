@@ -131,27 +131,38 @@ int init(platform_ctxt *ctxt, void *user_data)
     hset_insert(&mat1->pipelines, PLINE_FWD_RPASS_S0_OPAQUE_COL);
     mat1->col = {1.0, 0.0, 0.0, 1.0};
 
-    auto mat2 = add_robj(mat_cache, terminate_material);
-    init_material(mat2.ptr, "mat2", mem_global_arena());
-    hset_insert(&mat2->pipelines, PLINE_FWD_RPASS_S0_OPAQUE_COL);
-    mat2->col = {0.0, 1.0, 0.0, 1.0};
+    auto mat_maria_face = add_robj(mat_cache, terminate_material);
+    init_material(mat_maria_face.ptr, "maria-face", mem_global_arena());
+    hset_insert(&mat_maria_face->pipelines, PLINE_FWD_RPASS_S0_OPAQUE_DIFFUSE);
+    mat_maria_face->col = {0.0, 1.0, 0.0, 1.0};
+
+    auto tex_maria = add_robj(tex_cache, terminate_texture);
+    init_texture(tex_maria.ptr, "maria", mem_global_arena());
+    cstr err;
+    const char* path = "import/maria.png";
+    if (load_texture(tex_maria.ptr, path, &err)) {
+        ilog("Loaded %s from %s", to_cstr(tex_maria->name), path);
+        arr_emplace_back(&mat_maria_face->textures, tex_maria->id);
+    }
+    else {
+        wlog("Failed to load texture %s from %s: %s", to_cstr(tex_maria->name), path, err);
+    }
 
     auto mat_daniel_face = add_robj(mat_cache, terminate_material);
     init_material(mat_daniel_face.ptr, "daniel-face", mem_global_arena());
     hset_insert(&mat_daniel_face->pipelines, PLINE_FWD_RPASS_S0_OPAQUE_DIFFUSE);
     mat_daniel_face->col = {0.0, 0.0, 1.0, 1.0};
 
-    auto tex = add_robj(tex_cache, terminate_texture);
-    init_texture(tex.ptr, "daniel", mem_global_arena());
-    cstr err;
-    const char *path = "import/daniel.png";
-    if (load_texture(tex.ptr, path, &err)) {
-        ilog("Loaded %s from %s", to_cstr(tex->name), path);
-        arr_emplace_back(&mat_daniel_face->textures, tex->id);
+    auto tex_daniel = add_robj(tex_cache, terminate_texture);
+    init_texture(tex_daniel.ptr, "daniel", mem_global_arena());
+    path = "import/daniel.png";
+    if (load_texture(tex_daniel.ptr, path, &err)) {
+        ilog("Loaded %s from %s", to_cstr(tex_daniel->name), path);
+        arr_emplace_back(&mat_daniel_face->textures, tex_daniel->id);
     }
     else {
-        wlog("Failed to load texture %s from %s: %s", to_cstr(tex->name), path, err);
-    }
+        wlog("Failed to load texture %s from %s: %s", to_cstr(tex_daniel->name), path, err);
+    }    
 
     ilog("Rect mesh submesh count %d and vert count %d and ind count %d",
          rect_msh->submeshes.size,
@@ -168,7 +179,9 @@ int init(platform_ctxt *ctxt, void *user_data)
         return ret;
     }
 
-    // Upload our meshes
+    // Upload our data to gpu
+    upload_to_gpu(tex_daniel.ptr, &app->rndr);
+    upload_to_gpu(tex_maria.ptr, &app->rndr);
     upload_to_gpu(cube_msh.ptr, &app->rndr);
     upload_to_gpu(rect_msh.ptr, &app->rndr);
 
@@ -187,7 +200,7 @@ int init(platform_ctxt *ctxt, void *user_data)
     setup_camera_controller(ctxt, app);
 
     // Create a grid of entities with odd ones being cubes and even being rectangles
-    int len = 10, width = 10, height = 10;
+    int len = 40, width = 40, height = 40;
     auto ent_offset = add_entities(len * width * height, &app->rgn);
 
     auto tf_tbl = get_comp_tbl<transform>(&app->rgn.cdb);
@@ -210,11 +223,11 @@ int init(platform_ctxt *ctxt, void *user_data)
                 tfcomp->cached = math::model_tform(tfcomp->world_pos, tfcomp->orientation, tfcomp->scale);
 
                 auto m = (zind * width * len + yind * width + xind);
-                if ((m % 3) == 0) {
+                if ((m % 2)) {
                     sc->mat_ids[0] = mat1->id;
                 }
-                else if ((m % 3) == 1) {
-                    sc->mat_ids[0] = mat2->id;
+                else if (m % 4) {
+                    sc->mat_ids[0] = mat_maria_face->id;
                 }
                 else {
                     sc->mat_ids[0] = mat_daniel_face->id;

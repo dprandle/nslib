@@ -1619,6 +1619,8 @@ sizet vkr_add_image_view(vkr_device *device, const vkr_image_view &copy)
 int vkr_init_image_view(vkr_image_view *iview, const vkr_image_view_cfg *cfg, const vkr_context *vk)
 {
     asrt(cfg->image);
+    iview->dev = &vk->inst.device;
+    iview->alloc_cbs = &vk->alloc_cbs;    
     VkImageViewCreateInfo create_info{};
     create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     create_info.image = cfg->image->hndl;
@@ -1627,8 +1629,7 @@ int vkr_init_image_view(vkr_image_view *iview, const vkr_image_view_cfg *cfg, co
     create_info.flags = cfg->create_flags;
     create_info.format = cfg->image->format;
     create_info.subresourceRange = cfg->srange;
-
-    int err = vkCreateImageView(vk->inst.device.hndl, &create_info, &vk->alloc_cbs, &iview->hndl);
+    int err = vkCreateImageView(vk->inst.device.hndl, &create_info, iview->alloc_cbs, &iview->hndl);
     if (err != VK_SUCCESS) {
         wlog("Failed creating image view with vk error code %d", err);
         return err_code::VKR_CREATE_IMAGE_VIEW_FAIL;
@@ -1636,10 +1637,10 @@ int vkr_init_image_view(vkr_image_view *iview, const vkr_image_view_cfg *cfg, co
     return err_code::VKR_NO_ERROR;
 }
 
-void vkr_terminate_image_view(vkr_image_view *iview, const vkr_context *vk)
+void vkr_terminate_image_view(vkr_image_view *iview)
 {
     ilog("Terminating image view");
-    vkDestroyImageView(vk->inst.device.hndl, iview->hndl, &vk->alloc_cbs);
+    vkDestroyImageView(iview->dev->hndl, iview->hndl, iview->alloc_cbs);
 }
 
 sizet vkr_add_sampler(vkr_device *device, const vkr_sampler &copy)
@@ -1652,6 +1653,8 @@ sizet vkr_add_sampler(vkr_device *device, const vkr_sampler &copy)
 
 int vkr_init_sampler(vkr_sampler *sampler, const vkr_sampler_cfg *cfg, const vkr_context *vk)
 {
+    sampler->dev = &vk->inst.device;
+    sampler->alloc_cbs = &vk->alloc_cbs;
     VkSamplerCreateInfo create_info{};
     create_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     create_info.addressModeU = cfg->address_mode_uvw[0];
@@ -1683,10 +1686,10 @@ int vkr_init_sampler(vkr_sampler *sampler, const vkr_sampler_cfg *cfg, const vkr
     return err_code::VKR_NO_ERROR;
 }
 
-void vkr_terminate_sampler(vkr_sampler *sampler, const vkr_context *vk)
+void vkr_terminate_sampler(vkr_sampler *sampler)
 {
     ilog("Terminating image view");
-    vkDestroySampler(vk->inst.device.hndl, sampler->hndl, &vk->alloc_cbs);
+    vkDestroySampler(sampler->dev->hndl, sampler->hndl, sampler->alloc_cbs);
 }
 
 int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
@@ -1999,7 +2002,7 @@ void vkr_terminate_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
 {
     ilog("Terminating swapchain");
     for (int i = 0; i < sw_info->image_views.size; ++i) {
-        vkr_terminate_image_view(&sw_info->image_views[i], vk);
+        vkr_terminate_image_view(&sw_info->image_views[i]);
     }
     vkDestroySwapchainKHR(vk->inst.device.hndl, sw_info->swapchain, &vk->alloc_cbs);
     arr_terminate(&sw_info->images);
@@ -2033,10 +2036,10 @@ void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
         vkr_terminate_image(&dev->images[i]);
     }
     for (int i = 0; i < dev->image_views.size; ++i) {
-        vkr_terminate_image_view(&dev->image_views[i], vk);
+        vkr_terminate_image_view(&dev->image_views[i]);
     }
     for (int i = 0; i < dev->samplers.size; ++i) {
-        vkr_terminate_sampler(&dev->samplers[i], vk);
+        vkr_terminate_sampler(&dev->samplers[i]);
     }
 
     arr_terminate(&dev->render_passes);

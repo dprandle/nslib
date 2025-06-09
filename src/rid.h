@@ -16,6 +16,11 @@ void set_rid(rid *id, const char *str);
 rid make_rid(const string &str);
 rid make_rid(const char *str);
 
+inline bool is_valid(const rid &id)
+{
+    return id.id != 0;
+}
+
 pup_func(rid)
 {
     pup_member_info(str, vinfo);

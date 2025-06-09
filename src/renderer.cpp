@@ -75,24 +75,25 @@ struct draw_call
 struct material_draw_group
 {
     const material_info *mi;
-    sizet dc_offset;
-    sizet set_ind;
+    sizet set_layouti;
     array<draw_call> dcs;
 };
 
 struct pipeline_draw_group
 {
     const pipeline_info *plinfo;
-    sizet set_ind;
+    // Not to be conused with the set index in the descriptor set layout, this is the index of the descriptor set struct
+    // that should be bound during draw - ie
+    sizet set_layouti;
     hmap<rid, material_draw_group *> mats;
 };
 
 struct render_pass_draw_group
 {
     const rpass_info *rpinfo;
-    sizet frame_set_ind{INVALID_IND};
-    sizet obj_set_ind{INVALID_IND};
-    array<VkDescriptorSetLayout> set_ind_layouts;
+    sizet frame_set_layouti{INVALID_IND};
+    sizet obj_set_layouti{INVALID_IND};
+    array<VkDescriptorSetLayout> set_layouts;
     hmap<rid, pipeline_draw_group *> plines;
 };
 
@@ -340,7 +341,7 @@ intern int setup_diffuse_mat_pipeline(renderer *rndr)
     info.raster.rasterizer_discard_enable = false;
     info.raster.polygon_mode = VK_POLYGON_MODE_FILL;
     info.raster.line_width = 1.0f;
-    info.raster.cull_mode = VK_CULL_MODE_BACK_BIT;
+    info.raster.cull_mode = VK_CULL_MODE_NONE;
     info.raster.front_face = VK_FRONT_FACE_CLOCKWISE;
     info.raster.depth_bias_enable = false;
     info.raster.depth_bias_constant_factor = 0.0f;
@@ -645,9 +646,81 @@ intern sbuffer_entry find_sbuffer_block(sbuffer_info *sbuf, sizet req_size)
     return ret_entry;
 }
 
-bool upload_to_gpu(const texture *texture, renderer *rdnr)
+bool upload_to_gpu(const texture *tex, renderer *rndr)
 {
-    return false;
+    auto dev = &rndr->vk.inst.device;
+    // Most default values are correct
+    vkr_image_cfg cfg{};
+    cfg.format = VK_FORMAT_R8G8B8A8_SRGB;
+    cfg.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    cfg.dims = {tex->size, 1};
+    cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    cfg.vma_alloc = &rndr->vk.inst.device.vma_alloc;
+
+    // Create image
+    vkr_image im{};
+    int err = vkr_init_image(&im, &cfg);
+    if (err != err_code::VKR_NO_ERROR) {
+        wlog("Failed to initialize vk image for texture %s - err code: %d", str_cstr(tex->id.str), err);
+        return err;
+    }
+
+    // Upload texture data to created image using staging buffer
+    err = vkr_stage_and_upload_image_data(
+        &im, tex->pixels.data, get_texture_memsize(tex), &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], VKR_RENDER_QUEUE, &rndr->vk);
+    if (err != err_code::VKR_NO_ERROR) {
+        wlog("Failed to upload texture data for %s with err code %d", to_cstr(tex->name), err);
+        vkr_terminate_image(&im);
+    }
+
+    // Create image view
+    vkr_image_view iview{};
+    vkr_image_view_cfg iview_cfg{};
+    iview_cfg.image = &im;
+
+    err = vkr_init_image_view(&iview, &iview_cfg, &rndr->vk);
+    if (err != err_code::VKR_NO_ERROR) {
+        wlog("Failed to initialize image view for texture %s - err code: %d", to_cstr(tex->name), err);
+        vkr_terminate_image(&im);
+        return err;
+    }
+
+    // Create image sampler
+    vkr_sampler sampler{};
+    vkr_sampler_cfg samp_cfg{};
+    for (int i = 0; i < 3; ++i) {
+        samp_cfg.address_mode_uvw[i] = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    }
+    samp_cfg.mag_filter = VK_FILTER_LINEAR;
+    samp_cfg.min_filter = VK_FILTER_LINEAR;
+    samp_cfg.anisotropy_enable = true;
+    samp_cfg.max_anisotropy = rndr->vk.inst.pdev_info.props.limits.maxSamplerAnisotropy;
+    samp_cfg.border_color = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    samp_cfg.compare_op = VK_COMPARE_OP_ALWAYS;
+    samp_cfg.mipmap_mode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+    err = vkr_init_sampler(&sampler, &samp_cfg, &rndr->vk);
+    if (err != err_code::VKR_NO_ERROR) {
+        wlog("Failed to initialize sampler for texture %s - err code: %d", to_cstr(tex->name), err);
+        vkr_terminate_image(&im);
+        vkr_terminate_image_view(&iview);
+        return err;
+    }
+
+    sampled_texture_info stex_info{};
+    stex_info.im = vkr_add_image(dev, im);
+    stex_info.im_view = vkr_add_image_view(dev, iview);
+    stex_info.sampler = vkr_add_sampler(dev, sampler);
+
+    auto ins = hmap_insert(&rndr->sampled_textures, tex->id, stex_info);
+    if (!ins) {
+        wlog("Failed to insert sampled texture %s into renderer sampled texture map", str_cstr(tex->name));
+        vkr_terminate_image(&im);
+        vkr_terminate_image_view(&iview);
+        vkr_terminate_sampler(&sampler);
+        return false;
+    }
+    return true;
 }
 
 // Upload mesh data to GPU using the shared indice/vertex buffer, also "registers" the mesh with the renderer so it can
@@ -755,75 +828,6 @@ bool remove_from_gpu(mesh *msh, renderer *rndr)
     return minfo;
 }
 
-intern int load_default_image_and_sampler(renderer *rndr)
-{
-    auto vk = &rndr->vk;
-    auto dev = &rndr->vk.inst.device;
-
-    /////////////////////////////////
-    // Load the image for sampling //
-    /////////////////////////////////
-    int tex_channels;
-    ivec2 tex_dims;
-    stbi_uc *pixels = stbi_load("data/textures/texture.jpg", &tex_dims.w, &tex_dims.h, &tex_channels, STBI_rgb_alpha);
-    if (!pixels) {
-        return err_code::PLATFORM_INIT_FAIL;
-    }
-
-    rndr->default_image_ind = vkr_add_image(dev, {});
-    auto dest_image = &dev->images[rndr->default_image_ind];
-
-    vkr_image_cfg cfg{};
-    cfg.dims = {tex_dims, 1};
-    cfg.format = VK_FORMAT_R8G8B8A8_SRGB;
-    //    cfg.mip_levels = 1;vkr_get_required_mip_levels(tex_dims);
-
-    // We have the src bit set here because we generate mipmaps for the image
-    cfg.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-    cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-    cfg.vma_alloc = &dev->vma_alloc;
-
-    int err = vkr_init_image(dest_image, &cfg);
-    if (err != err_code::VKR_NO_ERROR) {
-        stbi_image_free(pixels);
-        return err;
-    }
-
-    sizet imsize = cfg.dims.x * cfg.dims.y * cfg.dims.z * 4;
-    vkr_stage_and_upload_image_data(dest_image, pixels, imsize, &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], VKR_RENDER_QUEUE, vk);
-
-    stbi_image_free(pixels);
-
-    ///////////////////////////////////////
-    // Create the image view and sampler //
-    ///////////////////////////////////////
-    vkr_image_view_cfg iview_cfg{};
-    iview_cfg.image = dest_image;
-
-    rndr->default_image_view_ind = vkr_add_image_view(dev);
-    auto iview_ptr = &dev->image_views[rndr->default_image_view_ind];
-    err = vkr_init_image_view(iview_ptr, &iview_cfg, vk);
-    if (err != err_code::VKR_NO_ERROR) {
-        return err;
-    }
-
-    vkr_sampler_cfg samp_cfg{};
-    for (int i = 0; i < 3; ++i) {
-        samp_cfg.address_mode_uvw[i] = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    }
-    samp_cfg.mag_filter = VK_FILTER_LINEAR;
-    samp_cfg.min_filter = VK_FILTER_LINEAR;
-    samp_cfg.anisotropy_enable = true;
-    samp_cfg.max_anisotropy = vk->inst.pdev_info.props.limits.maxSamplerAnisotropy;
-    samp_cfg.border_color = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-    samp_cfg.compare_op = VK_COMPARE_OP_ALWAYS;
-    samp_cfg.mipmap_mode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    rndr->default_sampler_ind = vkr_add_sampler(dev);
-    auto samp_ptr = &dev->samplers[rndr->default_sampler_ind];
-    err = vkr_init_sampler(samp_ptr, &samp_cfg, vk);
-    return err;
-}
-
 intern int init_swapchain_images_and_framebuffer(renderer *rndr)
 {
     auto vk = &rndr->vk;
@@ -902,12 +906,6 @@ intern int setup_rendering(renderer *rndr)
         return err;
     }
 
-    err = load_default_image_and_sampler(rndr);
-    if (err != err_code::VKR_NO_ERROR) {
-        elog("Failed to setup default image/sampler");
-        return err;
-    }
-
     ////////////////////////////////////////////////////////////////////////////////
     // Create uniform buffers and descriptor sets pointing to them for each frame //
     ////////////////////////////////////////////////////////////////////////////////
@@ -960,14 +958,41 @@ intern int setup_rendering(renderer *rndr)
     return err_code::VKR_NO_ERROR;
 }
 
-intern void add_desc_write_update(renderer *rndr,
-                                  vkr_frame *cur_frame,
-                                  sizet ubo_offset,
-                                  sizet range,
-                                  sizet buf_ind,
-                                  sizet set_ind,
-                                  array<VkWriteDescriptorSet> *updates,
-                                  VkDescriptorType type)
+intern void add_image_sampler_desc_write_update(renderer *rndr,
+                                                vkr_frame *cur_frame,
+                                                sizet im_view,
+                                                sizet sampler,
+                                                sizet im_slot,
+                                                sizet set_ind,
+                                                array<VkWriteDescriptorSet> *updates,
+                                                VkDescriptorType type)
+{
+    auto dev = &rndr->vk.inst.device;
+    // Add a write descriptor set to update our obj descriptor to point at this portion of our unifrom buffer
+    auto im_info = mem_calloc<VkDescriptorImageInfo>(1, &rndr->frame_linear);
+    im_info->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    im_info->imageView = dev->image_views[im_view].hndl;
+    im_info->sampler = dev->samplers[sampler].hndl;
+
+    VkWriteDescriptorSet desc_write{};
+    desc_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    desc_write.dstSet = cur_frame->desc_pool.desc_sets[set_ind].hndl;
+    desc_write.dstBinding = DESCRIPTOR_SET_BINDING_IMAGE_SAMPLER + im_slot;
+    desc_write.dstArrayElement = 0;
+    desc_write.descriptorType = type;
+    desc_write.descriptorCount = 1;
+    desc_write.pImageInfo = im_info;
+    arr_push_back(updates, desc_write);
+}
+
+intern void add_uniform_desc_write_update(renderer *rndr,
+                                          vkr_frame *cur_frame,
+                                          sizet ubo_offset,
+                                          sizet range,
+                                          sizet buf_ind,
+                                          sizet set_ind,
+                                          array<VkWriteDescriptorSet> *updates,
+                                          VkDescriptorType type)
 {
     // Add a write descriptor set to update our obj descriptor to point at this portion of our unifrom buffer
     auto buffer_info = mem_calloc<VkDescriptorBufferInfo>(1, &rndr->frame_linear);
@@ -978,7 +1003,7 @@ intern void add_desc_write_update(renderer *rndr,
     VkWriteDescriptorSet desc_write{};
     desc_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     desc_write.dstSet = cur_frame->desc_pool.desc_sets[set_ind].hndl;
-    desc_write.dstBinding = 0;
+    desc_write.dstBinding = DESCRIPTOR_SET_BINDING_UNIFORM_BUFFER;
     desc_write.dstArrayElement = 0;
     desc_write.descriptorType = type;
     desc_write.descriptorCount = 1;
@@ -1013,7 +1038,7 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
         vkr_cmd_begin_rpass(cmd_buf, fb, rpass, att_clear_vals, 2);
 
         // Bind frame rpass descriptor set
-        auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->val->frame_set_ind].hndl;
+        auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->val->frame_set_layouti].hndl;
         vkCmdBindDescriptorSets(
             cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, G_FRAME_PL_LAYOUT, DESCRIPTOR_SET_LAYOUT_FRAME, 1, &ds, 0, nullptr);
 
@@ -1024,7 +1049,7 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
             auto pipeline = &dev->pipelines[pl_iter->val->plinfo->plind];
             vkCmdBindPipeline(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->hndl);
 
-            auto ds = cur_frame->desc_pool.desc_sets[pl_iter->val->set_ind].hndl;
+            auto ds = cur_frame->desc_pool.desc_sets[pl_iter->val->set_layouti].hndl;
             vkCmdBindDescriptorSets(
                 cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, DESCRIPTOR_SET_LAYOUT_PIPELINE, 1, &ds, 0, nullptr);
 
@@ -1045,13 +1070,13 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
             auto mat_iter = hmap_begin(&pl_iter->val->mats);
             while (mat_iter) {
                 // Bind the material set
-                auto ds = cur_frame->desc_pool.desc_sets[mat_iter->val->set_ind].hndl;
+                auto ds = cur_frame->desc_pool.desc_sets[mat_iter->val->set_layouti].hndl;
                 vkCmdBindDescriptorSets(
                     cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, DESCRIPTOR_SET_LAYOUT_MATERIAL, 1, &ds, 0, nullptr);
 
                 for (u32 dci = 0; dci < mat_iter->val->dcs.size; ++dci) {
                     const draw_call *cur_dc = &mat_iter->val->dcs[dci];
-                    auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->val->obj_set_ind].hndl;
+                    auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->val->obj_set_layouti].hndl;
                     sizet obj_ubo_item_size = vkr_uniform_buffer_offset_alignment(&rndr->vk, sizeof(obj_ubo_data));
                     // Our dynamic ubo_offset in to our singlestoring all of our transforms is computed by adding
                     // the material base draw call ubo_offset (computed each frame).
@@ -1117,6 +1142,7 @@ int init_renderer(renderer *rndr, const handle<material> &default_mat, void *win
     hmap_init(&rndr->rpasses, hash_type, fl_arena);
     hmap_init(&rndr->pipelines, hash_type, fl_arena);
     hmap_init(&rndr->materials, hash_type, fl_arena);
+    hmap_init(&rndr->sampled_textures, hash_type, fl_arena);
 
     mem_init_lin_arena(&rndr->dcs.dc_linear, 100 * MB_SIZE, fl_arena, "dcs");
     hmap_init(&rndr->dcs.rpasses);
@@ -1129,7 +1155,7 @@ int init_renderer(renderer *rndr, const handle<material> &default_mat, void *win
     desc_cfg.max_sets = (MAX_RENDERPASS_COUNT * 2 + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT);
     desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER] = (MAX_RENDERPASS_COUNT + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT);
     desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC] = MAX_RENDERPASS_COUNT;
-    desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = MAX_MATERIAL_COUNT * TEXTURE_SLOT_COUNT;
+    desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = MAX_MATERIAL_COUNT * MAT_SAMPLER_SLOT_COUNT;
     vkr_cfg vkii{.app_name = "rdev",
                  .vi{1, 0, 0},
                  .arenas{.persistent_arena = &rndr->vk_free_list, .command_arena = &rndr->vk_frame_linear},
@@ -1169,7 +1195,7 @@ int init_renderer(renderer *rndr, const handle<material> &default_mat, void *win
 intern void terminate_swapchain_images_and_framebuffer(renderer *rndr)
 {
     auto dev = &rndr->vk.inst.device;
-    vkr_terminate_image_view(&dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind], &rndr->vk);
+    vkr_terminate_image_view(&dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind]);
     vkr_terminate_image(&dev->images[rndr->swapchain_fb_depth_stencil_im_ind]);
     vkr_terminate_swapchain_framebuffers(dev, &rndr->vk);
 }
@@ -1348,7 +1374,9 @@ intern void handle_post_pipeline_ubo_update_all(renderer *rndr, vkr_frame *cur_f
     }
 }
 
-// This currently not only creates/updates the descriptors, but is also updating the underlying buffers..
+// This only creates/writes the descriptors using the current frame data ubo offsets for the draw call data structure.
+// It does not update the underlying buffers at those offsets. That is done with ubo buffer events that the user is
+// responsible for submitting whenever anything changes
 intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
 {
     auto dev = &rndr->vk.inst.device;
@@ -1359,59 +1387,78 @@ intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
     auto rp_iter = hmap_begin(&rndr->dcs.rpasses);
     while (rp_iter) {
         vkr_add_result desc_ind =
-            vkr_add_descriptor_sets(&cur_frame->desc_pool, &rndr->vk, rp_iter->val->set_ind_layouts.data, rp_iter->val->set_ind_layouts.size);
+            vkr_add_descriptor_sets(&cur_frame->desc_pool, &rndr->vk, rp_iter->val->set_layouts.data, rp_iter->val->set_layouts.size);
         if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
             return desc_ind.err_code;
         }
 
         // Add the frame rpass desc write update
         sizet frame_ubo_item_size = vkr_uniform_buffer_offset_alignment(&rndr->vk, sizeof(frame_ubo_data));
-        add_desc_write_update(rndr,
-                              cur_frame,
-                              0,
-                              frame_ubo_item_size,
-                              cur_frame->frame_ubo_ind,
-                              rp_iter->val->frame_set_ind,
-                              &desc_updates,
-                              VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+        add_uniform_desc_write_update(rndr,
+                                      cur_frame,
+                                      0,
+                                      frame_ubo_item_size,
+                                      cur_frame->frame_ubo_ind,
+                                      rp_iter->val->frame_set_layouti,
+                                      &desc_updates,
+                                      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 
         // Add the dynamic per obj desc write update
         sizet obj_ubo_item_size = vkr_uniform_buffer_offset_alignment(&rndr->vk, sizeof(obj_ubo_data));
-        add_desc_write_update(rndr,
-                              cur_frame,
-                              0,
-                              obj_ubo_item_size,
-                              cur_frame->obj_ubo_ind,
-                              rp_iter->val->obj_set_ind,
-                              &desc_updates,
-                              VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
+        add_uniform_desc_write_update(rndr,
+                                      cur_frame,
+                                      0,
+                                      obj_ubo_item_size,
+                                      cur_frame->obj_ubo_ind,
+                                      rp_iter->val->obj_set_layouti,
+                                      &desc_updates,
+                                      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
 
         // Update material and pipeline UBOs and create the descriptor writes for them
         auto pl_iter = hmap_begin(&rp_iter->val->plines);
         while (pl_iter) {
             sizet pl_ubo_item_size = vkr_uniform_buffer_offset_alignment(&rndr->vk, sizeof(pipeline_ubo_data));
             sizet byte_offset = pl_ubo_item_size * pl_iter->val->plinfo->ubo_offset;
-            add_desc_write_update(rndr,
-                                  cur_frame,
-                                  byte_offset,
-                                  pl_ubo_item_size,
-                                  cur_frame->pl_ubo_ind,
-                                  pl_iter->val->set_ind,
-                                  &desc_updates,
-                                  VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+            add_uniform_desc_write_update(rndr,
+                                          cur_frame,
+                                          byte_offset,
+                                          pl_ubo_item_size,
+                                          cur_frame->pl_ubo_ind,
+                                          pl_iter->val->set_layouti,
+                                          &desc_updates,
+                                          VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 
             auto mat_iter = hmap_begin(&pl_iter->val->mats);
             while (mat_iter) {
                 sizet mat_ubo_item_size = vkr_uniform_buffer_offset_alignment(&rndr->vk, sizeof(material_ubo_data));
                 sizet byte_offset = mat_ubo_item_size * mat_iter->val->mi->ubo_offset;
-                add_desc_write_update(rndr,
-                                      cur_frame,
-                                      byte_offset,
-                                      mat_ubo_item_size,
-                                      cur_frame->mat_ubo_ind,
-                                      mat_iter->val->set_ind,
-                                      &desc_updates,
-                                      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+                add_uniform_desc_write_update(rndr,
+                                              cur_frame,
+                                              byte_offset,
+                                              mat_ubo_item_size,
+                                              cur_frame->mat_ubo_ind,
+                                              mat_iter->val->set_layouti,
+                                              &desc_updates,
+                                              VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+
+                // Go through all sampler slots - if there is a valid texture in a slot then set the associated sampler descriptor
+                for (sizet sloti = 0; sloti < mat_iter->val->mi->mat->textures.size; ++sloti) {
+                    auto cur_s = &mat_iter->val->mi->mat->textures[sloti];
+                    if (is_valid(*cur_s)) {
+                        auto tex_fiter = hmap_find(&rndr->sampled_textures, *cur_s);
+                        if (tex_fiter) {
+                            add_image_sampler_desc_write_update(rndr,
+                                                                cur_frame,
+                                                                tex_fiter->val.im_view,
+                                                                tex_fiter->val.sampler,
+                                                                sloti,
+                                                                mat_iter->val->set_layouti,
+                                                                &desc_updates,
+                                                                VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+                        }
+                    }
+                }
+
                 mat_iter = hmap_next(&pl_iter->val->mats, mat_iter);
             }
             pl_iter = hmap_next(&rp_iter->val->plines, pl_iter);
@@ -1572,16 +1619,16 @@ int add_static_model(renderer *rndr, const static_model *sm, sizet transform_ind
                 auto rpdg = mem_calloc<render_pass_draw_group>(1, &rndr->dcs.dc_linear);
 
                 rpdg->rpinfo = &rp_fiter->val;
-                arr_init(&rpdg->set_ind_layouts, &rndr->dcs.dc_linear);
+                arr_init(&rpdg->set_layouts, &rndr->dcs.dc_linear);
                 hmap_init(&rpdg->plines, hash_type, &rndr->dcs.dc_linear);
 
                 // Add the frame rpass descriptor set;
-                rpdg->frame_set_ind = rpdg->set_ind_layouts.size;
-                arr_emplace_back(&rpdg->set_ind_layouts, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_FRAME]);
+                rpdg->frame_set_layouti = rpdg->set_layouts.size;
+                arr_emplace_back(&rpdg->set_layouts, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_FRAME]);
 
                 // Add the obj rpass descriptor set
-                rpdg->obj_set_ind = rpdg->set_ind_layouts.size;
-                arr_emplace_back(&rpdg->set_ind_layouts, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_OBJECT]);
+                rpdg->obj_set_layouti = rpdg->set_layouts.size;
+                arr_emplace_back(&rpdg->set_layouts, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_OBJECT]);
 
                 push_rp_fiter = hmap_insert(&rndr->dcs.rpasses, rp_fiter->key, rpdg);
             }
@@ -1596,8 +1643,8 @@ int add_static_model(renderer *rndr, const static_model *sm, sizet transform_ind
                 hmap_init(&pldg->mats, hash_type, &rndr->dcs.dc_linear);
 
                 // Add the pipeline discriptor set
-                pldg->set_ind = push_rp_fiter->val->set_ind_layouts.size;
-                arr_emplace_back(&push_rp_fiter->val->set_ind_layouts, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_PIPELINE]);
+                pldg->set_layouti = push_rp_fiter->val->set_layouts.size;
+                arr_emplace_back(&push_rp_fiter->val->set_layouts, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_PIPELINE]);
 
                 push_pl_fiter = hmap_insert(&push_rp_fiter->val->plines, pl_fiter->key, pldg);
             }
@@ -1621,8 +1668,8 @@ int add_static_model(renderer *rndr, const static_model *sm, sizet transform_ind
                 arr_init(&matdg->dcs, &rndr->dcs.dc_linear);
 
                 // Add the material discriptor set
-                matdg->set_ind = push_rp_fiter->val->set_ind_layouts.size;
-                arr_emplace_back(&push_rp_fiter->val->set_ind_layouts, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_MATERIAL]);
+                matdg->set_layouti = push_rp_fiter->val->set_layouts.size;
+                arr_emplace_back(&push_rp_fiter->val->set_layouts, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_MATERIAL]);
 
                 push_mat_fiter = hmap_insert(&push_pl_fiter->val->mats, mat->id, matdg);
             }
@@ -1793,6 +1840,7 @@ void terminate_renderer(renderer *rndr)
     hmap_terminate(&rndr->rpasses);
     hmap_terminate(&rndr->pipelines);
     hmap_terminate(&rndr->materials);
+    hmap_terminate(&rndr->sampled_textures);
 }
 
 } // namespace nslib

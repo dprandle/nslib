@@ -136,6 +136,14 @@ struct static_model_draw_info
 };
 // What we really want to do is have a big SSAO with all transforms for entire scene right?
 
+struct sampled_texture_info
+{
+    //sizet ubo_offset{};
+    sizet im;
+    sizet im_view;
+    sizet sampler;
+};
+
 struct material_info
 {
     handle<material> mat{};
@@ -245,6 +253,9 @@ struct renderer
 
     // Info needed for material rendering
     hmap<rid, material_info> materials{};
+
+    // Info needed for setting up a sampled texture in shader
+    hmap<rid, sampled_texture_info> sampled_textures{};
 
     // A mapping between framebuffers and render passes
     // hmap<sizet, array<rid> *> fb_rpasses;

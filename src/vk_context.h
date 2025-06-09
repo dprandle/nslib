@@ -70,6 +70,7 @@ inline constexpr sizet MAX_FRAMES_IN_FLIGHT = 2;
 inline constexpr u32 VKR_INVALID = (u32)-1;
 inline constexpr u32 MEM_ALLOC_TYPE_COUNT = VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE + 1;
 inline constexpr u32 VKR_API_VERSION = VK_API_VERSION_1_3;
+struct vkr_device;
 
 struct vk_mem_alloc_stats
 {
@@ -162,6 +163,8 @@ struct vkr_image_view_cfg
 struct vkr_image_view
 {
     VkImageView hndl;
+    const VkAllocationCallbacks *alloc_cbs;
+    const vkr_device *dev;
 };
 
 struct vkr_framebuffer_attachment
@@ -191,6 +194,8 @@ struct vkr_sampler_cfg
 struct vkr_sampler
 {
     VkSampler hndl;
+    const vkr_device *dev;
+    const VkAllocationCallbacks *alloc_cbs;
 };
 
 struct vkr_add_result
@@ -630,10 +635,10 @@ int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
                                     const vkr_context *vk);
 sizet vkr_add_image_view(vkr_device *device, const vkr_image_view &copy = {});
 int vkr_init_image_view(vkr_image_view *iview, const vkr_image_view_cfg *cfg, const vkr_context *vk);
-void vkr_terminate_image_view(vkr_image_view *iview, const vkr_context *vk);
+void vkr_terminate_image_view(vkr_image_view *iview);
 sizet vkr_add_sampler(vkr_device *device, const vkr_sampler &copy = {});
 int vkr_init_sampler(vkr_sampler *sampler, const vkr_sampler_cfg *cfg, const vkr_context *vk);
-void vkr_terminate_sampler(vkr_sampler *sampler, const vkr_context *vk);
+void vkr_terminate_sampler(vkr_sampler *sampler);
 
 // Returns the index if the first swapchain framebuffer added
 sizet vkr_add_swapchain_framebuffers(vkr_device *device);

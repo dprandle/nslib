@@ -5,11 +5,28 @@
 namespace nslib
 {
 
+// Colors are ARGB - msb gets alpha
 intern const vertex RECT_VERTS[] = {
-    {{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}, 0xffff0000}, // Colors are ARGB - msb gets alpha
-    {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}, 0xff00ff00},
-    {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}, 0xff0000ff},
-    {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}, 0xff00ffff},
+    {
+        {-0.5f, -0.5f, 0.0f},
+        {0.0f, 0.0f},
+        0xffff0000,
+    },
+    {
+        {0.5f, -0.5f, 0.0f},
+        {1.0f, 0.0f},
+        0xff00ff00,
+    },
+    {
+        {0.5f, 0.5f, 0.0f},
+        {1.0f, 1.0f},
+        0xff0000ff,
+    },
+    {
+        {-0.5f, 0.5f, 0.0f},
+        {0.0f, 1.0f},
+        0xff00ffff,
+    },
 };
 
 intern const ind_t RECT_INDS_TRI_LIST[] = {
@@ -21,77 +38,63 @@ intern const ind_t RECT_INDS_TRI_LIST[] = {
     0,
 };
 
+// Colors are ARGB - msb gets alpha
 intern vertex CUBE_VERTS[] = {
-    {{-0.5f, 0.5f, 0.5f}, {0.0f, 1.0f}, 0xff000000},
-    {{0.5f, 0.5f, 0.5f}, {1.0f, 1.0f}, 0xff0000ff},
-    {{-0.5f, -0.5f, 0.5f}, {0.0f, 0.0f}, 0xff00ff00},
-    {{0.5f, -0.5f, 0.5f}, {1.0f, 0.0f}, 0xff00ffff},
-    {{-0.5f, 0.5f, -0.5f}, {0.0f, 1.0f}, 0xffff0000},
-    {{0.5f, 0.5f, -0.5f}, {1.0f, 1.0f}, 0xffff00ff},
-    {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, 0xffffff00},
-    {{0.5f, -0.5f, -0.5f}, {1.0f, 0.0f}, 0xffffffff},
+    {
+        {-0.5f, 0.5f, 0.5f},
+        {0.0f, 1.0f},
+        0xff000000,
+    },
+    {
+        {0.5f, 0.5f, 0.5f},
+        {1.0f, 1.0f},
+        0xff0000ff,
+    },
+    {
+        {-0.5f, -0.5f, 0.5f},
+        {0.0f, 0.0f},
+        0xff00ff00,
+    },
+    {
+        {0.5f, -0.5f, 0.5f},
+        {1.0f, 0.0f},
+        0xff00ffff,
+    },
+    {
+        {-0.5f, 0.5f, -0.5f},
+        {0.0f, 1.0f},
+        0xffff0000,
+    },
+    {
+        {0.5f, 0.5f, -0.5f},
+        {1.0f, 1.0f},
+        0xffff00ff,
+    },
+    {
+        {-0.5f, -0.5f, -0.5f},
+        {0.0f, 0.0f},
+        0xffffff00,
+    },
+    {
+        {0.5f, -0.5f, -0.5f},
+        {1.0f, 0.0f},
+        0xffffffff,
+    },
 };
 
 intern const ind_t CUBE_INDS_TRI_LIST[] = {
-    0, 1, 2,          // 0
-    1, 3, 2, 4, 6, 5, // 2
-    5, 6, 7, 0, 2, 4, // 4
-    4, 2, 6, 1, 5, 3, // 6
-    5, 7, 3, 0, 4, 1, // 8
-    4, 5, 1, 2, 3, 6, // 10
-    6, 3, 7,
-};
-
-intern const ind_t CUBE_INDS_TRI_STRIP[] = {
-    0,
-    1,
-    2,
-    3,
-    7,
-    1,
-    5,
-    0,
-    4,
-    2,
-    6,
-    7,
-    4,
-    5,
-};
-
-intern const ind_t CUBE_INDS_LINE_LIST[] = {
-    0, 1, 0, 2, 0, 4, 1, 3, 1, 5, 2, 3, 2, 6, 3, 7, 4, 5, 4, 6, 5, 7, 6, 7,
-};
-
-intern const ind_t CUBE_INDS_LINE_STRIP[] = {
-    0,
-    2,
-    3,
-    1,
-    5,
-    7,
-    6,
-    4,
-    0,
-    2,
-    6,
-    4,
-    5,
-    7,
-    3,
-    1,
-    0,
-};
-
-intern const ind_t CUBE_INDS_POINTS[] = {
-    0,
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
+    0, 1, 2, // 0
+    1, 3, 2, // 1
+    4, 6, 5, // 2
+    5, 6, 7, // 3
+    0, 2, 4, // 4
+    4, 2, 6, // 5
+    1, 5, 3, // 6
+    5, 7, 3, // 7
+    0, 4, 1, // 8
+    4, 5, 1, // 9
+    2, 3, 6, // 10
+    6, 3, 7, // 11
 };
 
 void init_texture(texture *tex, const string &name, mem_arena *arena)
@@ -100,20 +103,20 @@ void init_texture(texture *tex, const string &name, mem_arena *arena)
     arr_init(&tex->pixels, arena);
 }
 
-u32 get_texture_pixel_count(texture *tex)
+u32 get_texture_pixel_count(const texture *tex)
 {
     return tex->size.w * tex->size.h;
 }
 
-sizet get_texture_memsize(texture *tex)
+sizet get_texture_memsize(const texture *tex)
 {
     return get_texture_pixel_count(tex) * tex->channels;
 }
 
 bool load_texture(texture *tex, const char *path, cstr *err)
 {
-    
-    auto stb_pixels = stbi_load(path, (s32*)&tex->size.w, (s32*)&tex->size.h, (s32*)&tex->channels, STBI_rgb_alpha);
+
+    auto stb_pixels = stbi_load(path, (s32 *)&tex->size.w, (s32 *)&tex->size.h, (s32 *)&tex->channels, STBI_rgb_alpha);
     if (stb_pixels) {
         if (tex->channels != STBI_rgb_alpha) {
             ilog("Converted %s from %d to %d channels", path, tex->channels, STBI_rgb_alpha);
