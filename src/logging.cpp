@@ -1,11 +1,14 @@
 #include <cstdarg>
 #include <ctime>
+#include <vector>
 
 #include "platform.h"
 #include "logging.h"
+#include "stb_sprintf.h"
 
 #define MAX_CALLBACKS 32
 #define LOG_USE_COLOR
+constexpr int LOCAL_BUFFER_SIZE = 1024;
 
 #if defined(PLATFORM_APPLE) || defined(PLATFORM_WIN32)
     #define PRINT_U64 "ll"
@@ -15,6 +18,32 @@
 
 namespace nslib
 {
+template <typename FormatFunc>
+intern void write_formatted(FILE *fp, FormatFunc format)
+{
+    if (!fp) {
+        return;
+    }
+    char local_buf[LOCAL_BUFFER_SIZE];
+    int len = format(local_buf, LOCAL_BUFFER_SIZE);
+    asrt(len < LOCAL_BUFFER_SIZE && "Logging tmp formatting buffer too small");
+    if (len > 0) {
+        fwrite(local_buf, 1, (sizet)(len), fp);
+    }
+}
+
+intern void write_log_message(FILE *fp, log_event *ev)
+{
+    auto format_func = [ev](char *buffer, int buffer_size) -> int {
+        va_list args;
+        va_copy(args, ev->ap);
+        int len = stbsp_vsnprintf(buffer, buffer_size, ev->fmt, args);
+        va_end(args);
+        return len;
+    };
+    write_formatted(fp, format_func);
+}
+
 struct logging_ctxt
 {
     const char *name;
@@ -39,21 +68,32 @@ intern void stdout_callback(log_event *ev)
     char buf[16];
     buf[strftime(buf, sizeof(buf), "%H:%M:%S", ev->time)] = '\0';
     auto fp = (FILE *)ev->udata;
+    write_formatted(fp, [&](char *buffer, int buffer_size) -> int {
 #ifdef LOG_USE_COLOR
-    fprintf(fp,
-            "%s %s%-5s \x1b[0m\x1b[90m%02" PRINT_U64 "x:%s(%s):%d: \x1b[0m",
-            buf,
-            level_colors[ev->level],
-            level_strings[ev->level],
-            ev->thread_id,
-            ev->file,
-            ev->func,
-            ev->line);
+        return stbsp_snprintf(buffer,
+                              buffer_size,
+                              "%s %s%-5s \x1b[0m\x1b[90m%02" PRINT_U64 "x:%s(%s):%d: \x1b[0m",
+                              buf,
+                              level_colors[ev->level],
+                              level_strings[ev->level],
+                              ev->thread_id,
+                              ev->file,
+                              ev->func,
+                              ev->line);
 #else
-    fprintf(fp, "%s %-5s %02" PRINT_U64 "x:%s(%s):%d: ", buf, level_strings[ev->level], ev->thread_id, ev->file, ev->func, ev->line);
+        return stbsp_snprintf(buffer,
+                              buffer_size,
+                              "%s %-5s %02" PRINT_U64 "x:%s(%s):%d: ",
+                              buf,
+                              level_strings[ev->level],
+                              ev->thread_id,
+                              ev->file,
+                              ev->func,
+                              ev->line);
 #endif
-    vfprintf(fp, ev->fmt, ev->ap);
-    fprintf(fp, "\n");
+    });
+    write_log_message(fp, ev);
+    fputc('\n', fp);
     fflush(fp);
 }
 
@@ -62,9 +102,19 @@ intern void file_callback(log_event *ev)
     char buf[64];
     buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", ev->time)] = '\0';
     auto fp = (FILE *)ev->udata;
-    fprintf(fp, "%s %-5s %02" PRINT_U64 "x:%s(%s):%d: ", buf, level_strings[ev->level], ev->thread_id, ev->file, ev->func, ev->line);
-    vfprintf(fp, ev->fmt, ev->ap);
-    fprintf(fp, "\n");
+    write_formatted(fp, [&](char *buffer, int buffer_size) -> int {
+        return stbsp_snprintf(buffer,
+                              buffer_size,
+                              "%s %-5s %02" PRINT_U64 "x:%s(%s):%d: ",
+                              buf,
+                              level_strings[ev->level],
+                              ev->thread_id,
+                              ev->file,
+                              ev->func,
+                              ev->line);
+    });
+    write_log_message(fp, ev);
+    fputc('\n', fp);
     fflush(fp);
 }
 
