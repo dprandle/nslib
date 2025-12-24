@@ -206,7 +206,7 @@ intern int setup_render_pass(renderer *rndr)
     att.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     arr_push_back(&rp_cfg.attachments, att);
 
-    att.format = VK_FORMAT_D32_SFLOAT_S8_UINT;
+    att.format = vkr_find_best_depth_format(&rndr->vk.inst.pdev_info);
     att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     att.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     arr_push_back(&rp_cfg.attachments, att);
@@ -569,7 +569,6 @@ intern int setup_rmesh_info(renderer *rndr)
     b_cfg.vma_alloc = &dev->vma_alloc;
 
     // Vert buffer
-    ilog("Creating vertex buffer");
     b_cfg.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     b_cfg.buffer_size = DEFAULT_VERT_BUFFER_SIZE * sizeof(vertex);
     int err = vkr_init_buffer(&dev->buffers[rndr->rmi.verts.buf_ind], &b_cfg);
@@ -578,7 +577,6 @@ intern int setup_rmesh_info(renderer *rndr)
     }
 
     // Ind buffer
-    ilog("Creating index buffer");
     b_cfg.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     b_cfg.buffer_size = DEFAULT_IND_BUFFER_SIZE * sizeof(ind_t);
     err = vkr_init_buffer(&dev->buffers[rndr->rmi.inds.buf_ind], &b_cfg);
@@ -834,7 +832,7 @@ intern int init_swapchain_images_and_framebuffer(renderer *rndr)
 
     vkr_image_cfg im_cfg{};
     im_cfg.dims = {dev->swapchain.extent.width, dev->swapchain.extent.height, 1};
-    im_cfg.format = VK_FORMAT_D32_SFLOAT_S8_UINT;
+    im_cfg.format = vkr_find_best_depth_format(&rndr->vk.inst.pdev_info);
     im_cfg.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
     im_cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
     im_cfg.vma_alloc = &dev->vma_alloc;

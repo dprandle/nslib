@@ -785,12 +785,8 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
 
     // I no like typing too much
     vkr_pdevice_swapchain_support swap_support{};
-    vkr_init_pdevice_swapchain_support(&swap_support, vk->cfg.arenas.command_arena);    
+    vkr_init_pdevice_swapchain_support(&swap_support, vk->cfg.arenas.command_arena);
     vkr_fill_pdevice_swapchain_support(vk->inst.pdev_info.hndl, vk->inst.surface, &swap_support);
-
-    // auto caps = &vk->inst.pdev_info.swap_support.capabilities;
-    // auto formats = &vk->inst.pdev_info.swap_support.formats;
-    // auto pmodes = &vk->inst.pdev_info.swap_support.present_modes;
     auto qfams = &vk->inst.pdev_info.qfams;
 
     VkSwapchainCreateInfoKHR swap_create{};
@@ -850,6 +846,7 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
         swap_create.imageExtent.width, swap_support.capabilities.minImageExtent.width, swap_support.capabilities.maxImageExtent.width);
     swap_create.imageExtent.height = std::clamp(
         swap_create.imageExtent.height, swap_support.capabilities.minImageExtent.height, swap_support.capabilities.maxImageExtent.height);
+    
     ilog("Should be setting extent to {%d %d} (min {%d %d} max {%d %d})",
          swap_create.imageExtent.width,
          swap_create.imageExtent.height,
@@ -907,13 +904,12 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
     }
     ilog("Successfully set up swapchain with %d image views", sw_info->image_views.size);
     vkr_terminate_pdevice_swapchain_support(&swap_support);
-    
+
     return err_code::VKR_NO_ERROR;
 }
 
 vkr_add_result vkr_add_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, sizet count)
 {
-    ilog("Adding %lu command buffer/s", count);
     vkr_add_result ret{};
     array<VkCommandBuffer> hndls;
     arr_init(&hndls, vk->cfg.arenas.command_arena);
@@ -936,16 +932,13 @@ vkr_add_result vkr_add_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, s
     arr_resize(&pool->buffers, ret.end);
     for (sizet i = 0; i < count; ++i) {
         pool->buffers[ret.begin + i].hndl = hndls[i];
-        ilog("Setting cmd buffer at index %d in pool %p to hndl %lu", ret.begin + i, pool, hndls[i]);
     }
-    ilog("Successfully added command buffer/s");
     arr_terminate(&hndls);
     return ret;
 }
 
 void vkr_remove_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, sizet ind, sizet count)
 {
-    ilog("Removing %lu command buffers starting at index %lu", count, ind);
     array<VkCommandBuffer> hndls{};
     arr_init(&hndls, vk->cfg.arenas.command_arena);
     arr_resize(&hndls, count);
@@ -1004,7 +997,6 @@ void vkr_remove_descriptor_sets(vkr_descriptor_pool *pool, const vkr_context *vk
 
 int vkr_init_cmd_pool(const vkr_context *vk, u32 fam_ind, VkCommandPoolCreateFlags flags, vkr_command_pool *cpool)
 {
-    ilog("Initializing command pool");
     arr_init(&cpool->buffers, vk->cfg.arenas.persistent_arena);
 
     VkCommandPoolCreateInfo pool_info{};
@@ -1016,13 +1008,11 @@ int vkr_init_cmd_pool(const vkr_context *vk, u32 fam_ind, VkCommandPoolCreateFla
         elog("Failed creating vulkan command pool with code %d", err);
         return err_code::VKR_CREATE_COMMAND_POOL_FAIL;
     }
-    ilog("Successfully initialized command pool");
     return err_code::VKR_NO_ERROR;
 }
 
 sizet vkr_add_cmd_pool(vkr_device_queue_fam_info *qfam, const vkr_command_pool &cpool)
 {
-    ilog("Adding command pool to qfamily");
     sizet ind = qfam->cmd_pools.size;
     arr_push_back(&qfam->cmd_pools, cpool);
     return ind;
@@ -1030,35 +1020,28 @@ sizet vkr_add_cmd_pool(vkr_device_queue_fam_info *qfam, const vkr_command_pool &
 
 void vkr_terminate_cmd_pool(const vkr_context *vk, u32 fam_ind, vkr_command_pool *cpool)
 {
-    ilog("Terminating command pool");
     vkDestroyCommandPool(vk->inst.device.hndl, cpool->hndl, &vk->alloc_cbs);
     arr_terminate(&cpool->buffers);
 }
 
 int vkr_init_shader_module(VkShaderModule *module, const byte_array *code, const vkr_context *vk)
 {
-    ilog("Initializing shader module");
     VkShaderModuleCreateInfo create_info{};
     create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    ilog("Code size:%d", code->size);
     create_info.codeSize = code->size;
     create_info.pCode = (const u32 *)code->data;
     if (vkCreateShaderModule(vk->inst.device.hndl, &create_info, &vk->alloc_cbs, module) != VK_SUCCESS) {
         return err_code::VKR_CREATE_SHADER_MODULE_FAIL;
     }
-    ilog("Successfully initialized shader module");
     return err_code::VKR_NO_ERROR;
 }
 void vkr_terminate_shader_module(VkShaderModule module, const vkr_context *vk)
 {
-    ilog("Terminating shader module");
     vkDestroyShaderModule(vk->inst.device.hndl, module, &vk->alloc_cbs);
 }
 
 int vkr_init_render_pass(vkr_rpass *rpass, const vkr_rpass_cfg *cfg, const vkr_context *vk)
 {
-    ilog("Initializing render pass");
-
     VkAttachmentReference col_att_ref{};
     col_att_ref.attachment = 0;
     col_att_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -1108,22 +1091,18 @@ int vkr_init_render_pass(vkr_rpass *rpass, const vkr_rpass_cfg *cfg, const vkr_c
         elog("Failed to create render pass");
         return err_code::VKR_CREATE_RENDER_PASS_FAIL;
     }
-    ilog("Successfully initialized render pass");
     return err_code::VKR_NO_ERROR;
 }
 
 sizet vkr_add_render_pass(vkr_device *device, const vkr_rpass &copy)
 {
-    ilog("Adding render_pass to device");
     sizet ind = device->render_passes.size;
     arr_push_back(&device->render_passes, copy);
-
     return ind;
 }
 
 void vkr_terminate_render_pass(const vkr_rpass *rpass, const vkr_context *vk)
 {
-    ilog("Terminating render pass");
     vkDestroyRenderPass(vk->inst.device.hndl, rpass->hndl, &vk->alloc_cbs);
 }
 
@@ -1155,7 +1134,6 @@ const char *vkr_shader_stage_type_str(vkr_shader_stage_type st_type)
 
 int vkr_init_pipeline(vkr_pipeline *pipe_info, const vkr_pipeline_cfg *cfg, const vkr_context *vk)
 {
-    ilog("Initializing pipeline");
     VkPipelineShaderStageCreateInfo stages[VKR_SHADER_STAGE_COUNT]{};
     sizet actual_stagei = 0;
     for (u32 stagei = 0; stagei < VKR_SHADER_STAGE_COUNT; ++stagei) {
@@ -1329,14 +1307,12 @@ int vkr_init_pipeline(vkr_pipeline *pipe_info, const vkr_pipeline_cfg *cfg, cons
     for (u32 si = 0; si < actual_stagei; ++si) {
         vkr_terminate_shader_module(stages[si].module, vk);
     }
-    ilog("Successfully initialized pipeline");
     err_ret = err_code::VKR_NO_ERROR;
     return err_ret;
 }
 
 sizet vkr_add_pipeline(vkr_device *device, const vkr_pipeline &copy)
 {
-    ilog("Adding pipeline to device");
     sizet ind = device->pipelines.size;
     arr_push_back(&device->pipelines, copy);
     return ind;
@@ -1344,7 +1320,6 @@ sizet vkr_add_pipeline(vkr_device *device, const vkr_pipeline &copy)
 
 void vkr_terminate_pipeline(const vkr_pipeline *pipe_info, const vkr_context *vk)
 {
-    ilog("Terminating pipeline");
     vkDestroyPipeline(vk->inst.device.hndl, pipe_info->hndl, &vk->alloc_cbs);
     vkDestroyPipelineLayout(vk->inst.device.hndl, pipe_info->layout_hndl, &vk->alloc_cbs);
     for (int i = 0; i < pipe_info->descriptor_layouts.size; ++i) {
@@ -1354,7 +1329,6 @@ void vkr_terminate_pipeline(const vkr_pipeline *pipe_info, const vkr_context *vk
 
 int vkr_init_framebuffer(vkr_framebuffer *fb, const vkr_framebuffer_cfg *cfg, const vkr_context *vk)
 {
-    ilog("Initializing framebuffer");
     asrt(cfg->rpass);
     asrt(cfg->attachments);
 
@@ -1385,14 +1359,12 @@ int vkr_init_framebuffer(vkr_framebuffer *fb, const vkr_framebuffer_cfg *cfg, co
         elog("Failed to create framebuffer with vk err %d", res);
         return err_code::VKR_CREATE_FRAMEBUFFER_FAIL;
     }
-    ilog("Successfully initialized framebuffer");
     arr_terminate(&att);
     return err_code::VKR_NO_ERROR;
 }
 
 sizet vkr_add_framebuffer(vkr_device *device, const vkr_framebuffer &copy)
 {
-    ilog("Adding framebuffer to device");
     sizet ind = device->framebuffers.size;
     arr_push_back(&device->framebuffers, copy);
     return ind;
@@ -1400,7 +1372,6 @@ sizet vkr_add_framebuffer(vkr_device *device, const vkr_framebuffer &copy)
 
 void vkr_terminate_framebuffer(vkr_framebuffer *fb, const vkr_context *vk)
 {
-    ilog("Terminating framebuffer");
     vkDestroyFramebuffer(vk->inst.device.hndl, fb->hndl, &vk->alloc_cbs);
     arr_terminate(&fb->attachments);
 }
@@ -1520,7 +1491,6 @@ int vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
 
 sizet vkr_add_buffer(vkr_device *device, const vkr_buffer &copy)
 {
-    ilog("Adding buffer to device");
     sizet ind = device->buffers.size;
     arr_push_back(&device->buffers, copy);
     return ind;
@@ -1553,16 +1523,36 @@ int vkr_init_buffer(vkr_buffer *buffer, const vkr_buffer_cfg *cfg)
 
 void vkr_terminate_buffer(vkr_buffer *buffer, const vkr_context *vk)
 {
-    ilog("Terminating buffer");
     vmaDestroyBuffer(vk->inst.device.vma_alloc.hndl, buffer->hndl, buffer->mem_hndl);
 }
 
 sizet vkr_add_image(vkr_device *device, const vkr_image &copy)
 {
-    ilog("Adding image to device");
     sizet ind = device->images.size;
     arr_push_back(&device->images, copy);
     return ind;
+}
+
+VkFormat vkr_find_best_depth_format(const vkr_phys_device *phs, bool need_stencil)
+{
+    VkFormat depth_formats[] = {
+        VK_FORMAT_D32_SFLOAT_S8_UINT,
+        VK_FORMAT_D24_UNORM_S8_UINT,
+        VK_FORMAT_D16_UNORM_S8_UINT,
+        VK_FORMAT_D32_SFLOAT,
+        VK_FORMAT_D16_UNORM,
+    };
+    sizet start_ind = need_stencil ? 0 : 2;
+    sizet sz = need_stencil ? 3 : 2;
+    for (sizet i = start_ind; i != start_ind + sz; ++i) {
+        VkFormatProperties props;
+        vkGetPhysicalDeviceFormatProperties(phs->hndl, depth_formats[i], &props);
+        // Does the format with optimal tiling (needed for depth attachment) allow depth attachement bit
+        if (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+            return depth_formats[i];
+        }
+    }
+    return VK_FORMAT_UNDEFINED;
 }
 
 int vkr_init_image(vkr_image *image, const vkr_image_cfg *cfg)
@@ -1604,13 +1594,11 @@ int vkr_init_image(vkr_image *image, const vkr_image_cfg *cfg)
 
 void vkr_terminate_image(vkr_image *image)
 {
-    ilog("Terminating image");
     vmaDestroyImage(image->vma_alloc->hndl, image->hndl, image->mem_hndl);
 }
 
 sizet vkr_add_image_view(vkr_device *device, const vkr_image_view &copy)
 {
-    ilog("Adding image view to device");
     sizet ind = device->image_views.size;
     arr_push_back(&device->image_views, copy);
     return ind;
@@ -1620,7 +1608,7 @@ int vkr_init_image_view(vkr_image_view *iview, const vkr_image_view_cfg *cfg, co
 {
     asrt(cfg->image);
     iview->dev = &vk->inst.device;
-    iview->alloc_cbs = &vk->alloc_cbs;    
+    iview->alloc_cbs = &vk->alloc_cbs;
     VkImageViewCreateInfo create_info{};
     create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     create_info.image = cfg->image->hndl;
@@ -1639,13 +1627,11 @@ int vkr_init_image_view(vkr_image_view *iview, const vkr_image_view_cfg *cfg, co
 
 void vkr_terminate_image_view(vkr_image_view *iview)
 {
-    ilog("Terminating image view");
     vkDestroyImageView(iview->dev->hndl, iview->hndl, iview->alloc_cbs);
 }
 
 sizet vkr_add_sampler(vkr_device *device, const vkr_sampler &copy)
 {
-    ilog("Adding image sampler to device");
     sizet ind = device->samplers.size;
     arr_push_back(&device->samplers, copy);
     return ind;
@@ -1688,7 +1674,6 @@ int vkr_init_sampler(vkr_sampler *sampler, const vkr_sampler_cfg *cfg, const vkr
 
 void vkr_terminate_sampler(vkr_sampler *sampler)
 {
-    ilog("Terminating image view");
     vkDestroySampler(sampler->dev->hndl, sampler->hndl, sampler->alloc_cbs);
 }
 
@@ -1842,7 +1827,6 @@ void vkr_terminate_swapchain_framebuffers(vkr_device *device, const vkr_context 
 // Initialize surface in the vk_context from the window - the instance must have been created already
 int vkr_init_surface(const vkr_context *vk, VkSurfaceKHR *surface)
 {
-    ilog("Initializing window surface");
     asrt(vk->cfg.window);
     // Create surface
     bool ret = SDL_Vulkan_CreateSurface((SDL_Window *)vk->cfg.window, vk->inst.hndl, &vk->alloc_cbs, surface);
@@ -1850,15 +1834,11 @@ int vkr_init_surface(const vkr_context *vk, VkSurfaceKHR *surface)
         log_any_sdl_error("Failed to create surface");
         return err_code::VKR_CREATE_SURFACE_FAIL;
     }
-    else {
-        ilog("Successfully initialized window surface");
-        return err_code::VKR_NO_ERROR;
-    }
+    return err_code::VKR_NO_ERROR;
 }
 
 void vkr_terminate_surface(const vkr_context *vk, VkSurfaceKHR surface)
 {
-    ilog("Terminating window surface");
     vkDestroySurfaceKHR(vk->inst.hndl, surface, &vk->alloc_cbs);
 }
 
@@ -2219,12 +2199,10 @@ int vkr_copy_buffer(vkr_buffer *dest,
                     sizet qind,
                     const vkr_context *vk)
 {
-    ilog("Starting buffer copy");
     auto pool = &cmd_q->cmd_pools[cmd_q->transient_pool];
     auto tmp_buf = cmd_buf_begin(pool, vk);
     if (tmp_buf.err_code == err_code::VKR_NO_ERROR) {
         vkCmdCopyBuffer(pool->buffers[tmp_buf.begin].hndl, src->hndl, dest->hndl, 1, region);
-        ilog("Finished copying buffer");
         return cmd_buf_end(tmp_buf, pool, cmd_q, qind, vk);
     }
     return tmp_buf.err_code;
@@ -2237,12 +2215,10 @@ int vkr_copy_buffer_to_image(vkr_image *dest,
                              sizet qind,
                              const vkr_context *vk)
 {
-    ilog("Copying buffer to image");
     auto pool = &cmd_q->cmd_pools[cmd_q->transient_pool];
     auto tmp_buf = cmd_buf_begin(pool, vk);
     if (tmp_buf.err_code == err_code::VKR_NO_ERROR) {
         vkCmdCopyBufferToImage(pool->buffers[tmp_buf.begin].hndl, src->hndl, dest->hndl, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, region);
-        ilog("Finished copying buffer to image");
         return cmd_buf_end(tmp_buf, pool, cmd_q, qind, vk);
     }
     return tmp_buf.err_code;
@@ -2254,7 +2230,6 @@ int vkr_transition_image_layout(const vkr_image *image,
                                 sizet qind,
                                 const vkr_context *vk)
 {
-    ilog("Transitioning image layout");
     auto pool = &cmd_q->cmd_pools[cmd_q->transient_pool];
     auto tmp_buf = cmd_buf_begin(pool, vk);
     if (tmp_buf.err_code == err_code::VKR_NO_ERROR) {
@@ -2290,7 +2265,6 @@ int vkr_transition_image_layout(const vkr_image *image,
             return err_code::VKR_TRANSITION_IMAGE_UNSUPPORTED_LAYOUT;
         }
         vkCmdPipelineBarrier(pool->buffers[tmp_buf.begin].hndl, source_stage, dest_stage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
-        ilog("Finished transitioning image layout");
         return cmd_buf_end(tmp_buf, pool, cmd_q, qind, vk);
     }
     return tmp_buf.err_code;
