@@ -129,7 +129,7 @@ int init(platform_ctxt *ctxt, void *user_data)
     auto mat1 = add_robj(mat_cache, terminate_material);
     init_material(mat1.ptr, "mat1", mem_global_arena());
     hset_insert(&mat1->pipelines, PLINE_FWD_RPASS_S0_OPAQUE_COL);
-    mat1->col = {1.0, 0.0, 0.0, 1.0};
+    mat1->col = {1.0, 0.0, 1.0, 1.0};
 
     auto mat_maria_face = add_robj(mat_cache, terminate_material);
     init_material(mat_maria_face.ptr, "maria-face", mem_global_arena());
@@ -200,7 +200,7 @@ int init(platform_ctxt *ctxt, void *user_data)
     setup_camera_controller(ctxt, app);
 
     // Create a grid of entities with odd ones being cubes and even being rectangles
-    int len = 40, width = 40, height = 40;
+    int len = 10, width = 10, height = 10;
     auto ent_offset = add_entities(len * width * height, &app->rgn);
 
     auto tf_tbl = get_comp_tbl<transform>(&app->rgn.cdb);
