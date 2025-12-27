@@ -116,7 +116,7 @@ struct vkr_buffer_cfg
 
 struct vkr_buffer
 {
-    VkBuffer hndl;
+    VkBuffer hndl{VK_NULL_HANDLE};
     VmaAllocation mem_hndl;
     VmaAllocationInfo mem_info;
 };
@@ -143,7 +143,7 @@ struct vkr_image_cfg
 
 struct vkr_image
 {
-    VkImage hndl;
+    VkImage hndl{VK_NULL_HANDLE};
     VkFormat format;
     uvec3 dims;
     VmaAllocation mem_hndl;
@@ -162,7 +162,7 @@ struct vkr_image_view_cfg
 
 struct vkr_image_view
 {
-    VkImageView hndl;
+    VkImageView hndl{VK_NULL_HANDLE};
     const VkAllocationCallbacks *alloc_cbs;
     const vkr_device *dev;
 };
@@ -193,7 +193,7 @@ struct vkr_sampler_cfg
 
 struct vkr_sampler
 {
-    VkSampler hndl;
+    VkSampler hndl{VK_NULL_HANDLE};
     const vkr_device *dev;
     const VkAllocationCallbacks *alloc_cbs;
 };
@@ -213,12 +213,12 @@ struct vkr_debug_extension_funcs
 
 struct vkr_command_buffer
 {
-    VkCommandBuffer hndl;
+    VkCommandBuffer hndl{VK_NULL_HANDLE};
 };
 
 struct vkr_command_pool
 {
-    VkCommandPool hndl;
+    VkCommandPool hndl{VK_NULL_HANDLE};
     array<vkr_command_buffer> buffers{};
 };
 
@@ -248,7 +248,7 @@ struct vkr_pdevice_swapchain_support
 
 struct vkr_phys_device
 {
-    VkPhysicalDevice hndl{};
+    VkPhysicalDevice hndl{VK_NULL_HANDLE};
     VkPhysicalDeviceFeatures features{};
     VkPhysicalDeviceProperties props{};
     vkr_queue_families qfams{};
@@ -269,13 +269,13 @@ struct vkr_cmd_buf_ind
 
 struct vkr_descriptor_set
 {
-    VkDescriptorSet hndl;
+    VkDescriptorSet hndl{VK_NULL_HANDLE};
     VkDescriptorSetLayout layout;
 };
 
 struct vkr_descriptor_pool
 {
-    VkDescriptorPool hndl;
+    VkDescriptorPool hndl{VK_NULL_HANDLE};
     array<vkr_descriptor_set> desc_sets;
 };
 
@@ -287,9 +287,8 @@ struct vkr_frame
     sizet mat_ubo_ind;
     sizet obj_ubo_ind;
     vkr_descriptor_pool desc_pool;
-    VkSemaphore image_avail;
-    VkSemaphore render_finished;
     VkFence in_flight;
+    VkSemaphore image_avail;
 };
 
 struct vkr_swapchain
@@ -297,6 +296,7 @@ struct vkr_swapchain
     array<vkr_image> images;
     array<vkr_image_view> image_views;
     array<array<vkr_framebuffer_attachment>> other_attachments;
+    array<VkSemaphore> renders_finished;
     VkFormat format;
     VkExtent2D extent;
     VkSwapchainKHR swapchain;
@@ -321,7 +321,7 @@ struct vkr_rpass_cfg
 
 struct vkr_rpass
 {
-    VkRenderPass hndl;
+    VkRenderPass hndl{VK_NULL_HANDLE};
 };
 
 struct vkr_shader_stage
@@ -332,7 +332,7 @@ struct vkr_shader_stage
 
 struct vkr_push_constant_range
 {
-    VkPushConstantRange hndl;
+    VkPushConstantRange hndl{};
 };
 
 struct vkr_pipeline_cfg_raster
@@ -434,9 +434,9 @@ struct vkr_pipeline_cfg
 struct vkr_pipeline
 {
     vkr_rpass rpass;
-    VkPipelineLayout layout_hndl;
+    VkPipelineLayout layout_hndl{VK_NULL_HANDLE};
     static_array<VkDescriptorSetLayout, 4> descriptor_layouts;
-    VkPipeline hndl;
+    VkPipeline hndl{VK_NULL_HANDLE};
 };
 
 struct vkr_framebuffer_cfg
@@ -454,12 +454,12 @@ struct vkr_framebuffer
     u32 layers;
     vkr_rpass rpass;
     array<vkr_framebuffer_attachment> attachments;
-    VkFramebuffer hndl;
+    VkFramebuffer hndl{VK_NULL_HANDLE};
 };
 
 struct vkr_queue
 {
-    VkQueue hndl;
+    VkQueue hndl{VK_NULL_HANDLE};
 };
 
 struct vkr_device_queue_fam_info
@@ -473,7 +473,7 @@ struct vkr_device_queue_fam_info
 
 struct vkr_device
 {
-    VkDevice hndl;
+    VkDevice hndl{VK_NULL_HANDLE};
     vkr_device_queue_fam_info qfams[VKR_QUEUE_FAM_TYPE_COUNT];
     array<vkr_rpass> render_passes;
     array<vkr_pipeline> pipelines;
@@ -490,7 +490,7 @@ struct vkr_device
 
 struct vkr_instance
 {
-    VkInstance hndl;
+    VkInstance hndl{VK_NULL_HANDLE};
     VkDebugUtilsMessengerEXT dbg_messenger;
     vkr_debug_extension_funcs ext_funcs;
 

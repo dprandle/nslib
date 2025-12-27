@@ -8,7 +8,7 @@
 
 #define MAX_CALLBACKS 32
 #define LOG_USE_COLOR
-constexpr int LOCAL_BUFFER_SIZE = 1024;
+constexpr int LOCAL_BUFFER_SIZE = 512;
 
 #if defined(PLATFORM_APPLE) || defined(PLATFORM_WIN32)
     #define PRINT_U64 "ll"
@@ -18,7 +18,7 @@ constexpr int LOCAL_BUFFER_SIZE = 1024;
 
 namespace nslib
 {
-template <typename FormatFunc>
+template<typename FormatFunc>
 intern void write_formatted(FILE *fp, FormatFunc format)
 {
     if (!fp) {
@@ -26,9 +26,20 @@ intern void write_formatted(FILE *fp, FormatFunc format)
     }
     char local_buf[LOCAL_BUFFER_SIZE];
     int len = format(local_buf, LOCAL_BUFFER_SIZE);
-    asrt(len < LOCAL_BUFFER_SIZE && "Logging tmp formatting buffer too small");
+
     if (len > 0) {
-        fwrite(local_buf, 1, (sizet)(len), fp);
+        // Most stuff should fit in local buf - for few that don't we create some temp space on the frame linear
+        // allocator - super cheap.
+        // buf size needs to be one element larger because null term
+        if (len < LOCAL_BUFFER_SIZE) {
+            fwrite(local_buf, 1, (sizet)(len), fp);
+        }
+        else {
+            auto buf = (char *)mem_calloc(1, len + 1, mem_global_frame_lin_arena());
+            auto new_len = format(buf, len);
+            asrt(new_len == len);
+            fwrite(buf, 1, (sizet)(len), fp);
+        }
     }
 }
 

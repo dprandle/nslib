@@ -1215,6 +1215,7 @@ intern s32 acquire_swapchain_image(renderer *rndr, vkr_frame *cur_frame, u32 *im
 {
     auto dev = &rndr->vk.inst.device;
     auto prev_frame = get_previous_frame(rndr);
+    
     // Acquire the image, signal the image_avail semaphore once the image has been acquired. We get the index back, but
     // that doesn't mean the image is ready. The image is only ready (on the GPU side) once the image avail semaphore is triggered
     VkResult result = vkAcquireNextImageKHR(dev->hndl, dev->swapchain.swapchain, UINT64_MAX, cur_frame->image_avail, VK_NULL_HANDLE, im_ind);
@@ -1237,7 +1238,7 @@ intern s32 acquire_swapchain_image(renderer *rndr, vkr_frame *cur_frame, u32 *im
     return err_code::RENDER_NO_ERROR;
 }
 
-intern s32 submit_command_buffer(renderer *rndr, vkr_frame *cur_frame, vkr_command_buffer *cmd_buf)
+intern s32 submit_command_buffer(renderer *rndr, vkr_frame *cur_frame, vkr_command_buffer *cmd_buf, u32 image_ind)
 {
     auto dev = &rndr->vk.inst.device;
     // Get the info ready to submit our command buffer to the queue. We need to wait until the image avail semaphore has
@@ -1251,7 +1252,7 @@ intern s32 submit_command_buffer(renderer *rndr, vkr_frame *cur_frame, vkr_comma
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &cmd_buf->hndl;
     submit_info.signalSemaphoreCount = 1;
-    submit_info.pSignalSemaphores = &cur_frame->render_finished;
+    submit_info.pSignalSemaphores = &rndr->vk.inst.device.swapchain.renders_finished[image_ind];
     if (vkQueueSubmit(dev->qfams[VKR_QUEUE_FAM_TYPE_GFX].qs[VKR_RENDER_QUEUE].hndl, 1, &submit_info, cur_frame->in_flight) != VK_SUCCESS) {
         return err_code::RENDER_SUBMIT_QUEUE_FAIL;
     }
@@ -1265,7 +1266,7 @@ intern s32 present_image(renderer *rndr, vkr_frame *cur_frame, u32 image_ind)
     VkPresentInfoKHR present_info{};
     present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     present_info.waitSemaphoreCount = 1;
-    present_info.pWaitSemaphores = &cur_frame->render_finished;
+    present_info.pWaitSemaphores = &rndr->vk.inst.device.swapchain.renders_finished[image_ind];
     present_info.swapchainCount = 1;
     present_info.pSwapchains = &dev->swapchain.swapchain;
     present_info.pImageIndices = &image_ind;
@@ -1801,7 +1802,7 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
     }
 
     // Submit command buffer to GPU
-    err = submit_command_buffer(rndr, cur_frame->vkf, cmd_buf);
+    err = submit_command_buffer(rndr, cur_frame->vkf, cmd_buf, im_ind);
     if (err != err_code::RENDER_NO_ERROR) {
         return err;
     }

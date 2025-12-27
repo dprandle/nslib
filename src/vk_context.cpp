@@ -782,6 +782,7 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
     ilog("Setting up swapchain");
     arr_init(&sw_info->image_views, vk->cfg.arenas.persistent_arena);
     arr_init(&sw_info->images, vk->cfg.arenas.persistent_arena);
+    arr_init(&sw_info->renders_finished, vk->cfg.arenas.persistent_arena);
 
     // I no like typing too much
     vkr_pdevice_swapchain_support swap_support{};
@@ -854,12 +855,12 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
          swap_support.capabilities.minImageExtent.height,
          swap_support.capabilities.maxImageExtent.width,
          swap_support.capabilities.maxImageExtent.height);
-    //    }
 
     // Create this baby boo
     if (vkCreateSwapchainKHR(vk->inst.device.hndl, &swap_create, &vk->alloc_cbs, &sw_info->swapchain) != VK_SUCCESS) {
         arr_terminate(&sw_info->image_views);
         arr_terminate(&sw_info->images);
+        arr_terminate(&sw_info->renders_finished);
         return err_code::VKR_CREATE_SWAPCHAIN_FAIL;
     }
     sw_info->extent = swap_create.imageExtent;
@@ -870,6 +871,7 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
         elog("Failed to get swapchain images count with code %d", res);
         arr_terminate(&sw_info->image_views);
         arr_terminate(&sw_info->images);
+        arr_terminate(&sw_info->renders_finished);
         return err_code::VKR_GET_SWAPCHAIN_IMAGES_FAIL;
     }
 
@@ -890,18 +892,28 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
     }
     arr_terminate(&simages);
 
-    arr_resize(&sw_info->image_views, image_count);
-    for (int i = 0; i < sw_info->image_views.size; ++i) {
+    arr_resize(&sw_info->image_views, image_count, vkr_image_view{});
+    arr_resize(&sw_info->renders_finished, image_count, VK_NULL_HANDLE);
+    for (int i = 0; i < image_count; ++i) {
         vkr_image_view_cfg iview_create{};
         iview_create.image = &sw_info->images[i];
         int err = vkr_init_image_view(&sw_info->image_views[i], &iview_create, vk);
         if (err != err_code::VKR_NO_ERROR) {
             elog("Failed to create image view at index %d", i);
-            arr_terminate(&sw_info->images);
-            arr_terminate(&sw_info->image_views);
+            vkr_terminate_swapchain(sw_info, vk);
             return err_code::VKR_CREATE_IMAGE_VIEW_FAIL;
         }
+
+        VkSemaphoreCreateInfo sem_info{};
+        sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        err = vkCreateSemaphore(vk->inst.device.hndl, &sem_info, &vk->alloc_cbs, &sw_info->renders_finished[i]);
+        if (err != VK_SUCCESS) {
+            elog("Failed to create render finished semaphore for swapchain image %d with vk err code %d", i, err);
+            vkr_terminate_swapchain(sw_info, vk);
+            return err_code::VKR_CREATE_SEMAPHORE_FAIL;
+        }
     }
+    
     ilog("Successfully set up swapchain with %d image views", sw_info->image_views.size);
     vkr_terminate_pdevice_swapchain_support(&swap_support);
 
@@ -1847,7 +1859,6 @@ void vkr_terminate_render_frames(vkr_device *dev, const vkr_context *vk)
     for (int framei = 0; framei < dev->rframes.size; ++framei) {
         vkr_terminate_descriptor_pool(&dev->rframes[framei].desc_pool, vk);
         vkDestroySemaphore(dev->hndl, dev->rframes[framei].image_avail, &vk->alloc_cbs);
-        vkDestroySemaphore(dev->hndl, dev->rframes[framei].render_finished, &vk->alloc_cbs);
         vkDestroyFence(dev->hndl, dev->rframes[framei].in_flight, &vk->alloc_cbs);
     }
 }
@@ -1866,32 +1877,25 @@ int vkr_init_render_frames(vkr_device *dev, const vkr_context *vk)
 
     // Create frame synchronization objects - start all fences as signalled already
     for (u32 framei = 0; framei < dev->rframes.size; ++framei) {
-        VkSemaphoreCreateInfo sem_info{};
-        sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-        int err = vkCreateSemaphore(dev->hndl, &sem_info, &vk->alloc_cbs, &dev->rframes[framei].image_avail);
-        if (err != VK_SUCCESS) {
-            elog("Failed to create image semaphore for frame %d with vk err code %d", framei, err);
-            vkr_terminate_device(dev, vk);
-            return err_code::VKR_CREATE_SEMAPHORE_FAIL;
-        }
-
-        err = vkCreateSemaphore(dev->hndl, &sem_info, &vk->alloc_cbs, &dev->rframes[framei].render_finished);
-        if (err != VK_SUCCESS) {
-            elog("Failed to create render semaphore for frame %d with vk err code %d", framei, err);
-            vkr_terminate_device(dev, vk);
-            return err_code::VKR_CREATE_SEMAPHORE_FAIL;
-        }
-
         VkFenceCreateInfo fence_info{};
         fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-        err = vkCreateFence(dev->hndl, &fence_info, &vk->alloc_cbs, &dev->rframes[framei].in_flight);
+        int err = vkCreateFence(dev->hndl, &fence_info, &vk->alloc_cbs, &dev->rframes[framei].in_flight);
         if (err != VK_SUCCESS) {
             elog("Failed to create flight fence for frame %d with vk err code %d", framei, err);
             vkr_terminate_device(dev, vk);
             return err_code::VKR_CREATE_FENCE_FAIL;
+        }
+
+
+        VkSemaphoreCreateInfo sem_info{};
+        sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        err = vkCreateSemaphore(vk->inst.device.hndl, &sem_info, &vk->alloc_cbs, &dev->rframes[framei].image_avail);
+        if (err != VK_SUCCESS) {
+            elog("Failed to create image available semaphore for FIF %d with vk err code %d", framei, err);
+            vkr_terminate_device(dev, vk);
+            return err_code::VKR_CREATE_SEMAPHORE_FAIL;
         }
 
         // Assign the command buffer created earlier to this frame
@@ -1983,10 +1987,12 @@ void vkr_terminate_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
     ilog("Terminating swapchain");
     for (int i = 0; i < sw_info->image_views.size; ++i) {
         vkr_terminate_image_view(&sw_info->image_views[i]);
+        vkDestroySemaphore(vk->inst.device.hndl, sw_info->renders_finished[i], &vk->alloc_cbs);
     }
     vkDestroySwapchainKHR(vk->inst.device.hndl, sw_info->swapchain, &vk->alloc_cbs);
     arr_terminate(&sw_info->images);
     arr_terminate(&sw_info->image_views);
+    arr_terminate(&sw_info->renders_finished);
 }
 
 void vkr_device_wait_idle(vkr_device *dev)
