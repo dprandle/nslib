@@ -14,6 +14,7 @@ struct app_data
     renderer rndr{};
     sim_region rgn{};
     robj_cache_group cg{};
+    f64 accumulater{};
 
     input_keymap movement_km;
     input_keymap global_km;
@@ -64,7 +65,6 @@ intern void setup_camera_controller(platform_ctxt *ctxt, app_data *app)
         camt->orientation = math::orientation(vertical) * math::orientation(horizontal) * camt->orientation;
         camt->cached = math::model_tform(camt->world_pos, camt->orientation, camt->scale);
         camc->view = math::inverse(camt->cached);
-        post_pipeline_ubo_update_all(&app->rndr);
     };
     auto ins = add_input_trigger_func(&app->stack, "cam-turn", {cam_turn_func, app});
     asrt(ins);
@@ -232,27 +232,14 @@ int init(platform_ctxt *ctxt, void *user_data)
                 else {
                     sc->mat_ids[0] = mat_daniel_face->id;
                 }
-
-                // Add the model to our renderer
-                add_static_model(&app->rndr, sc, get_comp_ind(tfcomp, ent->cdb), msh_cache, mat_cache);
             }
         }
     }
-    post_ubo_update_all(&app->rndr, tf_tbl);
-
     return ret;
 }
 
-int run_frame(platform_ctxt *ctxt, void *user_data)
-{
-    auto app = (app_data *)user_data;
-    profile_timepoints pt;
+void simulate(platform_ctxt *ctxt, app_data *app, f64 dt) {
     map_input_frame(&app->stack, &ctxt->feventq);
-
-    int res = begin_render_frame(&app->rndr, ctxt->finished_frames);
-    if (res != err_code::VKR_NO_ERROR) {
-        return res;
-    }
 
     // Move the cam if needed
     auto cam = get_comp<camera>(app->cam_id, &app->rgn.cdb);
@@ -260,16 +247,12 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
         auto cam_tform = get_comp<transform>(app->cam_id, &app->rgn.cdb);
         auto right = math::right_vec(cam_tform->orientation);
         auto target = math::target_vec(cam_tform->orientation);
-        cam_tform->world_pos += (right * app->movement.x + target * app->movement.y) * ctxt->time_pts.dt * 10;
+        cam_tform->world_pos += (right * app->movement.x + target * app->movement.y) * dt * 10;
         cam_tform->cached = math::model_tform(cam_tform->world_pos, cam_tform->orientation, cam_tform->scale);
         cam->view = math::inverse(cam_tform->cached);
-        post_pipeline_ubo_update_all(&app->rndr);
     }
     static double update_tm = 0.0;
     static double render_tm = 0.0;
-
-    // Spin some entities
-    ptimer_restart(&pt);
 
     auto tform_tbl = get_comp_tbl<transform>(&app->rgn.cdb);
     auto mat_cache = get_cache<material>(&app->cg);
@@ -278,27 +261,46 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
         auto curtf = &tform_tbl->entries[i];
         if (curtf->ent_id != app->cam_id) {
             if (i % 3 == 0) {
-                curtf->orientation *= math::orientation(vec4{1.0, 0.0, 0.0, (f32)ctxt->time_pts.dt});
+                curtf->orientation *= math::orientation(vec4{1.0, 0.0, 0.0, (f32)dt});
             }
             else if (i % 3 == 2) {
-                curtf->orientation *= math::orientation(vec4{0.0, 1.0, 0.0, (f32)ctxt->time_pts.dt});
+                curtf->orientation *= math::orientation(vec4{0.0, 1.0, 0.0, (f32)dt});
             }
             else {
-                curtf->orientation *= math::orientation(vec4{0.0, 0.0, 1.0, (f32)ctxt->time_pts.dt});
+                curtf->orientation *= math::orientation(vec4{0.0, 0.0, 1.0, (f32)dt});
             }
             curtf->cached = math::model_tform(curtf->world_pos, curtf->orientation, curtf->scale);
-            // post_transform_ubo_update(&app->rndr, curtf, tform_tbl);
         }
     }
-    post_transform_ubo_update_all(&app->rndr, tform_tbl);
     ImGui::ShowDebugLogWindow();
+}
 
+int run_frame(platform_ctxt *ctxt, void *user_data)
+{
+    auto app = (app_data *)user_data;
+    profile_timepoints pt;
+
+    // Spin some entities
+    ptimer_restart(&pt);
+    static double update_tm{};
+    static double render_tm{};
+
+    app->accumulater += ctxt->time_pts.dt;
+
+    while (app->accumulater >= 0.010) {
+        simulate(ctxt, app, 0.010);
+        app->accumulater -= 0.010;
+    }
+
+    f64 alpha = app->accumulater / 0.010;
+    
     ptimer_split(&pt);
     update_tm += pt.dt;
 
-    // Draw some imgui stuff
+    int res = begin_render_frame(&app->rndr, ctxt->finished_frames);
 
     res = end_render_frame(&app->rndr, cam, ctxt->time_pts.dt);
+    
     ptimer_split(&pt);
     render_tm += pt.dt;
 

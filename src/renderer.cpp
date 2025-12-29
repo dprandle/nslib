@@ -71,29 +71,29 @@ struct draw_call
     sizet ubo_offset;
 };
 
-struct material_draw_group
+struct material_draw_bucket
 {
     const material_info *mi;
     sizet set_layouti;
     array<draw_call> dcs;
 };
 
-struct pipeline_draw_group
+struct pipeline_draw_bucket
 {
     const pipeline_info *plinfo;
-    // Not to be conused with the set index in the descriptor set layout, this is the index of the descriptor set struct
+    // Not to be confused with the set index in the descriptor set layout, this is the index of the descriptor set struct
     // that should be bound during draw - ie
     sizet set_layouti;
-    hmap<rid, material_draw_group *> mats;
+    hmap<rid, material_draw_bucket *> mats;
 };
 
-struct render_pass_draw_group
+struct render_pass_draw_bucket
 {
     const rpass_info *rpinfo;
     sizet frame_set_layouti{INVALID_IND};
     sizet obj_set_layouti{INVALID_IND};
     array<VkDescriptorSetLayout> set_layouts;
-    hmap<rid, pipeline_draw_group *> plines;
+    hmap<rid, pipeline_draw_bucket *> plines;
 };
 
 intern void imgui_mem_free(void *ptr, void *usr)
@@ -748,16 +748,13 @@ bool upload_to_gpu(const mesh *msh, renderer *rndr)
 
         // Our required vert and ind size might be a little less than the avail block size, if a block was picked that
         // was big enough to fit our needs but the remaining available in the block was less than the required min block
-        // size fot the sbuffer
+        // size for the sbuffer
         VkBufferCopy vert_region{}, ind_region{};
         vert_region.size = req_vert_byte_size;
         vert_region.dstOffset = new_smentry.verts.offset * sizeof(vertex);
 
         ind_region.size = req_inds_byte_size;
         ind_region.dstOffset = new_smentry.inds.offset * sizeof(ind_t);
-
-        // TODO: Handle error conditions here - there are several reasons why a buffer upload might fail - for new we
-        // just asrt it worked
 
         // Upload our vert data to the GPU
         int ret = vkr_stage_and_upload_buffer_data(&dev->buffers[rndr->rmi.verts.buf_ind],
@@ -767,6 +764,9 @@ bool upload_to_gpu(const mesh *msh, renderer *rndr)
                                                    &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX],
                                                    VKR_RENDER_QUEUE,
                                                    &rndr->vk);
+
+        // TODO: Handle error conditions here - there are several reasons why a buffer upload might fail - for now we
+        // just asrt it worked
         asrt(ret == err_code::VKR_NO_ERROR);
 
         // Upload our ind data to the GPU
@@ -1114,20 +1114,6 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
     return vkr_end_cmd_buf(cmd_buf);
 }
 
-intern renderer_fif_data *get_current_frame(renderer *rndr)
-{
-    // Grab the current in flight frame and its command buffer
-    int current_frame_ind = rndr->finished_frames % MAX_FRAMES_IN_FLIGHT;
-    return &rndr->per_frame_data[current_frame_ind];
-}
-
-intern renderer_fif_data *get_previous_frame(renderer *rndr)
-{
-    // Grab the current in flight frame and its command buffer
-    int prev_frame_ind = (rndr->finished_frames - 1) % MAX_FRAMES_IN_FLIGHT;
-    return &rndr->per_frame_data[prev_frame_ind];
-}
-
 int init_renderer(renderer *rndr, const handle<material> &default_mat, void *win_hndl, mem_arena *fl_arena)
 {
     asrt(fl_arena->alloc_type == mem_alloc_type::FREE_LIST);
@@ -1211,520 +1197,43 @@ intern void recreate_swapchain(renderer *rndr)
     init_swapchain_images_and_framebuffer(rndr);
 }
 
-intern s32 acquire_swapchain_image(renderer *rndr, vkr_frame *cur_frame, u32 *im_ind)
-{
-    auto dev = &rndr->vk.inst.device;
-    auto prev_frame = get_previous_frame(rndr);
-    
-    // Acquire the image, signal the image_avail semaphore once the image has been acquired. We get the index back, but
-    // that doesn't mean the image is ready. The image is only ready (on the GPU side) once the image avail semaphore is triggered
-    VkResult result = vkAcquireNextImageKHR(dev->hndl, dev->swapchain.swapchain, UINT64_MAX, cur_frame->image_avail, VK_NULL_HANDLE, im_ind);
-
-    // If the image is out of date/suboptimal we need to recreate the swapchain and our caller needs to exit early as
-    // well. It seems that on some platforms, if the result from above is out of date or suboptimal, the semaphore
-    // associated with it will never get triggered. So if we were to continue and just resize at the end of frame it
-    // wouldn't work because the queue submit would never fire as it depends on this image available semaphore.
-    // At least.. i think?
-    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        if (rndr->no_resize_frames > RESIZE_DEBOUNCE_FRAME_COUNT) {
-            recreate_swapchain(rndr);
-        }
-        return result;
-    }
-    else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-        elog("Failed to acquire swapchain image");
-        return err_code::RENDER_ACQUIRE_IMAGE_FAIL;
-    }
-    return err_code::RENDER_NO_ERROR;
-}
-
-intern s32 submit_command_buffer(renderer *rndr, vkr_frame *cur_frame, vkr_command_buffer *cmd_buf, u32 image_ind)
-{
-    auto dev = &rndr->vk.inst.device;
-    // Get the info ready to submit our command buffer to the queue. We need to wait until the image avail semaphore has
-    // signaled, and then we need to trigger the render finished signal once the the command buffer completes
-    VkSubmitInfo submit_info{};
-    VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit_info.waitSemaphoreCount = 1;
-    submit_info.pWaitSemaphores = &cur_frame->image_avail;
-    submit_info.pWaitDstStageMask = wait_stages;
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &cmd_buf->hndl;
-    submit_info.signalSemaphoreCount = 1;
-    submit_info.pSignalSemaphores = &rndr->vk.inst.device.swapchain.renders_finished[image_ind];
-    if (vkQueueSubmit(dev->qfams[VKR_QUEUE_FAM_TYPE_GFX].qs[VKR_RENDER_QUEUE].hndl, 1, &submit_info, cur_frame->in_flight) != VK_SUCCESS) {
-        return err_code::RENDER_SUBMIT_QUEUE_FAIL;
-    }
-    return err_code::RENDER_NO_ERROR;
-}
-
-intern s32 present_image(renderer *rndr, vkr_frame *cur_frame, u32 image_ind)
-{
-    auto dev = &rndr->vk.inst.device;
-    // Once the rendering signal has fired, present the image (show it on screen)
-    VkPresentInfoKHR present_info{};
-    present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    present_info.waitSemaphoreCount = 1;
-    present_info.pWaitSemaphores = &rndr->vk.inst.device.swapchain.renders_finished[image_ind];
-    present_info.swapchainCount = 1;
-    present_info.pSwapchains = &dev->swapchain.swapchain;
-    present_info.pImageIndices = &image_ind;
-    present_info.pResults = nullptr; // Optional - check for individual swaps
-    VkResult result = vkQueuePresentKHR(dev->qfams[VKR_QUEUE_FAM_TYPE_PRESENT].qs[VKR_RENDER_QUEUE].hndl, &present_info);
-
-    // This purely helps with smoothness - it works fine without recreating the swapchain here and instead doing it on
-    // the next frame, but it seems to resize more smoothly doing it here
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
-        if (rndr->no_resize_frames > RESIZE_DEBOUNCE_FRAME_COUNT) {
-            recreate_swapchain(rndr);
-        }
-    }
-    else if (result != VK_SUCCESS) {
-        elog("Failed to presenet KHR");
-        return err_code::RENDER_PRESENT_KHR_FAIL;
-    }
-    return err_code::RENDER_NO_ERROR;
-}
-
-intern void push_ubo_event(renderer *rndr, const update_ubo_buffer_event &ev)
-{
-    for (sizet fif_ind = 0; fif_ind < rndr->per_frame_data.size; ++fif_ind) {
-        arr_push_back(&rndr->per_frame_data[fif_ind].buffer_updates, ev);
-    }
-}
-
-intern void update_transform_ubo_data(renderer *rndr, sizet ubo_ind, const transform *tform, sizet ubo_offset)
-{
-    auto dev = &rndr->vk.inst.device;
-    obj_ubo_data oubo{};
-    sizet obj_ubo_item_size = vkr_uniform_buffer_offset_alignment(&rndr->vk, sizeof(obj_ubo_data));
-    oubo.transform = tform->cached;
-    sizet byte_offset = obj_ubo_item_size * ubo_offset;
-    char *adjusted_addr = (char *)dev->buffers[ubo_ind].mem_info.pMappedData + byte_offset;
-    memcpy(adjusted_addr, &oubo, obj_ubo_item_size);
-}
-
-intern void handle_post_transform_event(renderer *rndr, vkr_frame *cur_frame, const update_ubo_buffer_event &ev)
-{
-    update_transform_ubo_data(rndr, cur_frame->obj_ubo_ind, ev.tf.tform, ev.tf.ubo_offset);
-}
-
-intern void handle_post_transform_ubo_update_all(renderer *rndr, vkr_frame *cur_frame, const update_ubo_buffer_event &ev)
-{
-    for (int i = 0; i < ev.tfall.transforms->entries.size; ++i) {
-        update_transform_ubo_data(rndr, cur_frame->obj_ubo_ind, &ev.tfall.transforms->entries[i], i);
-    }
-}
-
-intern void update_material_ubo_data(renderer *rndr, sizet ubo_ind, const material_info *mi)
-{
-    auto dev = &rndr->vk.inst.device;
-    // Now update our material ubo with this mat data
-    material_ubo_data mat_ubo{};
-    mat_ubo.color = mi->mat->col;
-    sizet mat_ubo_item_size = vkr_uniform_buffer_offset_alignment(&rndr->vk, sizeof(material_ubo_data));
-    sizet byte_offset = mat_ubo_item_size * mi->ubo_offset;
-    char *adjusted_addr = (char *)dev->buffers[ubo_ind].mem_info.pMappedData + byte_offset;
-    memcpy(adjusted_addr, &mat_ubo, mat_ubo_item_size);
-}
-
-intern void handle_post_material_ubo_update(renderer *rndr, vkr_frame *cur_frame, const update_ubo_buffer_event &ev)
-{
-    update_material_ubo_data(rndr, cur_frame->mat_ubo_ind, ev.mat.mi);
-}
-
-intern void handle_post_material_ubo_update_all(renderer *rndr, vkr_frame *cur_frame, const update_ubo_buffer_event &ev)
-{
-    auto matiter = hmap_begin(&rndr->materials);
-    while (matiter) {
-        update_material_ubo_data(rndr, cur_frame->mat_ubo_ind, &matiter->val);
-        matiter = hmap_next(&rndr->materials, matiter);
-    }
-}
-
-intern void update_pipeline_ubo_data(renderer *rndr, sizet ubo_ind, const pipeline_info *plinfo)
-{
-    auto dev = &rndr->vk.inst.device;
-
-    // Now update our pipeline ubo with this pipeline data
-    pipeline_ubo_data pl_ubo{};
-    pl_ubo.proj_view = plinfo->proj_view;
-
-    // Update the actual buffer data memory
-    sizet pl_ubo_item_size = vkr_uniform_buffer_offset_alignment(&rndr->vk, sizeof(pipeline_ubo_data));
-    sizet byte_offset = pl_ubo_item_size * plinfo->ubo_offset;
-    char *adjusted_addr = (char *)dev->buffers[ubo_ind].mem_info.pMappedData + byte_offset;
-    memcpy(adjusted_addr, &pl_ubo, pl_ubo_item_size);
-}
-
-intern void handle_post_pipeline_ubo_update(renderer *rndr, vkr_frame *cur_frame, const update_ubo_buffer_event &ev)
-{
-    update_pipeline_ubo_data(rndr, cur_frame->pl_ubo_ind, ev.pl.plinfo);
-}
-
-intern void handle_post_pipeline_ubo_update_all(renderer *rndr, vkr_frame *cur_frame, const update_ubo_buffer_event &ev)
-{
-    auto pliter = hmap_begin(&rndr->pipelines);
-    while (pliter) {
-        update_pipeline_ubo_data(rndr, cur_frame->pl_ubo_ind, &pliter->val);
-        pliter = hmap_next(&rndr->pipelines, pliter);
-    }
-}
-
-// This only creates/writes the descriptors using the current frame data ubo offsets for the draw call data structure.
-// It does not update the underlying buffers at those offsets. That is done with ubo buffer events that the user is
-// responsible for submitting whenever anything changes
-intern int update_uniform_descriptors(renderer *rndr, vkr_frame *cur_frame)
-{
-    auto dev = &rndr->vk.inst.device;
-    // rough capacity estimate - should overshoot i think
-    sizet cap = (rndr->materials.count * rndr->pipelines.count + 1) * rndr->rpasses.count;
-    array<VkWriteDescriptorSet> desc_updates(&rndr->frame_linear, cap);
-
-    auto rp_iter = hmap_begin(&rndr->dcs.rpasses);
-    while (rp_iter) {
-        vkr_add_result desc_ind =
-            vkr_add_descriptor_sets(&cur_frame->desc_pool, &rndr->vk, rp_iter->val->set_layouts.data, rp_iter->val->set_layouts.size);
-        if (desc_ind.err_code != err_code::VKR_NO_ERROR) {
-            return desc_ind.err_code;
-        }
-
-        // Add the frame rpass desc write update
-        sizet frame_ubo_item_size = vkr_uniform_buffer_offset_alignment(&rndr->vk, sizeof(frame_ubo_data));
-        add_uniform_desc_write_update(rndr,
-                                      cur_frame,
-                                      0,
-                                      frame_ubo_item_size,
-                                      cur_frame->frame_ubo_ind,
-                                      rp_iter->val->frame_set_layouti,
-                                      &desc_updates,
-                                      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-
-        // Add the dynamic per obj desc write update
-        sizet obj_ubo_item_size = vkr_uniform_buffer_offset_alignment(&rndr->vk, sizeof(obj_ubo_data));
-        add_uniform_desc_write_update(rndr,
-                                      cur_frame,
-                                      0,
-                                      obj_ubo_item_size,
-                                      cur_frame->obj_ubo_ind,
-                                      rp_iter->val->obj_set_layouti,
-                                      &desc_updates,
-                                      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
-
-        // Update material and pipeline UBOs and create the descriptor writes for them
-        auto pl_iter = hmap_begin(&rp_iter->val->plines);
-        while (pl_iter) {
-            sizet pl_ubo_item_size = vkr_uniform_buffer_offset_alignment(&rndr->vk, sizeof(pipeline_ubo_data));
-            sizet byte_offset = pl_ubo_item_size * pl_iter->val->plinfo->ubo_offset;
-            add_uniform_desc_write_update(rndr,
-                                          cur_frame,
-                                          byte_offset,
-                                          pl_ubo_item_size,
-                                          cur_frame->pl_ubo_ind,
-                                          pl_iter->val->set_layouti,
-                                          &desc_updates,
-                                          VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-
-            auto mat_iter = hmap_begin(&pl_iter->val->mats);
-            while (mat_iter) {
-                sizet mat_ubo_item_size = vkr_uniform_buffer_offset_alignment(&rndr->vk, sizeof(material_ubo_data));
-                sizet byte_offset = mat_ubo_item_size * mat_iter->val->mi->ubo_offset;
-                add_uniform_desc_write_update(rndr,
-                                              cur_frame,
-                                              byte_offset,
-                                              mat_ubo_item_size,
-                                              cur_frame->mat_ubo_ind,
-                                              mat_iter->val->set_layouti,
-                                              &desc_updates,
-                                              VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-
-                // Go through all sampler slots - if there is a valid texture in a slot then set the associated sampler descriptor
-                for (sizet sloti = 0; sloti < mat_iter->val->mi->mat->textures.size; ++sloti) {
-                    auto cur_s = &mat_iter->val->mi->mat->textures[sloti];
-                    if (is_valid(*cur_s)) {
-                        auto tex_fiter = hmap_find(&rndr->sampled_textures, *cur_s);
-                        if (tex_fiter) {
-                            add_image_sampler_desc_write_update(rndr,
-                                                                cur_frame,
-                                                                tex_fiter->val.im_view,
-                                                                tex_fiter->val.sampler,
-                                                                sloti,
-                                                                mat_iter->val->set_layouti,
-                                                                &desc_updates,
-                                                                VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-                        }
-                    }
-                }
-
-                mat_iter = hmap_next(&pl_iter->val->mats, mat_iter);
-            }
-            pl_iter = hmap_next(&rp_iter->val->plines, pl_iter);
-        }
-
-        vkUpdateDescriptorSets(dev->hndl, (u32)desc_updates.size, desc_updates.data, 0, nullptr);
-        rp_iter = hmap_next(&rndr->dcs.rpasses, rp_iter);
-    }
-    return err_code::VKR_NO_ERROR;
-}
-
-intern void process_ubo_update_events(renderer *rndr, renderer_fif_data *frame_data)
-{
-    auto dev = &rndr->vk.inst.device;
-    auto cur_frame = get_current_frame(rndr);
-
-    for (sizet i = 0; i < frame_data->buffer_updates.size; ++i) {
-        const auto &ev = frame_data->buffer_updates[i];
-        switch (ev.type) {
-        case UPDATE_BUFFER_EVENT_TYPE_TRANSFORM:
-            handle_post_transform_event(rndr, cur_frame->vkf, ev);
-            break;
-        case UPDATE_BUFFER_EVENT_TYPE_ALL_TRANSFORMS:
-            handle_post_transform_ubo_update_all(rndr, cur_frame->vkf, ev);
-            break;
-        case UPDATE_BUFFER_EVENT_TYPE_MATERIAL:
-            handle_post_material_ubo_update(rndr, cur_frame->vkf, ev);
-            break;
-        case UPDATE_BUFFER_EVENT_TYPE_ALL_MATERIALS:
-            handle_post_material_ubo_update_all(rndr, cur_frame->vkf, ev);
-            break;
-        case UPDATE_BUFFER_EVENT_TYPE_PIPELINE:
-            handle_post_pipeline_ubo_update(rndr, cur_frame->vkf, ev);
-            break;
-        case UPDATE_BUFFER_EVENT_TYPE_ALL_PIPELINES:
-            handle_post_pipeline_ubo_update_all(rndr, cur_frame->vkf, ev);
-            break;
-        default:
-            wlog("Unknown update buffer event type %d", ev.type);
-        }
-    }
-
-    // Clear the events
-    arr_clear(&frame_data->buffer_updates);
-}
-
-void post_transform_ubo_update(renderer *rndr, const transform *tf, const comp_table<transform> *ctbl)
-{
-    update_ubo_buffer_event ev{};
-    ev.type = UPDATE_BUFFER_EVENT_TYPE_TRANSFORM;
-    ev.tf.ubo_offset = get_comp_ind(tf, ctbl);
-    ev.tf.tform = tf;
-    push_ubo_event(rndr, ev);
-}
-
-void post_transform_ubo_update_all(renderer *rndr, const comp_table<transform> *ctbl)
-{
-    update_ubo_buffer_event ev{};
-    ev.type = UPDATE_BUFFER_EVENT_TYPE_ALL_TRANSFORMS;
-    ev.tfall.transforms = ctbl;
-    push_ubo_event(rndr, ev);
-}
-
-void post_material_ubo_update(renderer *rndr, const rid &mat_id)
-{
-    auto mat_fiter = hmap_find(&rndr->materials, mat_id);
-    if (mat_fiter) {
-        update_ubo_buffer_event ev{};
-        ev.type = UPDATE_BUFFER_EVENT_TYPE_MATERIAL;
-        ev.mat.mi = &mat_fiter->val;
-        push_ubo_event(rndr, ev);
-    }
-    else {
-        wlog("Could not find material %s", to_cstr(mat_id));
-    }
-}
-
-void post_material_ubo_update_all(renderer *rndr)
-{
-    update_ubo_buffer_event ev{};
-    ev.type = UPDATE_BUFFER_EVENT_TYPE_ALL_MATERIALS;
-    push_ubo_event(rndr, ev);
-}
-
-void post_pipeline_ubo_update(renderer *rndr, const rid &plid)
-{
-    auto pl_fiter = hmap_find(&rndr->pipelines, plid);
-    if (pl_fiter) {
-        update_ubo_buffer_event ev{};
-        ev.type = UPDATE_BUFFER_EVENT_TYPE_PIPELINE;
-        ev.pl.plinfo = &pl_fiter->val;
-        push_ubo_event(rndr, ev);
-    }
-    else {
-        wlog("Could not find pipeline %s", to_cstr(plid));
-    }
-}
-
-void post_pipeline_ubo_update_all(renderer *rndr)
-{
-    update_ubo_buffer_event ev{};
-    ev.type = UPDATE_BUFFER_EVENT_TYPE_ALL_PIPELINES;
-    push_ubo_event(rndr, ev);
-}
-
-void post_ubo_update_all(renderer *rndr, const comp_table<transform> *ctbl)
-{
-    // Post all transforms
-    post_transform_ubo_update_all(rndr, ctbl);
-    // Post all materials
-    post_material_ubo_update_all(rndr);
-    // Post all pipelines
-    post_pipeline_ubo_update_all(rndr);
-}
-
-void clear_static_models(renderer *rndr)
-{
-    hmap_terminate(&rndr->dcs.rpasses);
-    mem_reset_arena(&rndr->dcs.dc_linear);
-    hmap_init(&rndr->dcs.rpasses);
-}
-
-int add_static_model(renderer *rndr, const static_model *sm, sizet transform_ind, const mesh_cache *msh_cache, const material_cache *mat_cache)
-{
-    auto dev = &rndr->vk.inst.device;
-    auto cur_frame = get_current_frame(rndr);
-
-    auto rmesh = hmap_find(&rndr->rmi.meshes, sm->mesh_id);
-    asrt(rmesh);
-
-    auto msh = get_robj(msh_cache, sm->mesh_id);
-    asrt(msh);
-    asrt(rmesh->val.submesh_entrees.size == msh->submeshes.size);
-
-    for (int i = 0; i < msh->submeshes.size; ++i) {
-        auto mat = rndr->default_mat;
-        if (sm->mat_ids[i].id != 0) {
-            auto mato = get_robj(mat_cache, sm->mat_ids[i]);
-            if (mato) {
-                mat = mato;
-            }
-        }
-
-        // Go through all pipelines this material references
-        auto pl_iter = hset_begin(&mat->pipelines);
-        while (pl_iter) {
-            auto pl_fiter = hmap_find(&rndr->pipelines, pl_iter->val);
-            asrt(pl_fiter);
-            auto pline = &dev->pipelines[pl_fiter->val.plind];
-
-            // Get the pipelines render pass
-            auto rp_fiter = hmap_find(&rndr->rpasses, pl_fiter->val.rpass_id);
-            asrt(rp_fiter);
-
-            // If the render pass has not yet been added to our renderer's push list, add it now
-            auto push_rp_fiter = hmap_find(&rndr->dcs.rpasses, rp_fiter->key);
-            if (!push_rp_fiter) {
-                auto rpdg = mem_calloc<render_pass_draw_group>(1, &rndr->dcs.dc_linear);
-
-                rpdg->rpinfo = &rp_fiter->val;
-                arr_init(&rpdg->set_layouts, &rndr->dcs.dc_linear);
-                hmap_init(&rpdg->plines, hash_type, &rndr->dcs.dc_linear);
-
-                // Add the frame rpass descriptor set;
-                rpdg->frame_set_layouti = rpdg->set_layouts.size;
-                arr_emplace_back(&rpdg->set_layouts, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_FRAME]);
-
-                // Add the obj rpass descriptor set
-                rpdg->obj_set_layouti = rpdg->set_layouts.size;
-                arr_emplace_back(&rpdg->set_layouts, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_OBJECT]);
-
-                push_rp_fiter = hmap_insert(&rndr->dcs.rpasses, rp_fiter->key, rpdg);
-            }
-            asrt(push_rp_fiter);
-
-            // If the pipeline has not yey been added to our render pass' push list, add it now
-            auto push_pl_fiter = hmap_find(&push_rp_fiter->val->plines, pl_fiter->key);
-            if (!push_pl_fiter) {
-                auto pldg = mem_calloc<pipeline_draw_group>(1, &rndr->dcs.dc_linear);
-
-                pldg->plinfo = &pl_fiter->val;
-                hmap_init(&pldg->mats, hash_type, &rndr->dcs.dc_linear);
-
-                // Add the pipeline discriptor set
-                pldg->set_layouti = push_rp_fiter->val->set_layouts.size;
-                arr_emplace_back(&push_rp_fiter->val->set_layouts, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_PIPELINE]);
-
-                push_pl_fiter = hmap_insert(&push_rp_fiter->val->plines, pl_fiter->key, pldg);
-            }
-            asrt(push_pl_fiter);
-
-            // Get the material info, and create it if it doesn't exist
-            auto mat_fiter = hmap_find(&rndr->materials, mat->id);
-            if (!mat_fiter) {
-                sizet ubo_offset = rndr->materials.count;
-                mat_fiter = hmap_insert(&rndr->materials, mat->id, material_info{});
-                mat_fiter->val.mat = mat;
-                mat_fiter->val.ubo_offset = ubo_offset;
-            }
-
-            // Now create the material set, if it doesn't exist
-            auto push_mat_fiter = hmap_find(&push_pl_fiter->val->mats, mat->id);
-            if (!push_mat_fiter) {
-                auto matdg = mem_calloc<material_draw_group>(1, &rndr->dcs.dc_linear);
-
-                matdg->mi = &mat_fiter->val;
-                arr_init(&matdg->dcs, &rndr->dcs.dc_linear);
-
-                // Add the material discriptor set
-                matdg->set_layouti = push_rp_fiter->val->set_layouts.size;
-                arr_emplace_back(&push_rp_fiter->val->set_layouts, pline->descriptor_layouts[DESCRIPTOR_SET_LAYOUT_MATERIAL]);
-
-                push_mat_fiter = hmap_insert(&push_pl_fiter->val->mats, mat->id, matdg);
-            }
-            asrt(push_mat_fiter);
-
-            // Now we create the actual draw call, and add the tform to the tform uniform buffer and increase the cur index
-            draw_call dc{
-                .index_count = (u32)rmesh->val.submesh_entrees[i].inds.size,
-                .instance_count = 1,
-                .first_index = (u32)rmesh->val.submesh_entrees[i].inds.offset,
-                .vertex_offset = (u32)rmesh->val.submesh_entrees[i].verts.offset,
-                .first_instance = 0,
-                .ubo_offset = transform_ind,
-            };
-            arr_push_back(&push_mat_fiter->val->dcs, dc);
-            pl_iter = hset_next(&mat->pipelines, pl_iter);
-        }
-    }
-
-    return err_code::VKR_NO_ERROR;
-}
-
-int begin_render_frame(renderer *rndr, int finished_frame_count)
+int begin_render_frame(renderer *rndr, int finished_frames)
 {
     auto dev = &rndr->vk.inst.device;
 
     mem_reset_arena(&rndr->vk_frame_linear);
     mem_reset_arena(&rndr->frame_linear);
 
+    // Finalize IM GUI data - not dependent on our render stuff currently
+    ImGui::Render();
+
     // Update finished frames which is used to get the current frame
-    rndr->finished_frames = finished_frame_count;
-    auto cur_frame = get_current_frame(rndr);
+    rndr->finished_frames = finished_frames;
+    int current_frame_ind = rndr->finished_frames % MAX_FRAMES_IN_FLIGHT;
+    vkr_frame *cur_frame = &dev->rframes[current_frame_ind];
 
     // We wait until this FIF's fence has been triggered before rendering the frame. FIF fences are created in a
     // triggered state so there will be no waiting on the first time. We then reset the fence (aka set it to
     // untriggered) and it is passed to the vkQueueSubmit call to trigger it again. So if not the first time rendering
     // this FIF, we are waiting for the vkQueueSubmit from the previous time this FIF was rendered to complete
-    VkResult vk_err = vkWaitForFences(dev->hndl, 1, &cur_frame->vkf->in_flight, VK_TRUE, UINT64_MAX);
-    if (vk_err != VK_SUCCESS) {
+    int vk_res = vkWaitForFences(dev->hndl, 1, &cur_frame->in_flight, VK_TRUE, UINT64_MAX);
+    if (vk_res != VK_SUCCESS) {
         elog("Failed to wait for fence");
         return err_code::RENDER_WAIT_FENCE_FAIL;
     }
 
     // Clear all prev desc sets
-    vkr_reset_descriptor_pool(&cur_frame->vkf->desc_pool, &rndr->vk);
-
-    ImGui_ImplVulkan_NewFrame();
-    ImGui_ImplSDL3_NewFrame();
-    ImGui::NewFrame();
-
-    return err_code::VKR_NO_ERROR;
+    vkr_reset_descriptor_pool(&cur_frame->desc_pool, &rndr->vk);
+    
+    return err_code::RENDER_NO_ERROR;
 }
+
 
 int end_render_frame(renderer *rndr, camera *cam, f64 dt)
 {
     auto dev = &rndr->vk.inst.device;
-    auto cur_frame = get_current_frame(rndr);
+    int current_frame_ind = rndr->finished_frames % MAX_FRAMES_IN_FLIGHT;
+    vkr_frame *cur_frame = &dev->rframes[current_frame_ind];
 
     if (window_resized_this_frame(rndr->vk.cfg.window)) {
         rndr->no_resize_frames = 0.0;
@@ -1733,20 +1242,31 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
         rndr->no_resize_frames += dt;
     }
 
-    // Get the next available swapchain image index or return if the
+    /////////////////////////////////
+    // Acquire Swapchain Image Ind //
+    /////////////////////////////////
+    // Acquire the image, signal the image_avail semaphore once the image has been acquired. We get the index back, but
+    // that doesn't mean the image is ready. The image is only ready (on the GPU side) once the image avail semaphore is triggered
     u32 im_ind{};
-    s32 err = acquire_swapchain_image(rndr, cur_frame->vkf, &im_ind);
-    if (err != err_code::RENDER_NO_ERROR) {
-        ImGui::EndFrame();
-        if (err != err_code::RENDER_ACQUIRE_IMAGE_FAIL) {
-            return err_code::RENDER_NO_ERROR;
-        }
-        return err;
-    }
+    int vk_res = vkAcquireNextImageKHR(dev->hndl, dev->swapchain.swapchain, UINT64_MAX, cur_frame->image_avail, VK_NULL_HANDLE, &im_ind);
 
-    // Recreating the swapchain here before even acquiring images gives us the smoothest resizing, but we still need to
-    // handle recreation for other things that might happen so keep the acquire image and present image recreations
-    // based on return value
+    // If the image is out of date/suboptimal we need to recreate the swapchain and our caller needs to exit early as
+    // well. It seems that on some platforms, if the result from above is out of date or suboptimal, the semaphore
+    // associated with it will never get triggered. So if we were to continue and just resize at the end of frame it
+    // wouldn't work because the queue submit would never fire as it depends on this image available semaphore.
+    // At least.. i think?
+    if (vk_res == VK_ERROR_OUT_OF_DATE_KHR) {
+        if (rndr->no_resize_frames > RESIZE_DEBOUNCE_FRAME_COUNT) {
+            recreate_swapchain(rndr);
+        }
+        return vk_res;
+    }
+    else if (vk_res != VK_SUCCESS && vk_res != VK_SUBOPTIMAL_KHR) {
+        elog("Failed to acquire swapchain image");
+        return err_code::RENDER_ACQUIRE_IMAGE_FAIL;
+    }
+    
+    
     if (cam) {
         ivec2 sz = get_window_pixel_size(rndr->vk.cfg.window);
         if (cam->vp_size != sz) {
@@ -1764,51 +1284,87 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
         }
     }
 
-    // Here we reset the fence for the current frame.. we wait for it to be signaled in render_frame_begin before
-    // clearing the frame's descriptor pool (so we don't clear any that are in use). Without resetting the fence,
-    // vkWaitForFences call just immediately returns as the fence is still triggered.
-    int vk_err = vkResetFences(dev->hndl, 1, &cur_frame->vkf->in_flight);
-    if (vk_err != VK_SUCCESS) {
-        elog("Failed to reset fence");
-        return err_code::RENDER_RESET_FENCE_FAIL;
-    }
-
-    // Once we have acquired our fences, update all buffers that need updating
-    process_ubo_update_events(rndr, cur_frame);
-
-    // Update all uniform buffers and write the descriptor set updates for them
-    // This takes about %20 of the run frame
-    err = update_uniform_descriptors(rndr, cur_frame->vkf);
-    if (err != err_code::RENDER_NO_ERROR) {
-        return err;
-    }
-
-    // Get IM GUI data
-    ImGui::Render();
 
     // The command buf index struct has an ind struct into the pool the cmd buf comes from, and then an ind into the buffer
     // The ind into the pool has an ind into the queue family (as that contains our array of command pools) and then and
     // ind to the command pool
-    auto buf_ind = cur_frame->vkf->cmd_buf_ind;
+    auto buf_ind = cur_frame->cmd_buf_ind;
     auto cmd_buf = &dev->qfams[buf_ind.pool_ind.qfam_ind].cmd_pools[buf_ind.pool_ind.pool_ind].buffers[buf_ind.buffer_ind];
     auto fb = &dev->framebuffers[im_ind];
 
+    ///////////////////////////
+    // Record Command Buffer //
+    ///////////////////////////
     // We have the acquired image index, though we don't know when it will be ready to have ops submitted, we can record
     // the ops in the command buffer and submit once it is ready
     // This takes about %80 of the run frame
-    err = record_command_buffer(rndr, fb, cur_frame->vkf, cmd_buf);
-    if (err != err_code::RENDER_NO_ERROR) {
-        return err;
+    vk_res = record_command_buffer(rndr, fb, cur_frame, cmd_buf);
+    if (vk_res != err_code::RENDER_NO_ERROR) {
+        return vk_res;
     }
 
-    // Submit command buffer to GPU
-    err = submit_command_buffer(rndr, cur_frame->vkf, cmd_buf, im_ind);
-    if (err != err_code::RENDER_NO_ERROR) {
-        return err;
+    /////////////////////
+    // Reset FIF Fence //
+    /////////////////////
+    // Here we reset the fence for the current frame fence as we know we are going to call queue submit which is the
+    // only thing that will trigger the fence - so this is why this reset needs to come here (rather than right after waiting)
+    vk_res = vkResetFences(dev->hndl, 1, &cur_frame->in_flight);
+    if (vk_res != VK_SUCCESS) {
+        elog("Failed to reset fence");
+        return err_code::RENDER_RESET_FENCE_FAIL;
     }
-    auto ret = present_image(rndr, cur_frame->vkf, im_ind);
+    
 
-    return ret;
+    //////////////////////////////////
+    // Submit command buffer to GPU //
+    //////////////////////////////////
+    // Get the info ready to submit our command buffer to the queue. We need to wait until the image avail semaphore has
+    // signaled, and then we need to trigger the render finished signal once the the command buffer completes
+    VkSubmitInfo submit_info{};
+    VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit_info.waitSemaphoreCount = 1;
+    submit_info.pWaitSemaphores = &cur_frame->image_avail;
+    submit_info.pWaitDstStageMask = wait_stages;
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &cmd_buf->hndl;
+    submit_info.signalSemaphoreCount = 1;
+    submit_info.pSignalSemaphores = &rndr->vk.inst.device.swapchain.renders_finished[im_ind];
+    if (vkQueueSubmit(dev->qfams[VKR_QUEUE_FAM_TYPE_GFX].qs[VKR_RENDER_QUEUE].hndl, 1, &submit_info, cur_frame->in_flight) != VK_SUCCESS) {
+        return err_code::RENDER_SUBMIT_QUEUE_FAIL;
+    }
+
+    ///////////////////
+    // Present Image //
+    ///////////////////
+    // Once the rendering signal has fired, present the image (show it on screen)
+    VkPresentInfoKHR present_info{};
+    present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    present_info.waitSemaphoreCount = 1;
+    present_info.pWaitSemaphores = &rndr->vk.inst.device.swapchain.renders_finished[im_ind];
+    present_info.swapchainCount = 1;
+    present_info.pSwapchains = &dev->swapchain.swapchain;
+    present_info.pImageIndices = &im_ind;
+    present_info.pResults = nullptr; // Optional - check for individual swaps
+    vk_res = vkQueuePresentKHR(dev->qfams[VKR_QUEUE_FAM_TYPE_PRESENT].qs[VKR_RENDER_QUEUE].hndl, &present_info);
+
+    // This purely helps with smoothness - it works fine without recreating the swapchain here and instead doing it on
+    // the next frame, but it seems to resize more smoothly doing it here
+    if (vk_res == VK_ERROR_OUT_OF_DATE_KHR || vk_res == VK_SUBOPTIMAL_KHR) {
+        if (rndr->no_resize_frames > RESIZE_DEBOUNCE_FRAME_COUNT) {
+            recreate_swapchain(rndr);
+        }
+    }
+    else if (vk_res != VK_SUCCESS) {
+        elog("Failed to presenet KHR");
+        return err_code::RENDER_PRESENT_KHR_FAIL;
+    }
+    
+    return err_code::RENDER_NO_ERROR;
+}
+
+int end_render_frame(renderer *rndr, camera *cam, f64 dt)
+{
 }
 
 void terminate_renderer(renderer *rndr)
