@@ -704,12 +704,12 @@ bool upload_to_gpu(const texture *tex, renderer *rndr)
         return err;
     }
 
-    sampled_texture_info stex_info{};
+    texture_info stex_info{};
     stex_info.im = vkr_add_image(dev, im);
     stex_info.im_view = vkr_add_image_view(dev, iview);
     stex_info.sampler = vkr_add_sampler(dev, sampler);
 
-    auto ins = hmap_insert(&rndr->sampled_textures, tex->id, stex_info);
+    auto ins = hmap_insert(&rndr->textures, tex->id, stex_info);
     if (!ins) {
         wlog("Failed to insert sampled texture %s into renderer sampled texture map", str_cstr(tex->name));
         vkr_terminate_image(&im);
@@ -1125,7 +1125,7 @@ int init_renderer(renderer *rndr, const handle<material> &default_mat, void *win
     hmap_init(&rndr->rpasses, hash_type, fl_arena);
     hmap_init(&rndr->pipelines, hash_type, fl_arena);
     hmap_init(&rndr->materials, hash_type, fl_arena);
-    hmap_init(&rndr->sampled_textures, hash_type, fl_arena);
+    hmap_init(&rndr->textures, hash_type, fl_arena);
 
     mem_init_lin_arena(&rndr->dcs.dc_linear, 100 * MB_SIZE, fl_arena, "dcs");
     hmap_init(&rndr->dcs.rpasses);
@@ -1394,7 +1394,7 @@ void terminate_renderer(renderer *rndr)
     hmap_terminate(&rndr->rpasses);
     hmap_terminate(&rndr->pipelines);
     hmap_terminate(&rndr->materials);
-    hmap_terminate(&rndr->sampled_textures);
+    hmap_terminate(&rndr->textures);
 }
 
 } // namespace nslib

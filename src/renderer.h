@@ -129,17 +129,21 @@ struct render_pass_draw_bucket;
 struct imgui_ctxt;
 struct profile_timepoints;
 
-struct sampled_texture_info
+struct texture_info
 {
     //sizet ubo_offset{};
     sizet im;
+};
+
+struct texture_sampler_info {
     sizet im_view;
-    sizet sampler;
+    sizet im_sampler;
 };
 
 struct material_info
 {
     handle<material> mat{};
+    sizet descriptor_set_ind{};
     sizet ubo_offset{};
 };
 
@@ -190,7 +194,7 @@ struct renderer
     hmap<rid, material_info> materials{};
 
     // Info needed for setting up a sampled texture in shader
-    hmap<rid, sampled_texture_info> sampled_textures{};
+    hmap<rid, texture_info> textures{};
 
     // ImGUI context
     imgui_ctxt imgui{};
@@ -236,7 +240,7 @@ int init_renderer(renderer *rndr, const handle<material> &default_mat, void *win
 
 int begin_render_frame(renderer *rndr, int finished_frames);
 
-int end_render_frame(renderer *rndr, camera *cam, f64 dt);.> 
+int end_render_frame(renderer *rndr, camera *cam, f64 dt); 
 
 void terminate_renderer(renderer *rndr);
 

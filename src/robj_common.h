@@ -16,6 +16,10 @@ enum robj_type : u32
     ROBJ_TYPE_USER,
 };
 
+enum robj_flags : u32 {
+    ROBJ_FLAG_DIRTY = (1 << 0)
+};
+
 const sizet ROBJ_TYPE_DEFAULT_BUDGET[ROBJ_TYPE_USER] = {256, 256, 256};
 
 #define ROBJ(type)                                                                                                                         \

@@ -278,7 +278,9 @@ void simulate(platform_ctxt *ctxt, app_data *app, f64 dt) {
 int run_frame(platform_ctxt *ctxt, void *user_data)
 {
     auto app = (app_data *)user_data;
+    auto cam = get_comp<camera>(app->cam_id, &app->rgn.cdb);
     profile_timepoints pt;
+    
 
     // Spin some entities
     ptimer_restart(&pt);
@@ -299,6 +301,8 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
 
     int res = begin_render_frame(&app->rndr, ctxt->finished_frames);
 
+    // Gather visible items and do stuff
+    
     res = end_render_frame(&app->rndr, cam, ctxt->time_pts.dt);
     
     ptimer_split(&pt);
