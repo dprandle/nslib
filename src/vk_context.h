@@ -27,6 +27,7 @@ enum vkr
     VKR_GET_SWAPCHAIN_IMAGES_FAIL,
     VKR_CREATE_IMAGE_VIEW_FAIL,
     VKR_CREATE_SHADER_MODULE_FAIL,
+    VKR_INIT_DESCRIPTOR_SET_LAYOUT_FAIL,
     VKR_CREATE_PIPELINE_LAYOUT_FAIL,
     VKR_CREATE_RENDER_PASS_FAIL,
     VKR_CREATE_PIPELINE_FAIL,
@@ -70,6 +71,11 @@ inline constexpr sizet MAX_FRAMES_IN_FLIGHT = 2;
 inline constexpr u32 VKR_INVALID = (u32)-1;
 inline constexpr u32 MEM_ALLOC_TYPE_COUNT = VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE + 1;
 inline constexpr u32 VKR_API_VERSION = VK_API_VERSION_1_3;
+inline constexpr sizet MAX_DESCRIPTOR_SET_LAYOUT_COUNT = 4;
+inline constexpr sizet MAX_PUSH_CONSTANT_RANGES = 12;
+inline constexpr sizet MAX_VERT_BINDINGS = 12;
+inline constexpr sizet MAX_VERT_ATTRIBS = 12;
+
 struct vkr_device;
 
 struct vk_mem_alloc_stats
@@ -160,16 +166,9 @@ struct vkr_image_view_cfg
     const vkr_image *image;
 };
 
-struct vkr_image_view
-{
-    VkImageView hndl{VK_NULL_HANDLE};
-    const VkAllocationCallbacks *alloc_cbs;
-    const vkr_device *dev;
-};
-
 struct vkr_framebuffer_attachment
 {
-    vkr_image_view iview;
+    VkImageView im_view;
     VkClearValue cv;
 };
 
@@ -294,7 +293,7 @@ struct vkr_frame
 struct vkr_swapchain
 {
     array<vkr_image> images;
-    array<vkr_image_view> image_views;
+    array<VkImageView> image_views;
     array<array<vkr_framebuffer_attachment>> other_attachments;
     array<VkSemaphore> renders_finished;
     VkFormat format;
@@ -317,11 +316,6 @@ struct vkr_rpass_cfg
     static_array<VkAttachmentDescription, 16> attachments;
     static_array<vkr_rpass_cfg_subpass, 16> subpasses;
     static_array<VkSubpassDependency, 16> subpass_dependencies;
-};
-
-struct vkr_rpass
-{
-    VkRenderPass hndl{VK_NULL_HANDLE};
 };
 
 struct vkr_shader_stage
@@ -392,20 +386,25 @@ struct vkr_pipeline_cfg_depth_stencil
     f32 max_depth_bounds;
 };
 
+struct vkr_vertex_layout {
+    static_array<VkVertexInputBindingDescription, MAX_VERT_BINDINGS> bindings{};
+    static_array<VkVertexInputAttributeDescription, MAX_VERT_ATTRIBS> attribs{};
+};
+
 struct vkr_pipeline_cfg
 {
+
     vkr_shader_stage shader_stages[VKR_SHADER_STAGE_COUNT];
 
     // Render pass info
-    const vkr_rpass *rpass;
+    VkRenderPass rpass{};
     u32 subpass{};
 
     // Dynamic states
     static_array<VkDynamicState, 32> dynamic_states;
 
     // Vertex Input
-    static_array<VkVertexInputBindingDescription, 32> vert_binding_desc;
-    static_array<VkVertexInputAttributeDescription, 32> vert_attrib_desc;
+    vkr_vertex_layout vert_desc;
 
     // Default Scissor/Viewport
     static_array<VkViewport, 16> viewports;
@@ -427,23 +426,26 @@ struct vkr_pipeline_cfg
     vkr_pipeline_cfg_depth_stencil depth_stencil;
 
     // Descriptor Sets and push constants
-    static_array<vkr_descriptor_set_layout_desc, 4> set_layouts;
-    static_array<VkPushConstantRange, 32> push_constant_ranges;
+    VkPipelineLayout layout_hndl;
 };
 
-struct vkr_pipeline
+struct vkr_descriptor_set_layout_cfg
 {
-    vkr_rpass rpass;
-    VkPipelineLayout layout_hndl{VK_NULL_HANDLE};
-    static_array<VkDescriptorSetLayout, 4> descriptor_layouts;
-    VkPipeline hndl{VK_NULL_HANDLE};
+    static_array<vkr_descriptor_set_layout_desc, MAX_DESCRIPTOR_SET_LAYOUT_COUNT> set_layout_descs;
+};
+
+struct vkr_pipeline_layout_cfg
+{
+    const VkDescriptorSetLayout *set_layouts;
+    sizet set_layout_count;
+    static_array<VkPushConstantRange, MAX_PUSH_CONSTANT_RANGES> push_constant_ranges;
 };
 
 struct vkr_framebuffer_cfg
 {
     uvec2 size;
     u32 layers{1};
-    const vkr_rpass *rpass;
+    VkRenderPass rpass;
     const vkr_framebuffer_attachment *attachments;
     u32 attachment_count;
 };
@@ -452,14 +454,9 @@ struct vkr_framebuffer
 {
     uvec2 size;
     u32 layers;
-    vkr_rpass rpass;
+    VkRenderPass rpass;
     array<vkr_framebuffer_attachment> attachments;
     VkFramebuffer hndl{VK_NULL_HANDLE};
-};
-
-struct vkr_queue
-{
-    VkQueue hndl{VK_NULL_HANDLE};
 };
 
 struct vkr_device_queue_fam_info
@@ -467,7 +464,7 @@ struct vkr_device_queue_fam_info
     u32 fam_ind;
     sizet default_pool;
     sizet transient_pool;
-    array<vkr_queue> qs;
+    array<VkQueue> qs;
     array<vkr_command_pool> cmd_pools;
 };
 
@@ -475,13 +472,8 @@ struct vkr_device
 {
     VkDevice hndl{VK_NULL_HANDLE};
     vkr_device_queue_fam_info qfams[VKR_QUEUE_FAM_TYPE_COUNT];
-    array<vkr_rpass> render_passes;
-    array<vkr_pipeline> pipelines;
     array<vkr_framebuffer> framebuffers;
     array<vkr_buffer> buffers;
-    array<vkr_image> images;
-    array<vkr_image_view> image_views;
-    array<vkr_sampler> samplers;
 
     vkr_swapchain swapchain;
     static_array<vkr_frame, MAX_FRAMES_IN_FLIGHT> rframes;
@@ -583,14 +575,22 @@ vkr_add_result vkr_add_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, s
 void vkr_remove_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, sizet ind, sizet count = 1);
 
 // Render passes
-sizet vkr_add_render_pass(vkr_device *device, const vkr_rpass &copy = {});
-int vkr_init_render_pass(vkr_rpass *rpass, const vkr_rpass_cfg *cfg, const vkr_context *vk);
-void vkr_terminate_render_pass(const vkr_rpass *rpass, const vkr_context *vk);
+int vkr_init_render_pass(VkRenderPass *hndl, const vkr_rpass_cfg *cfg, const vkr_context *vk);
+void vkr_terminate_render_pass(VkRenderPass hndl, const vkr_context *vk);
+
+// Descriptor set layouts
+int vkr_init_descriptor_set_layouts(VkDescriptorSetLayout *hndls, const vkr_descriptor_set_layout_cfg *cfg, const vkr_context *vk);
+void vkr_terminate_descriptor_set_layouts(VkDescriptorSetLayout *layouts, sizet size, const vkr_context *vk);
+
+// Pipeline layouts
+int vkr_init_pipeline_layout(VkPipelineLayout *hndl, const vkr_pipeline_layout_cfg *cfg, const vkr_context *vk);
+void vkr_terminate_pipeline_layout(VkPipelineLayout hndl, const vkr_context *vk);
 
 // Pipelines
-sizet vkr_add_pipeline(vkr_device *device, const vkr_pipeline &copy = {});
-int vkr_init_pipeline(vkr_pipeline *pipe_info, const vkr_pipeline_cfg *cfg, const vkr_context *vk);
-void vkr_terminate_pipeline(const vkr_pipeline *pipe_info, const vkr_context *vk_ctxt);
+int vkr_init_pipeline(VkPipeline *hndl, const vkr_pipeline_cfg *cfg, const vkr_context *vk);
+void vkr_terminate_pipeline(VkPipeline hndl, const vkr_context *vk_ctxt);
+
+// Shader module
 int vkr_init_shader_module(VkShaderModule *module, const byte_array *code, const vkr_context *vk);
 void vkr_terminate_shader_module(VkShaderModule module, const vkr_context *vk);
 
@@ -620,7 +620,6 @@ int vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
                                      const vkr_context *vk);
 
 // Images
-sizet vkr_add_image(vkr_device *device, const vkr_image &copy = {});
 int vkr_init_image(vkr_image *image, const vkr_image_cfg *cfg);
 void vkr_terminate_image(vkr_image *image);
 int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
@@ -636,12 +635,14 @@ int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
                                     vkr_device_queue_fam_info *cmd_q,
                                     sizet qind,
                                     const vkr_context *vk);
-sizet vkr_add_image_view(vkr_device *device, const vkr_image_view &copy = {});
-int vkr_init_image_view(vkr_image_view *iview, const vkr_image_view_cfg *cfg, const vkr_context *vk);
-void vkr_terminate_image_view(vkr_image_view *iview);
-sizet vkr_add_sampler(vkr_device *device, const vkr_sampler &copy = {});
-int vkr_init_sampler(vkr_sampler *sampler, const vkr_sampler_cfg *cfg, const vkr_context *vk);
-void vkr_terminate_sampler(vkr_sampler *sampler);
+
+// Image views
+int vkr_init_image_view(VkImageView *hndl, const vkr_image_view_cfg *cfg, const vkr_context *vk);
+void vkr_terminate_image_view(VkImageView hndl, const vkr_context *vk);
+
+// Samplers
+int vkr_init_sampler(VkSampler *hndl, const vkr_sampler_cfg *cfg, const vkr_context *vk);
+void vkr_terminate_sampler(VkSampler sampler, const vkr_context *vk);
 
 // Returns the index if the first swapchain framebuffer added
 sizet vkr_add_swapchain_framebuffers(vkr_device *device);
@@ -650,7 +651,7 @@ sizet vkr_add_swapchain_framebuffers(vkr_device *device);
 // The other_attachment image view will be added to each framebuffer (so make sure that is okay)
 void vkr_init_swapchain_framebuffers(vkr_device *device,
                                      const vkr_context *vk,
-                                     const vkr_rpass *rpass,
+                                     VkRenderPass rpass,
                                      const vkr_framebuffer_attachment &other_attachment,
                                      sizet fb_offset = 0);
 
@@ -658,7 +659,7 @@ void vkr_init_swapchain_framebuffers(vkr_device *device,
 // The other_attachments image views will be added to each framebuffer (so make sure that is okay)
 void vkr_init_swapchain_framebuffers(vkr_device *device,
                                      const vkr_context *vk,
-                                     const vkr_rpass *rpass,
+                                     VkRenderPass rpass,
                                      const array<vkr_framebuffer_attachment> &other_attachments,
                                      sizet fb_offset = 0);
 
@@ -668,7 +669,7 @@ void vkr_init_swapchain_framebuffers(vkr_device *device,
 // as the swapchain images array.
 void vkr_init_swapchain_framebuffers(vkr_device *device,
                                      const vkr_context *vk,
-                                     const vkr_rpass *rpass,
+                                     VkRenderPass rpass,
                                      const array<array<vkr_framebuffer_attachment>> *other_attachments,
                                      sizet fb_offset = 0);
 
@@ -708,7 +709,7 @@ int vkr_end_cmd_buf(const vkr_command_buffer *buf);
 
 void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf,
                          const vkr_framebuffer *fb,
-                         const vkr_rpass *rpass,
+                         VkRenderPass rpass,
                          const VkClearValue *att_clear_vals,
                          sizet clear_val_size);
 void vkr_cmd_end_rpass(const vkr_command_buffer *cmd_buf);

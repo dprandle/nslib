@@ -511,13 +511,8 @@ int vkr_init_device(vkr_device *dev,
                     const char *const *device_extensions,
                     u32 dev_ext_count)
 {
-    arr_init(&dev->render_passes, vk->cfg.arenas.persistent_arena);
     arr_init(&dev->framebuffers, vk->cfg.arenas.persistent_arena);
-    arr_init(&dev->pipelines, vk->cfg.arenas.persistent_arena);
     arr_init(&dev->buffers, vk->cfg.arenas.persistent_arena);
-    arr_init(&dev->images, vk->cfg.arenas.persistent_arena);
-    arr_init(&dev->image_views, vk->cfg.arenas.persistent_arena);
-    arr_init(&dev->samplers, vk->cfg.arenas.persistent_arena);
 
     ilog("Creating vk device and queues");
     const vkr_queue_families *qfams = &vk->inst.pdev_info.qfams;
@@ -606,7 +601,7 @@ int vkr_init_device(vkr_device *dev,
         dev->qfams[i].fam_ind = qfams->qinfo[i].index;
         for (u32 qind = 0; qind < qfams->qinfo[i].requested_count; ++qind) {
             u32 adjusted_ind = qind + offsets[i];
-            vkGetDeviceQueue(dev->hndl, qfams->qinfo[i].index, adjusted_ind, &dev->qfams[i].qs[qind].hndl);
+            vkGetDeviceQueue(dev->hndl, qfams->qinfo[i].index, adjusted_ind, &dev->qfams[i].qs[qind]);
             ilog("Getting queue %d from queue family %d: %p", adjusted_ind, qfams->qinfo[i].index, dev->qfams[i].qs[qind]);
         }
 
@@ -847,7 +842,7 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
         swap_create.imageExtent.width, swap_support.capabilities.minImageExtent.width, swap_support.capabilities.maxImageExtent.width);
     swap_create.imageExtent.height = std::clamp(
         swap_create.imageExtent.height, swap_support.capabilities.minImageExtent.height, swap_support.capabilities.maxImageExtent.height);
-    
+
     ilog("Should be setting extent to {%d %d} (min {%d %d} max {%d %d})",
          swap_create.imageExtent.width,
          swap_create.imageExtent.height,
@@ -892,7 +887,7 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
     }
     arr_terminate(&simages);
 
-    arr_resize(&sw_info->image_views, image_count, vkr_image_view{});
+    arr_resize(&sw_info->image_views, image_count, VK_NULL_HANDLE);
     arr_resize(&sw_info->renders_finished, image_count, VK_NULL_HANDLE);
     for (int i = 0; i < image_count; ++i) {
         vkr_image_view_cfg iview_create{};
@@ -913,7 +908,7 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
             return err_code::VKR_CREATE_SEMAPHORE_FAIL;
         }
     }
-    
+
     ilog("Successfully set up swapchain with %d image views", sw_info->image_views.size);
     vkr_terminate_pdevice_swapchain_support(&swap_support);
 
@@ -1052,7 +1047,7 @@ void vkr_terminate_shader_module(VkShaderModule module, const vkr_context *vk)
     vkDestroyShaderModule(vk->inst.device.hndl, module, &vk->alloc_cbs);
 }
 
-int vkr_init_render_pass(vkr_rpass *rpass, const vkr_rpass_cfg *cfg, const vkr_context *vk)
+int vkr_init_render_pass(VkRenderPass *hndl, const vkr_rpass_cfg *cfg, const vkr_context *vk)
 {
     VkAttachmentReference col_att_ref{};
     col_att_ref.attachment = 0;
@@ -1099,23 +1094,16 @@ int vkr_init_render_pass(vkr_rpass *rpass, const vkr_rpass_cfg *cfg, const vkr_c
 
     arr_terminate(&subpasses);
 
-    if (vkCreateRenderPass(vk->inst.device.hndl, &rpass_info, &vk->alloc_cbs, &rpass->hndl) != VK_SUCCESS) {
+    if (vkCreateRenderPass(vk->inst.device.hndl, &rpass_info, &vk->alloc_cbs, hndl) != VK_SUCCESS) {
         elog("Failed to create render pass");
         return err_code::VKR_CREATE_RENDER_PASS_FAIL;
     }
     return err_code::VKR_NO_ERROR;
 }
 
-sizet vkr_add_render_pass(vkr_device *device, const vkr_rpass &copy)
+void vkr_terminate_render_pass(VkRenderPass hndl, const vkr_context *vk)
 {
-    sizet ind = device->render_passes.size;
-    arr_push_back(&device->render_passes, copy);
-    return ind;
-}
-
-void vkr_terminate_render_pass(const vkr_rpass *rpass, const vkr_context *vk)
-{
-    vkDestroyRenderPass(vk->inst.device.hndl, rpass->hndl, &vk->alloc_cbs);
+    vkDestroyRenderPass(vk->inst.device.hndl, hndl, &vk->alloc_cbs);
 }
 
 VkShaderStageFlagBits vkr_shader_stage_type_bits(vkr_shader_stage_type st_type)
@@ -1144,7 +1132,58 @@ const char *vkr_shader_stage_type_str(vkr_shader_stage_type st_type)
     }
 }
 
-int vkr_init_pipeline(vkr_pipeline *pipe_info, const vkr_pipeline_cfg *cfg, const vkr_context *vk)
+int vkr_init_descriptor_set_layouts(VkDescriptorSetLayout *hndls, const vkr_descriptor_set_layout_cfg *cfg, const vkr_context *vk)
+{
+    sizet created{0};
+    for (int desc_i = 0; desc_i < cfg->set_layout_descs.size; ++desc_i) {
+        VkDescriptorSetLayoutCreateInfo ci{};
+        ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        ci.bindingCount = (u32)cfg->set_layout_descs[desc_i].bindings.size;
+        ci.pBindings = cfg->set_layout_descs[desc_i].bindings.data;
+        int res = vkCreateDescriptorSetLayout(vk->inst.device.hndl, &ci, &vk->alloc_cbs, &hndls[created]);
+        if (res == VK_SUCCESS) {
+            ++created;
+        }
+        else {
+            elog("Could not create descriptor set layout with vk err %d", res);
+            for (int i = 0; i < created; ++i) {
+                vkDestroyDescriptorSetLayout(vk->inst.device.hndl, hndls[i], &vk->alloc_cbs);
+            }
+            return err_code::VKR_INIT_DESCRIPTOR_SET_LAYOUT_FAIL;
+        }
+    }
+    return err_code::VKR_NO_ERROR;
+}
+
+void vkr_terminate_descriptor_set_layouts(VkDescriptorSetLayout *layouts, sizet size, const vkr_context *vk)
+{
+    for (int i = 0; i < size; ++i) {
+        vkDestroyDescriptorSetLayout(vk->inst.device.hndl, layouts[i], &vk->alloc_cbs);
+    }
+}
+
+int vkr_init_pipeline_layout(VkPipelineLayout *hndl, const vkr_pipeline_layout_cfg *cfg, const vkr_context *vk)
+{
+    // Pipeline layout - where we would bind uniforms and such
+    VkPipelineLayoutCreateInfo pipeline_layout_create_inf{};
+    pipeline_layout_create_inf.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipeline_layout_create_inf.setLayoutCount = (u32)cfg->set_layout_count;
+    pipeline_layout_create_inf.pSetLayouts = cfg->set_layouts;
+    pipeline_layout_create_inf.pushConstantRangeCount = (u32)cfg->push_constant_ranges.size;
+    pipeline_layout_create_inf.pPushConstantRanges = cfg->push_constant_ranges.data;
+    if (vkCreatePipelineLayout(vk->inst.device.hndl, &pipeline_layout_create_inf, &vk->alloc_cbs, hndl) != VK_SUCCESS) {
+        elog("Failed to create pileline layout");
+        return err_code::VKR_CREATE_PIPELINE_LAYOUT_FAIL;
+    }
+    return err_code::VKR_NO_ERROR;
+}
+
+void vkr_terminate_pipeline_layout(VkPipelineLayout hndl, const vkr_context *vk)
+{
+    vkDestroyPipelineLayout(vk->inst.device.hndl, hndl, &vk->alloc_cbs);
+}
+
+int vkr_init_pipeline(VkPipeline *hndl, const vkr_pipeline_cfg *cfg, const vkr_context *vk)
 {
     VkPipelineShaderStageCreateInfo stages[VKR_SHADER_STAGE_COUNT]{};
     sizet actual_stagei = 0;
@@ -1167,8 +1206,6 @@ int vkr_init_pipeline(vkr_pipeline *pipe_info, const vkr_pipeline_cfg *cfg, cons
         }
     }
 
-    pipe_info->rpass = *cfg->rpass;
-
     // Dynamic state
     VkPipelineDynamicStateCreateInfo dyn_state{};
     dyn_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -1178,10 +1215,10 @@ int vkr_init_pipeline(vkr_pipeline *pipe_info, const vkr_pipeline_cfg *cfg, cons
     // Vertex Input
     VkPipelineVertexInputStateCreateInfo vertex_input_info{};
     vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertex_input_info.vertexBindingDescriptionCount = (u32)cfg->vert_binding_desc.size;
-    vertex_input_info.pVertexBindingDescriptions = cfg->vert_binding_desc.data;
-    vertex_input_info.vertexAttributeDescriptionCount = (u32)cfg->vert_attrib_desc.size;
-    vertex_input_info.pVertexAttributeDescriptions = cfg->vert_attrib_desc.data;
+    vertex_input_info.vertexBindingDescriptionCount = (u32)cfg->vert_desc.bindings.size;
+    vertex_input_info.pVertexBindingDescriptions = cfg->vert_desc.bindings.data;
+    vertex_input_info.vertexAttributeDescriptionCount = (u32)cfg->vert_desc.attribs.size;
+    vertex_input_info.pVertexAttributeDescriptions = cfg->vert_desc.attribs.data;
 
     // Input assembly
     VkPipelineInputAssemblyStateCreateInfo input_assembly{};
@@ -1246,44 +1283,6 @@ int vkr_init_pipeline(vkr_pipeline *pipe_info, const vkr_pipeline_cfg *cfg, cons
     depth_stencil.minDepthBounds = cfg->depth_stencil.min_depth_bounds;
     depth_stencil.maxDepthBounds = cfg->depth_stencil.max_depth_bounds;
 
-    // Create the descriptor set layouts
-    for (int desc_i = 0; desc_i < cfg->set_layouts.size; ++desc_i) {
-        VkDescriptorSetLayoutCreateInfo ci{};
-        ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        ci.bindingCount = (u32)cfg->set_layouts[desc_i].bindings.size;
-        ci.pBindings = cfg->set_layouts[desc_i].bindings.data;
-        VkDescriptorSetLayout hndl{};
-        int res = vkCreateDescriptorSetLayout(vk->inst.device.hndl, &ci, &vk->alloc_cbs, &hndl);
-        if (res == VK_SUCCESS) {
-            arr_push_back(&pipe_info->descriptor_layouts, hndl);
-        }
-        else {
-            elog("Could not create descriptor set layout with vk err %d", res);
-            for (u32 i = 0; i < pipe_info->descriptor_layouts.size; ++i) {
-                vkDestroyDescriptorSetLayout(vk->inst.device.hndl, pipe_info->descriptor_layouts[i], &vk->alloc_cbs);
-            }
-        }
-    }
-
-    // Pipeline layout - where we would bind uniforms and such
-    VkPipelineLayoutCreateInfo pipeline_layout_create_inf{};
-    pipeline_layout_create_inf.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipeline_layout_create_inf.setLayoutCount = (u32)pipe_info->descriptor_layouts.size;
-    pipeline_layout_create_inf.pSetLayouts = pipe_info->descriptor_layouts.data;
-    pipeline_layout_create_inf.pushConstantRangeCount = (u32)cfg->push_constant_ranges.size;
-    pipeline_layout_create_inf.pPushConstantRanges = cfg->push_constant_ranges.data;
-
-    if (vkCreatePipelineLayout(vk->inst.device.hndl, &pipeline_layout_create_inf, &vk->alloc_cbs, &pipe_info->layout_hndl) != VK_SUCCESS) {
-        elog("Failed to create pileline layout");
-        for (u32 si = 0; si < actual_stagei; ++si) {
-            vkr_terminate_shader_module(stages[si].module, vk);
-        }
-        for (u32 i = 0; i < pipe_info->descriptor_layouts.size; ++i) {
-            vkDestroyDescriptorSetLayout(vk->inst.device.hndl, pipe_info->descriptor_layouts[i], &vk->alloc_cbs);
-        }
-        return err_code::VKR_CREATE_PIPELINE_LAYOUT_FAIL;
-    }
-
     VkGraphicsPipelineCreateInfo pipeline_info{};
     pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     pipeline_info.stageCount = (u32)actual_stagei;
@@ -1297,46 +1296,30 @@ int vkr_init_pipeline(vkr_pipeline *pipe_info, const vkr_pipeline_cfg *cfg, cons
     pipeline_info.pColorBlendState = &col_blend_state;
     pipeline_info.pDynamicState = &dyn_state;
 
-    pipeline_info.layout = pipe_info->layout_hndl;
-    pipeline_info.renderPass = cfg->rpass->hndl;
+    pipeline_info.layout = cfg->layout_hndl;
+    pipeline_info.renderPass = cfg->rpass;
     pipeline_info.subpass = 0;
 
     // This could possibly be used in future but who knows
     pipeline_info.basePipelineHandle = VK_NULL_HANDLE;
     pipeline_info.basePipelineIndex = -1;
 
-    int err_ret = vkCreateGraphicsPipelines(vk->inst.device.hndl, VK_NULL_HANDLE, 1, &pipeline_info, &vk->alloc_cbs, &pipe_info->hndl);
+    int err_ret = vkCreateGraphicsPipelines(vk->inst.device.hndl, VK_NULL_HANDLE, 1, &pipeline_info, &vk->alloc_cbs, hndl);
     if (err_ret != VK_SUCCESS) {
-        for (u32 si = 0; si < actual_stagei; ++si) {
-            vkr_terminate_shader_module(stages[si].module, vk);
-        }
-        for (u32 i = 0; i < pipe_info->descriptor_layouts.size; ++i) {
-            vkDestroyDescriptorSetLayout(vk->inst.device.hndl, pipe_info->descriptor_layouts[i], &vk->alloc_cbs);
-        }
-        vkDestroyPipelineLayout(vk->inst.device.hndl, pipe_info->layout_hndl, &vk->alloc_cbs);
         err_ret = err_code::VKR_CREATE_PIPELINE_FAIL;
+    }
+    else {
+        err_ret = err_code::VKR_NO_ERROR;
     }
     for (u32 si = 0; si < actual_stagei; ++si) {
         vkr_terminate_shader_module(stages[si].module, vk);
     }
-    err_ret = err_code::VKR_NO_ERROR;
     return err_ret;
 }
 
-sizet vkr_add_pipeline(vkr_device *device, const vkr_pipeline &copy)
+void vkr_terminate_pipeline(VkPipeline hndl, const vkr_context *vk)
 {
-    sizet ind = device->pipelines.size;
-    arr_push_back(&device->pipelines, copy);
-    return ind;
-}
-
-void vkr_terminate_pipeline(const vkr_pipeline *pipe_info, const vkr_context *vk)
-{
-    vkDestroyPipeline(vk->inst.device.hndl, pipe_info->hndl, &vk->alloc_cbs);
-    vkDestroyPipelineLayout(vk->inst.device.hndl, pipe_info->layout_hndl, &vk->alloc_cbs);
-    for (int i = 0; i < pipe_info->descriptor_layouts.size; ++i) {
-        vkDestroyDescriptorSetLayout(vk->inst.device.hndl, pipe_info->descriptor_layouts[i], &vk->alloc_cbs);
-    }
+    vkDestroyPipeline(vk->inst.device.hndl, hndl, &vk->alloc_cbs);
 }
 
 int vkr_init_framebuffer(vkr_framebuffer *fb, const vkr_framebuffer_cfg *cfg, const vkr_context *vk)
@@ -1346,7 +1329,7 @@ int vkr_init_framebuffer(vkr_framebuffer *fb, const vkr_framebuffer_cfg *cfg, co
 
     arr_init(&fb->attachments, vk->cfg.arenas.persistent_arena);
     fb->size = cfg->size;
-    fb->rpass = *cfg->rpass;
+    fb->rpass = cfg->rpass;
     fb->layers = fb->layers;
 
     arr_copy(&fb->attachments, cfg->attachments, cfg->attachment_count);
@@ -1355,12 +1338,12 @@ int vkr_init_framebuffer(vkr_framebuffer *fb, const vkr_framebuffer_cfg *cfg, co
     arr_init(&att, vk->cfg.arenas.command_arena);
     arr_resize(&att, cfg->attachment_count);
     for (int i = 0; i < att.size; ++i) {
-        att[i] = cfg->attachments[i].iview.hndl;
+        att[i] = cfg->attachments[i].im_view;
     }
 
     VkFramebufferCreateInfo create_info{};
     create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    create_info.renderPass = cfg->rpass->hndl;
+    create_info.renderPass = cfg->rpass;
     create_info.pAttachments = att.data;
     create_info.attachmentCount = (u32)att.size;
     create_info.width = cfg->size.x;
@@ -1538,13 +1521,6 @@ void vkr_terminate_buffer(vkr_buffer *buffer, const vkr_context *vk)
     vmaDestroyBuffer(vk->inst.device.vma_alloc.hndl, buffer->hndl, buffer->mem_hndl);
 }
 
-sizet vkr_add_image(vkr_device *device, const vkr_image &copy)
-{
-    sizet ind = device->images.size;
-    arr_push_back(&device->images, copy);
-    return ind;
-}
-
 VkFormat vkr_find_best_depth_format(const vkr_phys_device *phs, bool need_stencil)
 {
     VkFormat depth_formats[] = {
@@ -1609,18 +1585,9 @@ void vkr_terminate_image(vkr_image *image)
     vmaDestroyImage(image->vma_alloc->hndl, image->hndl, image->mem_hndl);
 }
 
-sizet vkr_add_image_view(vkr_device *device, const vkr_image_view &copy)
-{
-    sizet ind = device->image_views.size;
-    arr_push_back(&device->image_views, copy);
-    return ind;
-}
-
-int vkr_init_image_view(vkr_image_view *iview, const vkr_image_view_cfg *cfg, const vkr_context *vk)
+int vkr_init_image_view(VkImageView *hndl, const vkr_image_view_cfg *cfg, const vkr_context *vk)
 {
     asrt(cfg->image);
-    iview->dev = &vk->inst.device;
-    iview->alloc_cbs = &vk->alloc_cbs;
     VkImageViewCreateInfo create_info{};
     create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     create_info.image = cfg->image->hndl;
@@ -1629,7 +1596,7 @@ int vkr_init_image_view(vkr_image_view *iview, const vkr_image_view_cfg *cfg, co
     create_info.flags = cfg->create_flags;
     create_info.format = cfg->image->format;
     create_info.subresourceRange = cfg->srange;
-    int err = vkCreateImageView(vk->inst.device.hndl, &create_info, iview->alloc_cbs, &iview->hndl);
+    int err = vkCreateImageView(vk->inst.device.hndl, &create_info, &vk->alloc_cbs, hndl);
     if (err != VK_SUCCESS) {
         wlog("Failed creating image view with vk error code %d", err);
         return err_code::VKR_CREATE_IMAGE_VIEW_FAIL;
@@ -1637,22 +1604,13 @@ int vkr_init_image_view(vkr_image_view *iview, const vkr_image_view_cfg *cfg, co
     return err_code::VKR_NO_ERROR;
 }
 
-void vkr_terminate_image_view(vkr_image_view *iview)
+void vkr_terminate_image_view(VkImageView hndl, const vkr_context *vk)
 {
-    vkDestroyImageView(iview->dev->hndl, iview->hndl, iview->alloc_cbs);
+    vkDestroyImageView(vk->inst.device.hndl, hndl, &vk->alloc_cbs);
 }
 
-sizet vkr_add_sampler(vkr_device *device, const vkr_sampler &copy)
+int vkr_init_sampler(VkSampler *hndl, const vkr_sampler_cfg *cfg, const vkr_context *vk)
 {
-    sizet ind = device->samplers.size;
-    arr_push_back(&device->samplers, copy);
-    return ind;
-}
-
-int vkr_init_sampler(vkr_sampler *sampler, const vkr_sampler_cfg *cfg, const vkr_context *vk)
-{
-    sampler->dev = &vk->inst.device;
-    sampler->alloc_cbs = &vk->alloc_cbs;
     VkSamplerCreateInfo create_info{};
     create_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     create_info.addressModeU = cfg->address_mode_uvw[0];
@@ -1676,7 +1634,7 @@ int vkr_init_sampler(vkr_sampler *sampler, const vkr_sampler_cfg *cfg, const vkr
         create_info.maxAnisotropy = 1.0f;
     }
 
-    int err = vkCreateSampler(vk->inst.device.hndl, &create_info, &vk->alloc_cbs, &sampler->hndl);
+    int err = vkCreateSampler(vk->inst.device.hndl, &create_info, &vk->alloc_cbs, hndl);
     if (err != VK_SUCCESS) {
         wlog("Failed creating sampler with vk error code %d", err);
         return err_code::VKR_CREATE_SAMPLER_FAIL;
@@ -1684,9 +1642,9 @@ int vkr_init_sampler(vkr_sampler *sampler, const vkr_sampler_cfg *cfg, const vkr
     return err_code::VKR_NO_ERROR;
 }
 
-void vkr_terminate_sampler(vkr_sampler *sampler)
+void vkr_terminate_sampler(VkSampler hndl, const vkr_context *vk)
 {
-    vkDestroySampler(sampler->dev->hndl, sampler->hndl, sampler->alloc_cbs);
+    vkDestroySampler(vk->inst.device.hndl, hndl, &vk->alloc_cbs);
 }
 
 int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
@@ -1764,7 +1722,7 @@ sizet vkr_add_swapchain_framebuffers(vkr_device *device)
 
 void vkr_init_swapchain_framebuffers(vkr_device *device,
                                      const vkr_context *vk,
-                                     const vkr_rpass *rpass,
+                                     VkRenderPass rpass,
                                      const array<array<vkr_framebuffer_attachment>> *other_attachments,
                                      sizet fb_offset)
 {
@@ -1776,7 +1734,7 @@ void vkr_init_swapchain_framebuffers(vkr_device *device,
         arr_init(&atts, vk->cfg.arenas.command_arena);
 
         vkr_framebuffer_attachment col_att{};
-        col_att.iview = device->swapchain.image_views[i];
+        col_att.im_view = device->swapchain.image_views[i];
         arr_push_back(&atts, col_att);
         if (other_attachments) {
             arr_append(&atts, (*other_attachments)[i].data, (*other_attachments)[i].size);
@@ -1790,7 +1748,7 @@ void vkr_init_swapchain_framebuffers(vkr_device *device,
 
 void vkr_init_swapchain_framebuffers(vkr_device *device,
                                      const vkr_context *vk,
-                                     const vkr_rpass *rpass,
+                                     VkRenderPass rpass,
                                      const vkr_framebuffer_attachment &other_attachment,
                                      sizet fb_offset)
 {
@@ -1810,7 +1768,7 @@ void vkr_init_swapchain_framebuffers(vkr_device *device,
 
 void vkr_init_swapchain_framebuffers(vkr_device *device,
                                      const vkr_context *vk,
-                                     const vkr_rpass *rpass,
+                                     VkRenderPass rpass,
                                      const array<vkr_framebuffer_attachment> &other_attachments,
                                      sizet fb_offset)
 {
@@ -1887,7 +1845,6 @@ int vkr_init_render_frames(vkr_device *dev, const vkr_context *vk)
             vkr_terminate_device(dev, vk);
             return err_code::VKR_CREATE_FENCE_FAIL;
         }
-
 
         VkSemaphoreCreateInfo sem_info{};
         sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -1986,7 +1943,7 @@ void vkr_terminate_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
 {
     ilog("Terminating swapchain");
     for (int i = 0; i < sw_info->image_views.size; ++i) {
-        vkr_terminate_image_view(&sw_info->image_views[i]);
+        vkr_terminate_image_view(sw_info->image_views[i], vk);
         vkDestroySemaphore(vk->inst.device.hndl, sw_info->renders_finished[i], &vk->alloc_cbs);
     }
     vkDestroySwapchainKHR(vk->inst.device.hndl, sw_info->swapchain, &vk->alloc_cbs);
@@ -2006,35 +1963,15 @@ void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
     vkr_terminate_render_frames(dev, vk);
     vkr_terminate_swapchain(&dev->swapchain, vk);
 
-    for (int i = 0; i < dev->render_passes.size; ++i) {
-        vkr_terminate_render_pass(&dev->render_passes[i], vk);
-    }
     for (int i = 0; i < dev->framebuffers.size; ++i) {
         vkr_terminate_framebuffer(&dev->framebuffers[i], vk);
-    }
-    for (int i = 0; i < dev->pipelines.size; ++i) {
-        vkr_terminate_pipeline(&dev->pipelines[i], vk);
     }
     for (int i = 0; i < dev->buffers.size; ++i) {
         vkr_terminate_buffer(&dev->buffers[i], vk);
     }
-    for (int i = 0; i < dev->images.size; ++i) {
-        vkr_terminate_image(&dev->images[i]);
-    }
-    for (int i = 0; i < dev->image_views.size; ++i) {
-        vkr_terminate_image_view(&dev->image_views[i]);
-    }
-    for (int i = 0; i < dev->samplers.size; ++i) {
-        vkr_terminate_sampler(&dev->samplers[i]);
-    }
 
-    arr_terminate(&dev->render_passes);
     arr_terminate(&dev->framebuffers);
-    arr_terminate(&dev->pipelines);
     arr_terminate(&dev->buffers);
-    arr_terminate(&dev->images);
-    arr_terminate(&dev->image_views);
-    arr_terminate(&dev->samplers);
 
     for (sizet qfam_i = 0; qfam_i < VKR_QUEUE_FAM_TYPE_COUNT; ++qfam_i) {
         auto cur_fam = &dev->qfams[qfam_i];
@@ -2130,13 +2067,13 @@ sizet vkr_uniform_buffer_offset_alignment(vkr_context *vk, sizet uniform_block_s
 
 void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf,
                          const vkr_framebuffer *fb,
-                         const vkr_rpass *rpass,
+                         VkRenderPass rpass,
                          const VkClearValue *att_clear_vals,
                          sizet clear_val_size)
 {
     VkRenderPassBeginInfo info{};
     info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    info.renderPass = rpass->hndl;
+    info.renderPass = rpass;
     info.framebuffer = fb->hndl;
     info.renderArea.extent = {fb->size.w, fb->size.h};
 
@@ -2181,14 +2118,14 @@ intern int cmd_buf_end(vkr_add_result tmp_buf, vkr_command_pool *pool, vkr_devic
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &pool->buffers[tmp_buf.begin].hndl;
 
-    int err = vkQueueSubmit(cmd_q->qs[qind].hndl, 1, &submit_info, VK_NULL_HANDLE);
+    int err = vkQueueSubmit(cmd_q->qs[qind], 1, &submit_info, VK_NULL_HANDLE);
     if (err != VK_SUCCESS) {
         wlog("Failed to submit queue with vulkan error %d", err);
         vkr_remove_cmd_bufs(pool, vk, tmp_buf.begin);
         return err_code::VKR_COPY_BUFFER_SUBMIT_FAIL;
     }
 
-    err = vkQueueWaitIdle(cmd_q->qs[qind].hndl);
+    err = vkQueueWaitIdle(cmd_q->qs[qind]);
     if (err != VK_SUCCESS) {
         wlog("Failed to wait idle with vulkan error %d", err);
         vkr_remove_cmd_bufs(pool, vk, tmp_buf.begin);

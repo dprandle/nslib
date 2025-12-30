@@ -2,7 +2,7 @@
 
 #include "model.h"
 #include "math/matrix4.h"
-#include "containers/array.h"
+#include "containers/slot_pool.h"
 #include "containers/hmap.h"
 #include "sim_region.h"
 #include "vk_context.h"
@@ -36,14 +36,48 @@ const sizet MIN_VERT_FREE_BLOCK_SIZE = 4;
 // Minimum allowed sbuffer_entry block size in the free list for indices
 const sizet MIN_IND_FREE_BLOCK_SIZE = 6;
 // Maximum number of render passes supported
-const sizet MAX_RENDERPASS_COUNT = 16;
+//const sizet MAX_RENDERPASS_COUNT = 32;
+// Maximum number of techniques the renderer supports
+const sizet MAX_TECHNIQUE_COUNT = 1024;
 // Maximum number of materials the renderer supports
-const sizet MAX_PIPELINE_COUNT = 1024;
+const sizet MAX_PIPELINE_COUNT = 2048;
 // Maximum number of materials the renderer supports
 const sizet MAX_MATERIAL_COUNT = 4096;
+// Maximum number of materials the renderer supports
+const sizet MAX_MESH_COUNT = 4096;
+// Maximum number of textures the renderer supports
+const sizet MAX_TEXTURE_COUNT = 4096;
 // Maximum number of objects
 const sizet MAX_OBJECT_COUNT = 1000000;
 
+enum rvert_layout : u32 {
+    RVERT_LAYOUT_STATIC_MESH,
+    RVERT_LAYOUT_COUNT
+};
+
+enum rsampler_type : u32
+{
+    RSAMPLER_TYPE_LINEAR_REPEAT,
+    RSAMPLER_TYPE_COUNT
+};
+
+enum rpass_type {
+    RPASS_TYPE_OPAQUE,
+    RPASS_TYPE_COUNT
+};
+
+enum rdesc_set_layout : u32 {
+    // Bound once per frame.
+    RDESC_SET_LAYOUT_FRAME,
+    // Bound once per pass.
+    RDESC_SET_LAYOUT_INSTANCE,
+    // Bound per material change.
+    RDESC_SET_LAYOUT_MATERIAL,
+    // The wildcard.
+    RDESC_SET_LAYOUT_SPECIAL,
+    // Count
+    RDESC_SET_LAYOUT_COUNT,
+};
 
 namespace err_code
 {
@@ -53,10 +87,15 @@ enum render
     RENDER_INIT_FAIL,
     RENDER_LOAD_SHADERS_FAIL,
     RENDER_ACQUIRE_IMAGE_FAIL,
+    RENDER_INIT_IMAGE_FAIL,
+    RENDER_UPLOAD_IMAGE_FAIL,
+    RENDER_INIT_IMAGE_VIEW_FAIL,
+    RENDER_ADD_IMAGE_FAIL,
     RENDER_WAIT_FENCE_FAIL,
     RENDER_RESET_FENCE_FAIL,
     RENDER_SUBMIT_QUEUE_FAIL,
-    RENDER_PRESENT_KHR_FAIL
+    RENDER_PRESENT_KHR_FAIL,
+    RENDER_INIT_SAMPLER_FAIL,
 };
 }
 
@@ -117,6 +156,7 @@ struct rmesh_entry
 {
     static_array<rsubmesh_entry, MAX_SUBMESH_COUNT> submesh_entrees;
 };
+using rmesh_handle = slot_handle<rmesh_entry>;
 
 // We use a single vertex and indice buffer for all meshes
 struct rmesh_info
@@ -129,46 +169,42 @@ struct render_pass_draw_bucket;
 struct imgui_ctxt;
 struct profile_timepoints;
 
-struct texture_info
+struct rtexture_info
 {
-    //sizet ubo_offset{};
-    sizet im;
+    vkr_image im;
+    VkImageView im_view;
+};
+using rtexture_handle = slot_handle<rtexture_info>;
+
+struct rsampler_info
+{
+    VkSampler vk_hndl;
 };
 
-struct texture_sampler_info {
-    sizet im_view;
-    sizet im_sampler;
-};
-
-struct material_info
+struct rmaterial_info
 {
-    handle<material> mat{};
     sizet descriptor_set_ind{};
     sizet ubo_offset{};
 };
+using rmaterial_handle = slot_handle<rmaterial_info>;
 
-struct pipeline_info
+
+struct rtechnique_info
 {
-    sizet plind{};
-    sizet ubo_offset{};
-    rid id{};
-    rid rpass_id{};
-    mat4 proj_view{};
+    static_array<VkPipeline, RPASS_TYPE_COUNT> rpass_plines;
 };
+using rtechnique_handle = slot_handle<rtechnique_info>;
 
 struct rpass_info
 {
-    sizet rpind{};
-    rid id{};
+    VkRenderPass vk_hndl;
 };
 
 struct imgui_ctxt
 {
     ImGuiContext *ctxt;
     vkr_descriptor_pool pool;
-    vkr_rpass *rpass;
-    sizet queue_family;
-    vkr_queue queue;
+    VkRenderPass rpass;
     mem_arena fl;
 };
 
@@ -184,17 +220,30 @@ struct renderer
     mem_arena vk_frame_linear;
     mem_arena frame_linear;
 
-    // Render pass indices referenced by ids
-    hmap<rid, rpass_info> rpasses{};
+    // Render pass indices referenced by ids which are just pass names - map a pass name to a static array indice
+    hmap<rid, sizet> rpass_name_map;
+    static_array<rpass_info, RPASS_TYPE_COUNT> rpasses{};
 
-    // Pipeline indices referenced by ids
-    hmap<rid, pipeline_info> pipelines{};
+    // Created pipelines cached on pipeline state
+    // TODO: Implement this for smarter pipeline creation
+    hmap<u64, VkPipeline> pline_cache;
 
-    // Info needed for material rendering
-    hmap<rid, material_info> materials{};
+    slot_pool<rtechnique_info, MAX_TECHNIQUE_COUNT> techniques{};
+    slot_pool<rmaterial_info, MAX_MATERIAL_COUNT> materials{};
+    slot_pool<rtexture_info, MAX_TEXTURE_COUNT> textures{};
+    slot_pool<rmesh_entry, MAX_MESH_COUNT> meshes{};
 
-    // Info needed for setting up a sampled texture in shader
-    hmap<rid, texture_info> textures{};
+    // Global descriptor set layouts (used for creating descriptor sets and pipelines)
+    static_array<VkDescriptorSetLayout, RDESC_SET_LAYOUT_COUNT> set_layouts{};
+
+    // Global pipeline layout
+    VkPipelineLayout g_layout{VK_NULL_HANDLE};
+
+    // Global texture samplers
+    static_array<rsampler_info, RSAMPLER_TYPE_COUNT> samplers{};
+
+    // Vert layout presets
+    static_array<vkr_vertex_layout, RVERT_LAYOUT_COUNT> vertex_layouts;
 
     // ImGUI context
     imgui_ctxt imgui{};
@@ -208,16 +257,16 @@ struct renderer
     // This is incremented every frame there are no resize events
     f64 no_resize_frames;
 
-    // Default material for submeshes missing materials
-    handle<material> default_mat{};
 
-    sizet default_image_ind;
-    sizet default_image_view_ind;
-    sizet default_sampler_ind;
+    // TEMP
+    rtechnique_handle default_technique{};
+    rmaterial_handle default_mat{};
 
-    sizet swapchain_fb_depth_stencil_iview_ind{INVALID_IND};
-    sizet swapchain_fb_depth_stencil_im_ind{INVALID_IND};
+    rtexture_handle swapchain_fb_depth_stencil{};
 };
+
+
+rtexture_handle register_texture(const texture *tex, renderer *rndr);
 
 // NOTE: All of these mesh operations kind of need to wait on all rendering operations to complete as they modify the
 // vertex and index buffers - not sure yet if this is better done within the functions or in the caller. Also these should be done at the
@@ -226,21 +275,17 @@ struct renderer
 
 // Upload mesh data to GPU using the shared indice/vertex buffer, also "registers" the mesh with the renderer so it can
 // be drawn
-bool upload_to_gpu(const mesh *msh, renderer *rdnr);
-
-// Upload texture data to GPU using 
-bool upload_to_gpu(const texture *texture, renderer *rdnr);
-
+int upload_to_gpu(const mesh *msh, renderer *rdnr);
 
 // Remove from gpu simply adds the meshes block to the free list, indicating that the block can be overwritten, and then
 // removes the mesh from our mesh entry list. It does not do any actual gpu uploading
 bool remove_from_gpu(mesh *msh, renderer *rndr);
 
-int init_renderer(renderer *rndr, const handle<material> &default_mat, void *win_hndl, mem_arena *fl_arena);
+int init_renderer(renderer *rndr, void *win_hndl, mem_arena *fl_arena);
 
 int begin_render_frame(renderer *rndr, int finished_frames);
 
-int end_render_frame(renderer *rndr, camera *cam, f64 dt); 
+int end_render_frame(renderer *rndr, camera *cam, f64 dt);
 
 void terminate_renderer(renderer *rndr);
 

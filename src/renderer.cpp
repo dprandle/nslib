@@ -40,60 +40,10 @@ intern constexpr const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR
 intern constexpr f64 RESIZE_DEBOUNCE_FRAME_COUNT = 0.15; // 100 ms
 intern VkPipelineLayout G_FRAME_PL_LAYOUT{};
 
-enum descriptor_set_layout
-{
-    DESCRIPTOR_SET_LAYOUT_FRAME,
-    DESCRIPTOR_SET_LAYOUT_PIPELINE,
-    DESCRIPTOR_SET_LAYOUT_MATERIAL,
-    DESCRIPTOR_SET_LAYOUT_OBJECT,
-};
-
 enum descriptor_set_binding
 {
     DESCRIPTOR_SET_BINDING_UNIFORM_BUFFER,
     DESCRIPTOR_SET_BINDING_IMAGE_SAMPLER,
-};
-
-enum draw_call_flags
-{
-    DRAW_CALL_FLAG_NONE = 0,
-    DRAW_CALL_FLAG_HIDDEN = 1 << 0,
-};
-
-struct draw_call
-{
-    u32 index_count;
-    u32 instance_count;
-    u32 first_index;
-    u32 vertex_offset;
-    u32 first_instance;
-    u32 flags{};
-    sizet ubo_offset;
-};
-
-struct material_draw_bucket
-{
-    const material_info *mi;
-    sizet set_layouti;
-    array<draw_call> dcs;
-};
-
-struct pipeline_draw_bucket
-{
-    const pipeline_info *plinfo;
-    // Not to be confused with the set index in the descriptor set layout, this is the index of the descriptor set struct
-    // that should be bound during draw - ie
-    sizet set_layouti;
-    hmap<rid, material_draw_bucket *> mats;
-};
-
-struct render_pass_draw_bucket
-{
-    const rpass_info *rpinfo;
-    sizet frame_set_layouti{INVALID_IND};
-    sizet obj_set_layouti{INVALID_IND};
-    array<VkDescriptorSetLayout> set_layouts;
-    hmap<rid, pipeline_draw_bucket *> plines;
 };
 
 intern void imgui_mem_free(void *ptr, void *usr)
@@ -137,9 +87,7 @@ intern void init_imgui(renderer *rndr, void *win_hndl)
 
     // Use the main forward pass for imgui.. this might only change if we use deferred shading.. but i think the imgui
     // created pipeling only requires a color attachment
-    auto rpass_fiter = hmap_find(&rndr->rpasses, FWD_RPASS);
-    asrt(rpass_fiter);
-    rndr->imgui.rpass = &dev->render_passes[rpass_fiter->val.rpind];
+    rndr->imgui.rpass = rndr->rpasses[RPASS_TYPE_OPAQUE].vk_hndl;
 
     ImGui::SetAllocatorFunctions(imgui_mem_alloc, imgui_mem_free, &rndr->imgui.fl);
     rndr->imgui.ctxt = ImGui::CreateContext();
@@ -162,13 +110,13 @@ intern void init_imgui(renderer *rndr, void *win_hndl)
     init_info.PhysicalDevice = rndr->vk.inst.pdev_info.hndl;
     init_info.Device = rndr->vk.inst.device.hndl;
     init_info.QueueFamily = rndr->vk.inst.device.qfams[VKR_QUEUE_FAM_TYPE_GFX].fam_ind;
-    init_info.Queue = rndr->vk.inst.device.qfams[VKR_QUEUE_FAM_TYPE_GFX].qs[VKR_RENDER_QUEUE].hndl;
+    init_info.Queue = rndr->vk.inst.device.qfams[VKR_QUEUE_FAM_TYPE_GFX].qs[VKR_RENDER_QUEUE];
     init_info.PipelineCache = VK_NULL_HANDLE;
     init_info.DescriptorPool = rndr->imgui.pool.hndl;
     init_info.Allocator = &rndr->vk.alloc_cbs;
     init_info.MinImageCount = MAX_FRAMES_IN_FLIGHT;
     init_info.ImageCount = rndr->vk.inst.device.swapchain.images.size;
-    init_info.RenderPass = rndr->imgui.rpass->hndl;
+    init_info.RenderPass = rndr->imgui.rpass;
     init_info.Subpass = 0;
     init_info.CheckVkResultFn = check_vk_result;
     // init_info.MSAASamples
@@ -190,11 +138,10 @@ intern void terminate_imgui(renderer *rndr)
     mem_terminate_arena(&rndr->imgui.fl);
 }
 
-intern int setup_render_pass(renderer *rndr)
+intern int setup_render_passes(renderer *rndr)
 {
     auto vk = &rndr->vk;
     vkr_rpass_cfg rp_cfg{};
-
     VkAttachmentDescription att{};
     att.format = vk->inst.device.swapchain.format;
     att.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -237,115 +184,39 @@ intern int setup_render_pass(renderer *rndr)
     arr_push_back(&rp_cfg.subpass_dependencies, sp_dep);
 
     rpass_info rpi{};
-    rpi.id = FWD_RPASS;
-    rpi.rpind = vkr_add_render_pass(&vk->inst.device, {});
-
-    int ret = vkr_init_render_pass(&vk->inst.device.render_passes[rpi.rpind], &rp_cfg, vk);
+    int ret = vkr_init_render_pass(&rpi.vk_hndl, &rp_cfg, vk);
     if (ret == err_code::VKR_NO_ERROR) {
-        ilog("Setting render pass %s", str_cstr(rpi.id.str));
-        hmap_set(&rndr->rpasses, rpi.id, rpi);
+        hmap_set(&rndr->rpass_name_map, FWD_RPASS, rndr->rpasses.size);
+        arr_push_back(&rndr->rpasses, rpi);
     }
     return ret;
 }
 
-intern int setup_diffuse_mat_pipeline(renderer *rndr)
+intern void fill_default_pipeline_config(vkr_pipeline_cfg *cfg, renderer *rndr)
 {
-    auto vk = &rndr->vk;
-    vkr_pipeline_cfg info{};
 
-    arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_VIEWPORT);
-    arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_SCISSOR);
+    arr_push_back(&cfg->dynamic_states, VK_DYNAMIC_STATE_VIEWPORT);
+    arr_push_back(&cfg->dynamic_states, VK_DYNAMIC_STATE_SCISSOR);
 
-    // Descripitor Set Layouts - Just one layout for the moment with a binding at 0 for uniforms and a binding at 1 for
-    // image sampler
-    info.set_layouts.size = 4;
-
-    // Descriptor layouts
-    // Single Uniform buffer
-    VkDescriptorSetLayoutBinding b{};
-    b.binding = DESCRIPTOR_SET_BINDING_UNIFORM_BUFFER;
-    b.descriptorCount = 1;
-    b.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-
-    // Add uniform buffer binding to each set, and image sampler to material set as well
-    arr_push_back(&info.set_layouts[DESCRIPTOR_SET_LAYOUT_FRAME].bindings, b);
-    arr_push_back(&info.set_layouts[DESCRIPTOR_SET_LAYOUT_PIPELINE].bindings, b);
-    arr_push_back(&info.set_layouts[DESCRIPTOR_SET_LAYOUT_MATERIAL].bindings, b);
-
-    // Change descriptor type to dynamic descriptor for object - we bind it with an offset for each object
-    b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-    arr_push_back(&info.set_layouts[DESCRIPTOR_SET_LAYOUT_OBJECT].bindings, b);
-
-    // Add image sampler to material
-    b.binding = DESCRIPTOR_SET_BINDING_IMAGE_SAMPLER;
-    b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    arr_push_back(&info.set_layouts[DESCRIPTOR_SET_LAYOUT_MATERIAL].bindings, b);
-
-    // Setup our push constant
-    ++info.push_constant_ranges.size;
-    info.push_constant_ranges[0].offset = 0;
-    info.push_constant_ranges[0].size = sizeof(push_constants);
-    info.push_constant_ranges[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-    // Vertex binding:
-    VkVertexInputBindingDescription binding_desc{};
-    binding_desc.binding = 0;
-    binding_desc.stride = sizeof(vertex);
-    binding_desc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-    arr_push_back(&info.vert_binding_desc, binding_desc);
-
-    // Attribute Descriptions - so far we just have three
-    VkVertexInputAttributeDescription attrib_desc{};
-    attrib_desc.binding = 0;
-    attrib_desc.location = 0;
-    attrib_desc.format = VK_FORMAT_R32G32B32_SFLOAT;
-    attrib_desc.offset = offsetof(vertex, pos);
-    arr_push_back(&info.vert_attrib_desc, attrib_desc);
-
-    attrib_desc.binding = 0;
-    attrib_desc.location = 1;
-    attrib_desc.format = VK_FORMAT_R32G32_SFLOAT;
-    attrib_desc.offset = offsetof(vertex, tc);
-    arr_push_back(&info.vert_attrib_desc, attrib_desc);
-
-    attrib_desc.binding = 0;
-    attrib_desc.location = 2;
-    attrib_desc.format = VK_FORMAT_R8G8B8A8_UINT;
-    attrib_desc.offset = offsetof(vertex, color);
-    arr_push_back(&info.vert_attrib_desc, attrib_desc);
-
-    // Viewports and scissors
-    VkViewport viewport{};
-    viewport.x = 0.0f;
-    viewport.y = 0.0f;
-    viewport.width = (float)vk->inst.device.swapchain.extent.width;
-    viewport.height = (float)vk->inst.device.swapchain.extent.height;
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-    arr_push_back(&info.viewports, viewport);
-
-    VkRect2D scissor{};
-    scissor.offset = {0, 0};
-    scissor.extent = vk->inst.device.swapchain.extent;
-    arr_push_back(&info.scissors, scissor);
+    // Must be set to 1 at least
+    cfg->viewports.size = 1;
+    cfg->scissors.size = 1;
 
     // Input Assembly
-    info.input_assembly.primitive_topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    info.input_assembly.primitive_restart_enable = false;
+    cfg->input_assembly.primitive_topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    cfg->input_assembly.primitive_restart_enable = false;
 
     // Raster options
-    info.raster.depth_clamp_enable = false;
-    info.raster.rasterizer_discard_enable = false;
-    info.raster.polygon_mode = VK_POLYGON_MODE_FILL;
-    info.raster.line_width = 1.0f;
-    info.raster.cull_mode = VK_CULL_MODE_NONE;
-    info.raster.front_face = VK_FRONT_FACE_CLOCKWISE;
-    info.raster.depth_bias_enable = false;
-    info.raster.depth_bias_constant_factor = 0.0f;
-    info.raster.depth_bias_clamp = 0.0f;
-    info.raster.depth_bias_slope_factor = 0.0f;
+    cfg->raster.depth_clamp_enable = false;
+    cfg->raster.rasterizer_discard_enable = false;
+    cfg->raster.polygon_mode = VK_POLYGON_MODE_FILL;
+    cfg->raster.line_width = 1.0f;
+    cfg->raster.cull_mode = VK_CULL_MODE_NONE;
+    cfg->raster.front_face = VK_FRONT_FACE_CLOCKWISE;
+    cfg->raster.depth_bias_enable = false;
+    cfg->raster.depth_bias_constant_factor = 0.0f;
+    cfg->raster.depth_bias_clamp = 0.0f;
+    cfg->raster.depth_bias_slope_factor = 0.0f;
 
     // Multisampling defaults are good
 
@@ -353,15 +224,28 @@ intern int setup_diffuse_mat_pipeline(renderer *rndr)
     VkPipelineColorBlendAttachmentState col_blnd_att{};
     col_blnd_att.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
     col_blnd_att.blendEnable = false;
-    arr_push_back(&info.col_blend.attachments, col_blnd_att);
+    arr_push_back(&cfg->col_blend.attachments, col_blnd_att);
 
     // Depth Stencil
-    info.depth_stencil.depth_test_enable = true;
-    info.depth_stencil.depth_write_enable = true;
-    info.depth_stencil.depth_compare_op = VK_COMPARE_OP_LESS;
-    info.depth_stencil.depth_bounds_test_enable = false;
-    info.depth_stencil.min_depth_bounds = 0.0f;
-    info.depth_stencil.max_depth_bounds = 1.0f;
+    cfg->depth_stencil.depth_test_enable = true;
+    cfg->depth_stencil.depth_write_enable = true;
+    cfg->depth_stencil.depth_compare_op = VK_COMPARE_OP_LESS;
+    cfg->depth_stencil.depth_bounds_test_enable = false;
+    cfg->depth_stencil.min_depth_bounds = 0.0f;
+    cfg->depth_stencil.max_depth_bounds = 1.0f;
+
+    // Global layout for desc sets
+    cfg->layout_hndl = rndr->g_layout;
+}
+
+intern int setup_diffuse_technique(renderer *rndr)
+{
+    auto vk = &rndr->vk;
+    vkr_pipeline_cfg info{};
+
+    fill_default_pipeline_config(&info, rndr);
+    info.vert_desc = rndr->vertex_layouts[RVERT_LAYOUT_STATIC_MESH];
+    info.rpass = rndr->rpasses[RPASS_TYPE_OPAQUE].vk_hndl;
 
     // Our basic shaders
     const char *fnames[] = {"data/shaders/fwd-diffuse.vert.spv", "data/shaders/fwd-diffuse.frag.spv"};
@@ -376,178 +260,25 @@ intern int setup_diffuse_mat_pipeline(renderer *rndr)
         info.shader_stages[i].entry_point = "main";
     }
 
-    auto rpass_fiter = hmap_find(&rndr->rpasses, FWD_RPASS);
-    if (rpass_fiter) {
-        info.rpass = &vk->inst.device.render_passes[rpass_fiter->val.rpind];
-        pipeline_info plinfo{};
-        plinfo.id = PLINE_FWD_RPASS_S0_OPAQUE_DIFFUSE;
-        plinfo.ubo_offset = rndr->pipelines.count;
-        plinfo.plind = vkr_add_pipeline(&vk->inst.device, {});
-        plinfo.rpass_id = rpass_fiter->val.id;
-        int code = vkr_init_pipeline(&vk->inst.device.pipelines[plinfo.plind], &info, vk);
-        if (code == err_code::VKR_NO_ERROR) {
-            hmap_set(&rndr->pipelines, plinfo.id, plinfo);
-            // Set our global frame layout
-            G_FRAME_PL_LAYOUT = vk->inst.device.pipelines[plinfo.plind].layout_hndl;
-        }
+    VkPipeline pl{};
+    int code = vkr_init_pipeline(&pl, &info, vk);
+    if (code != err_code::VKR_NO_ERROR) {
+        wlog("Failed to initialize pipeline with code %d", code);
         return code;
     }
-    else {
-        elog("Failed to find render pass %s", str_cstr(FWD_RPASS.str));
-    }
-    return err_code::RENDER_INIT_FAIL;
-}
 
-intern int setup_color_mat_pipeline(renderer *rndr)
-{
-    auto vk = &rndr->vk;
-    vkr_pipeline_cfg info{};
+    // TEMP: This is just a dummy id for the pipeline for now - this eventually needs to be a hash of things unique from
+    // the technique/pass that needed it
+    hmap_set(&rndr->pline_cache, (u64)123, pl);
 
-    arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_VIEWPORT);
-    arr_push_back(&info.dynamic_states, VK_DYNAMIC_STATE_SCISSOR);
+    rndr->default_technique = acquire_slot(&rndr->techniques);
+    auto item = get_slot_item(&rndr->techniques, rndr->default_technique);
+    item->rpass_plines[RPASS_TYPE_OPAQUE] = pl;
 
-    // Descripitor Set Layouts - Just one layout for the moment with a binding at 0 for uniforms and a binding at 1 for
-    // image sampler
-    info.set_layouts.size = 4;
+    rndr->default_mat = acquire_slot(&rndr->materials);
+    auto mat_item = get_slot_item(&rndr->materials, rndr->default_mat);
 
-    // Single Uniform buffer
-    VkDescriptorSetLayoutBinding b{};
-    b.binding = DESCRIPTOR_SET_BINDING_UNIFORM_BUFFER;
-    b.descriptorCount = 1;
-    b.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-
-    // Add uniform buffer binding to each set
-    arr_push_back(&info.set_layouts[DESCRIPTOR_SET_LAYOUT_FRAME].bindings, b);
-    arr_push_back(&info.set_layouts[DESCRIPTOR_SET_LAYOUT_PIPELINE].bindings, b);
-    arr_push_back(&info.set_layouts[DESCRIPTOR_SET_LAYOUT_MATERIAL].bindings, b);
-
-    // Change descriptor type to dynamic descriptor for object so we only are binding it once per frame
-    b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-    arr_push_back(&info.set_layouts[DESCRIPTOR_SET_LAYOUT_OBJECT].bindings, b);
-
-    // Setup our push constant
-    ++info.push_constant_ranges.size;
-    info.push_constant_ranges[0].offset = 0;
-    info.push_constant_ranges[0].size = sizeof(push_constants);
-    info.push_constant_ranges[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-    // Vertex binding:
-    VkVertexInputBindingDescription binding_desc{};
-    binding_desc.binding = 0;
-    binding_desc.stride = sizeof(vertex);
-    binding_desc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-    arr_push_back(&info.vert_binding_desc, binding_desc);
-
-    // Attribute Descriptions - so far we just have three
-    VkVertexInputAttributeDescription attrib_desc{};
-    attrib_desc.binding = 0;
-    attrib_desc.location = 0;
-    attrib_desc.format = VK_FORMAT_R32G32B32_SFLOAT;
-    attrib_desc.offset = offsetof(vertex, pos);
-    arr_push_back(&info.vert_attrib_desc, attrib_desc);
-
-    attrib_desc.binding = 0;
-    attrib_desc.location = 1;
-    attrib_desc.format = VK_FORMAT_R32G32_SFLOAT;
-    attrib_desc.offset = offsetof(vertex, tc);
-    arr_push_back(&info.vert_attrib_desc, attrib_desc);
-
-    attrib_desc.binding = 0;
-    attrib_desc.location = 2;
-    attrib_desc.format = VK_FORMAT_R8G8B8A8_UINT;
-    attrib_desc.offset = offsetof(vertex, color);
-    arr_push_back(&info.vert_attrib_desc, attrib_desc);
-
-    // Viewports and scissors
-    VkViewport viewport{};
-    viewport.x = 0.0f;
-    viewport.y = 0.0f;
-    viewport.width = (float)vk->inst.device.swapchain.extent.width;
-    viewport.height = (float)vk->inst.device.swapchain.extent.height;
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-    arr_push_back(&info.viewports, viewport);
-
-    VkRect2D scissor{};
-    scissor.offset = {0, 0};
-    scissor.extent = vk->inst.device.swapchain.extent;
-    arr_push_back(&info.scissors, scissor);
-
-    // Input Assembly
-    info.input_assembly.primitive_topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    info.input_assembly.primitive_restart_enable = false;
-
-    // Raster options
-    info.raster.depth_clamp_enable = false;
-    info.raster.rasterizer_discard_enable = false;
-    info.raster.polygon_mode = VK_POLYGON_MODE_FILL;
-    info.raster.line_width = 1.0f;
-    info.raster.cull_mode = VK_CULL_MODE_BACK_BIT;
-    info.raster.front_face = VK_FRONT_FACE_CLOCKWISE;
-    info.raster.depth_bias_enable = false;
-    info.raster.depth_bias_constant_factor = 0.0f;
-    info.raster.depth_bias_clamp = 0.0f;
-    info.raster.depth_bias_slope_factor = 0.0f;
-
-    // Multisampling defaults are good
-
-    // Color blending
-    VkPipelineColorBlendAttachmentState col_blnd_att{};
-    col_blnd_att.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    col_blnd_att.blendEnable = false;
-    arr_push_back(&info.col_blend.attachments, col_blnd_att);
-
-    // This is to do alpha blending - leaving here until we create a pipeline that uses it
-    // col_blnd_att.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
-    // VK_COLOR_COMPONENT_A_BIT; col_blnd_att.blendEnable = true; col_blnd_att.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-    // col_blnd_att.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-    // col_blnd_att.colorBlendOp = VK_BLEND_OP_ADD;
-    // col_blnd_att.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-    // col_blnd_att.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-    // col_blnd_att.alphaBlendOp = VK_BLEND_OP_ADD;
-
-    // Depth Stencil
-    info.depth_stencil.depth_test_enable = true;
-    info.depth_stencil.depth_write_enable = true;
-    info.depth_stencil.depth_compare_op = VK_COMPARE_OP_LESS;
-    info.depth_stencil.depth_bounds_test_enable = false;
-    info.depth_stencil.min_depth_bounds = 0.0f;
-    info.depth_stencil.max_depth_bounds = 1.0f;
-
-    // Our basic shaders
-    const char *fnames[] = {"data/shaders/fwd-color.vert.spv", "data/shaders/fwd-color.frag.spv"};
-    for (int i = 0; i <= VKR_SHADER_STAGE_FRAG; ++i) {
-        platform_file_err_desc err{};
-        arr_init(&info.shader_stages[i].code, &rndr->vk_frame_linear);
-        read_file(fnames[i], &info.shader_stages[i].code, 0, &err);
-        if (err.code != err_code::PLATFORM_NO_ERROR) {
-            wlog("Error reading file %s from disk (code %d): %s", fnames[i], err.code, err.str);
-            return err_code::RENDER_LOAD_SHADERS_FAIL;
-        }
-        info.shader_stages[i].entry_point = "main";
-    }
-
-    auto rpass_fiter = hmap_find(&rndr->rpasses, FWD_RPASS);
-    if (rpass_fiter) {
-        info.rpass = &vk->inst.device.render_passes[rpass_fiter->val.rpind];
-        pipeline_info plinfo{};
-        plinfo.id = PLINE_FWD_RPASS_S0_OPAQUE_COL;
-        plinfo.ubo_offset = rndr->pipelines.count;
-        plinfo.plind = vkr_add_pipeline(&vk->inst.device, {});
-        plinfo.rpass_id = rpass_fiter->val.id;
-        int code = vkr_init_pipeline(&vk->inst.device.pipelines[plinfo.plind], &info, vk);
-        if (code == err_code::VKR_NO_ERROR) {
-            hmap_set(&rndr->pipelines, plinfo.id, plinfo);
-            // Set our global frame layout
-            G_FRAME_PL_LAYOUT = vk->inst.device.pipelines[plinfo.plind].layout_hndl;
-        }
-        return code;
-    }
-    else {
-        elog("Failed to find render pass %s", str_cstr(FWD_RPASS.str));
-    }
-    return err_code::RENDER_INIT_FAIL;
+    return err_code::RENDER_NO_ERROR;
 }
 
 intern int setup_rmesh_info(renderer *rndr)
@@ -643,47 +374,12 @@ intern sbuffer_entry find_sbuffer_block(sbuffer_info *sbuf, sizet req_size)
     return ret_entry;
 }
 
-bool upload_to_gpu(const texture *tex, renderer *rndr)
+int init_global_samplers(renderer *rndr)
 {
     auto dev = &rndr->vk.inst.device;
-    // Most default values are correct
-    vkr_image_cfg cfg{};
-    cfg.format = VK_FORMAT_R8G8B8A8_SRGB;
-    cfg.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    cfg.dims = {tex->size, 1};
-    cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-    cfg.vma_alloc = &rndr->vk.inst.device.vma_alloc;
-
-    // Create image
-    vkr_image im{};
-    int err = vkr_init_image(&im, &cfg);
-    if (err != err_code::VKR_NO_ERROR) {
-        wlog("Failed to initialize vk image for texture %s - err code: %d", str_cstr(tex->id.str), err);
-        return err;
-    }
-
-    // Upload texture data to created image using staging buffer
-    err = vkr_stage_and_upload_image_data(
-        &im, tex->pixels.data, get_texture_memsize(tex), &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], VKR_RENDER_QUEUE, &rndr->vk);
-    if (err != err_code::VKR_NO_ERROR) {
-        wlog("Failed to upload texture data for %s with err code %d", to_cstr(tex->name), err);
-        vkr_terminate_image(&im);
-    }
-
-    // Create image view
-    vkr_image_view iview{};
-    vkr_image_view_cfg iview_cfg{};
-    iview_cfg.image = &im;
-
-    err = vkr_init_image_view(&iview, &iview_cfg, &rndr->vk);
-    if (err != err_code::VKR_NO_ERROR) {
-        wlog("Failed to initialize image view for texture %s - err code: %d", to_cstr(tex->name), err);
-        vkr_terminate_image(&im);
-        return err;
-    }
+    rndr->samplers.size = RSAMPLER_TYPE_COUNT;
 
     // Create image sampler
-    vkr_sampler sampler{};
     vkr_sampler_cfg samp_cfg{};
     for (int i = 0; i < 3; ++i) {
         samp_cfg.address_mode_uvw[i] = VK_SAMPLER_ADDRESS_MODE_REPEAT;
@@ -696,33 +392,64 @@ bool upload_to_gpu(const texture *tex, renderer *rndr)
     samp_cfg.compare_op = VK_COMPARE_OP_ALWAYS;
     samp_cfg.mipmap_mode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
-    err = vkr_init_sampler(&sampler, &samp_cfg, &rndr->vk);
+    rsampler_info sdata{};
+    int err = vkr_init_sampler(&sdata.vk_hndl, &samp_cfg, &rndr->vk);
     if (err != err_code::VKR_NO_ERROR) {
-        wlog("Failed to initialize sampler for texture %s - err code: %d", to_cstr(tex->name), err);
-        vkr_terminate_image(&im);
-        vkr_terminate_image_view(&iview);
-        return err;
+        wlog("Failed to initialize sampler - vk err code: %d", err);
+        return err_code::RENDER_INIT_SAMPLER_FAIL;
+    }
+    rndr->samplers[RSAMPLER_TYPE_LINEAR_REPEAT] = sdata;
+    return err_code::RENDER_NO_ERROR;
+}
+
+rtexture_handle register_texture(const texture *tex, renderer *rndr)
+{
+    rtexture_handle ret{};
+    rtexture_info tex_info{};
+
+    auto dev = &rndr->vk.inst.device;
+    // Most default values are correct
+    vkr_image_cfg cfg{};
+    cfg.format = VK_FORMAT_R8G8B8A8_SRGB;
+    cfg.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    cfg.dims = {tex->size, 1};
+    cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    cfg.vma_alloc = &rndr->vk.inst.device.vma_alloc;
+
+    // Create image
+    int vk_ret = vkr_init_image(&tex_info.im, &cfg);
+    if (vk_ret != err_code::VKR_NO_ERROR) {
+        wlog("Failed to initialize vk image for texture %s - err code: %d", str_cstr(tex->id.str), vk_ret);
+        return ret;
     }
 
-    texture_info stex_info{};
-    stex_info.im = vkr_add_image(dev, im);
-    stex_info.im_view = vkr_add_image_view(dev, iview);
-    stex_info.sampler = vkr_add_sampler(dev, sampler);
-
-    auto ins = hmap_insert(&rndr->textures, tex->id, stex_info);
-    if (!ins) {
-        wlog("Failed to insert sampled texture %s into renderer sampled texture map", str_cstr(tex->name));
-        vkr_terminate_image(&im);
-        vkr_terminate_image_view(&iview);
-        vkr_terminate_sampler(&sampler);
-        return false;
+    // Upload texture data to created image using staging buffer
+    vk_ret = vkr_stage_and_upload_image_data(
+        &tex_info.im, tex->pixels.data, get_texture_memsize(tex), &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], VKR_RENDER_QUEUE, &rndr->vk);
+    if (vk_ret != err_code::VKR_NO_ERROR) {
+        wlog("Failed to upload texture data for %s with err code %d", to_cstr(tex->name), vk_ret);
+        vkr_terminate_image(&tex_info.im);
+        return ret;
     }
-    return true;
+
+    vkr_image_view_cfg iview_cfg{};
+    iview_cfg.image = &tex_info.im;
+
+    vk_ret = vkr_init_image_view(&tex_info.im_view, &iview_cfg, &rndr->vk);
+    if (vk_ret != err_code::VKR_NO_ERROR) {
+        wlog("Failed to initialize image view for texture %s - err code: %d", to_cstr(tex->name), vk_ret);
+        vkr_terminate_image(&tex_info.im);
+        return ret;
+    }
+
+    ret = acquire_slot(&rndr->textures, tex_info);
+    asrt(is_valid(ret));
+    return ret;
 }
 
 // Upload mesh data to GPU using the shared indice/vertex buffer, also "registers" the mesh with the renderer so it can
 // be drawn
-bool upload_to_gpu(const mesh *msh, renderer *rndr)
+int upload_to_gpu(const mesh *msh, renderer *rndr)
 {
     auto fiter = hmap_find(&rndr->rmi.meshes, msh->id);
     if (fiter) {
@@ -744,7 +471,7 @@ bool upload_to_gpu(const mesh *msh, renderer *rndr)
         new_smentry.inds = find_sbuffer_block(&rndr->rmi.inds, req_inds_size);
         asrt(new_smentry.verts.size > 0);
         asrt(new_smentry.inds.size > 0);
-        arr_emplace_back(&new_mentry.submesh_entrees, new_smentry);
+        arr_push_back(&new_mentry.submesh_entrees, new_smentry);
 
         // Our required vert and ind size might be a little less than the avail block size, if a block was picked that
         // was big enough to fit our needs but the remaining available in the block was less than the required min block
@@ -837,34 +564,106 @@ intern int init_swapchain_images_and_framebuffer(renderer *rndr)
     im_cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
     im_cfg.vma_alloc = &dev->vma_alloc;
 
-    if (rndr->swapchain_fb_depth_stencil_im_ind == INVALID_IND) {
-        rndr->swapchain_fb_depth_stencil_im_ind = vkr_add_image(dev);
+    if (!is_valid(rndr->swapchain_fb_depth_stencil)) {
+        rndr->swapchain_fb_depth_stencil = acquire_slot(&rndr->textures);
     }
-    int err = vkr_init_image(&dev->images[rndr->swapchain_fb_depth_stencil_im_ind], &im_cfg);
+    auto sl_item = get_slot_item(&rndr->textures, rndr->swapchain_fb_depth_stencil);
+    int err = vkr_init_image(&sl_item->im, &im_cfg);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
 
     vkr_image_view_cfg imv_cfg{};
     imv_cfg.srange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-    imv_cfg.image = &dev->images[rndr->swapchain_fb_depth_stencil_im_ind];
+    imv_cfg.image = &sl_item->im;
 
-    if (rndr->swapchain_fb_depth_stencil_iview_ind == INVALID_IND) {
-        rndr->swapchain_fb_depth_stencil_iview_ind = vkr_add_image_view(dev);
-    }
-    err = vkr_init_image_view(&dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind], &imv_cfg, vk);
+    err = vkr_init_image_view(&sl_item->im_view, &imv_cfg, vk);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
+
     // We need the render pass associated with our main framebuffer
-    auto rp_fiter = hmap_find(&rndr->rpasses, FWD_RPASS);
-    asrt(rp_fiter);
-    vkr_init_swapchain_framebuffers(dev,
-                                    vk,
-                                    &dev->render_passes[rp_fiter->val.rpind],
-                                    vkr_framebuffer_attachment{dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind]});
+    vkr_init_swapchain_framebuffers(
+        dev, vk, rndr->rpasses[RPASS_TYPE_OPAQUE].vk_hndl, vkr_framebuffer_attachment{.im_view = sl_item->im_view});
 
     return err;
+}
+
+intern int setup_global_descriptor_set_layouts(renderer *rndr)
+{
+    vkr_descriptor_set_layout_cfg cfg{};
+
+    // Descripitor Set Layouts - Just one layout for the moment with a binding at 0 for uniforms and a binding at 1 for
+    // image sampler
+    cfg.set_layout_descs.size = RDESC_SET_LAYOUT_COUNT;
+
+    // Descriptor layouts
+    // Single Uniform buffer
+    VkDescriptorSetLayoutBinding b{};
+    b.binding = DESCRIPTOR_SET_BINDING_UNIFORM_BUFFER;
+    b.descriptorCount = 1;
+    b.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+
+    // Add uniform buffer binding to each set, and image sampler to material set as well
+    arr_push_back(&cfg.set_layout_descs[RDESC_SET_LAYOUT_FRAME].bindings, b);
+    arr_push_back(&cfg.set_layout_descs[RDESC_SET_LAYOUT_INSTANCE].bindings, b);
+    arr_push_back(&cfg.set_layout_descs[RDESC_SET_LAYOUT_MATERIAL].bindings, b);
+
+    b.descriptorCount = 0;
+    arr_push_back(&cfg.set_layout_descs[RDESC_SET_LAYOUT_SPECIAL].bindings, b);
+
+    // Add image sampler to material
+    b.binding = DESCRIPTOR_SET_BINDING_IMAGE_SAMPLER;
+    b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    arr_push_back(&cfg.set_layout_descs[RDESC_SET_LAYOUT_MATERIAL].bindings, b);
+
+    // Set the size to the same as config
+    rndr->set_layouts.size = cfg.set_layout_descs.size;
+    return vkr_init_descriptor_set_layouts(rndr->set_layouts.data, &cfg, &rndr->vk);
+}
+
+intern int setup_global_pipeline_layout(renderer *rndr)
+{
+    vkr_pipeline_layout_cfg cfg{};
+    cfg.set_layouts = rndr->set_layouts.data;
+    cfg.set_layout_count = rndr->set_layouts.size;
+
+    // Setup our push constant
+    ++cfg.push_constant_ranges.size;
+    cfg.push_constant_ranges[0].offset = 0;
+    cfg.push_constant_ranges[0].size = sizeof(push_constants);
+    cfg.push_constant_ranges[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    return vkr_init_pipeline_layout(&rndr->g_layout, &cfg, &rndr->vk);
+}
+
+void setup_vertex_layout_presets(renderer *rndr)
+{
+    // TODO: separate positions for this buffer
+    rndr->vertex_layouts.size = RVERT_LAYOUT_COUNT;
+    auto sm_layout = &rndr->vertex_layouts[RVERT_LAYOUT_STATIC_MESH];
+    sm_layout->bindings.size = 1;
+    sm_layout->bindings[0].binding = 0;
+    sm_layout->bindings[0].stride = sizeof(vertex);
+    sm_layout->bindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    sm_layout->attribs.size = 3;
+    sm_layout->attribs[0].binding = 0;
+    sm_layout->attribs[0].location = 0;
+    sm_layout->attribs[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+    sm_layout->attribs[0].offset = offsetof(vertex, pos);
+
+    sm_layout->attribs[1].binding = 0;
+    sm_layout->attribs[1].location = 1;
+    sm_layout->attribs[1].format = VK_FORMAT_R32G32_SFLOAT;
+    sm_layout->attribs[1].offset = offsetof(vertex, uv);
+
+    sm_layout->attribs[2].binding = 0;
+    sm_layout->attribs[2].location = 2;
+    sm_layout->attribs[2].format = VK_FORMAT_R8G8B8A8_UINT;
+    sm_layout->attribs[2].offset = offsetof(vertex, color);
 }
 
 intern int setup_rendering(renderer *rndr)
@@ -873,19 +672,27 @@ intern int setup_rendering(renderer *rndr)
     auto vk = &rndr->vk;
     auto dev = &rndr->vk.inst.device;
 
-    int err = setup_render_pass(rndr);
+    int err = setup_render_passes(rndr);
     if (err != err_code::VKR_NO_ERROR) {
         elog("Failed to setup render pass");
         return err;
     }
 
-    err = setup_diffuse_mat_pipeline(rndr);
+    err = setup_global_descriptor_set_layouts(rndr);
     if (err != err_code::VKR_NO_ERROR) {
-        elog("Failed to setup pipeline");
+        elog("Failed to setup global descriptor set layouts");
         return err;
     }
 
-    err = setup_color_mat_pipeline(rndr);
+    err = setup_global_pipeline_layout(rndr);
+    if (err != err_code::VKR_NO_ERROR) {
+        elog("Failed to setup global pipeline layout");
+        return err;
+    }
+
+    setup_vertex_layout_presets(rndr);
+
+    err = setup_diffuse_technique(rndr);
     if (err != err_code::VKR_NO_ERROR) {
         elog("Failed to setup pipeline");
         return err;
@@ -955,59 +762,6 @@ intern int setup_rendering(renderer *rndr)
     return err_code::VKR_NO_ERROR;
 }
 
-intern void add_image_sampler_desc_write_update(renderer *rndr,
-                                                vkr_frame *cur_frame,
-                                                sizet im_view,
-                                                sizet sampler,
-                                                sizet im_slot,
-                                                sizet set_ind,
-                                                array<VkWriteDescriptorSet> *updates,
-                                                VkDescriptorType type)
-{
-    auto dev = &rndr->vk.inst.device;
-    // Add a write descriptor set to update our obj descriptor to point at this portion of our unifrom buffer
-    auto im_info = mem_calloc<VkDescriptorImageInfo>(1, &rndr->frame_linear);
-    im_info->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    im_info->imageView = dev->image_views[im_view].hndl;
-    im_info->sampler = dev->samplers[sampler].hndl;
-
-    VkWriteDescriptorSet desc_write{};
-    desc_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    desc_write.dstSet = cur_frame->desc_pool.desc_sets[set_ind].hndl;
-    desc_write.dstBinding = DESCRIPTOR_SET_BINDING_IMAGE_SAMPLER + im_slot;
-    desc_write.dstArrayElement = 0;
-    desc_write.descriptorType = type;
-    desc_write.descriptorCount = 1;
-    desc_write.pImageInfo = im_info;
-    arr_push_back(updates, desc_write);
-}
-
-intern void add_uniform_desc_write_update(renderer *rndr,
-                                          vkr_frame *cur_frame,
-                                          sizet ubo_offset,
-                                          sizet range,
-                                          sizet buf_ind,
-                                          sizet set_ind,
-                                          array<VkWriteDescriptorSet> *updates,
-                                          VkDescriptorType type)
-{
-    // Add a write descriptor set to update our obj descriptor to point at this portion of our unifrom buffer
-    auto buffer_info = mem_calloc<VkDescriptorBufferInfo>(1, &rndr->frame_linear);
-    buffer_info->offset = ubo_offset;
-    buffer_info->range = range;
-    buffer_info->buffer = rndr->vk.inst.device.buffers[buf_ind].hndl;
-
-    VkWriteDescriptorSet desc_write{};
-    desc_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    desc_write.dstSet = cur_frame->desc_pool.desc_sets[set_ind].hndl;
-    desc_write.dstBinding = DESCRIPTOR_SET_BINDING_UNIFORM_BUFFER;
-    desc_write.dstArrayElement = 0;
-    desc_write.descriptorType = type;
-    desc_write.descriptorCount = 1;
-    desc_write.pBufferInfo = buffer_info;
-    arr_push_back(updates, desc_write);
-}
-
 intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame *cur_frame, vkr_command_buffer *cmd_buf)
 {
     auto dev = &rndr->vk.inst.device;
@@ -1029,92 +783,92 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
 
     // TODO: This really can't go in any order we want for render passes.. We might have dependency ordered between
     // them.. for now we just have the one.. I'm not sure if we need to do a
-    auto rpass_iter = hmap_begin(&rndr->dcs.rpasses);
-    while (rpass_iter) {
-        auto rpass = &dev->render_passes[rpass_iter->val->rpinfo->rpind];
-        vkr_cmd_begin_rpass(cmd_buf, fb, rpass, att_clear_vals, 2);
+    for (int rpind = 0; rpind < rndr->rpasses.size; ++rpind) {
+        auto rpass = &rndr->rpasses[rpind];
+        vkr_cmd_begin_rpass(cmd_buf, fb, rpass->vk_hndl, att_clear_vals, 2);
+
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = (float)fb->size.w;
+        viewport.height = (float)fb->size.h;
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(cmd_buf->hndl, 0, 1, &viewport);
+
+        VkRect2D scissor{};
+        scissor.offset = {0, 0};
+        scissor.extent = {fb->size.w, fb->size.h};
+        vkCmdSetScissor(cmd_buf->hndl, 0, 1, &scissor);
 
         // Bind frame rpass descriptor set
-        auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->val->frame_set_layouti].hndl;
-        vkCmdBindDescriptorSets(
-            cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, G_FRAME_PL_LAYOUT, DESCRIPTOR_SET_LAYOUT_FRAME, 1, &ds, 0, nullptr);
+        // auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->val->frame_set_layouti].hndl;
+        // vkCmdBindDescriptorSets(
+        //     cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, G_FRAME_PL_LAYOUT, DESCRIPTOR_SET_LAYOUT_FRAME, 1, &ds, 0, nullptr);
 
-        // We could make our render pass have the vert/index buffer info.. ie
-        auto pl_iter = hmap_begin(&rpass_iter->val->plines);
-        while (pl_iter) {
-            // Grab the pipeline and set it, and set the viewport/scissor
-            auto pipeline = &dev->pipelines[pl_iter->val->plinfo->plind];
-            vkCmdBindPipeline(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->hndl);
+        // // We could make our render pass have the vert/index buffer info.. ie
+        // auto pl_iter = hmap_begin(&rpass_iter->val->plines);
+        // while (pl_iter) {
+        //     // Grab the pipeline and set it, and set the viewport/scissor
+        //     auto pipeline = &dev->pipelines[pl_iter->val->plinfo->plind];
+        //     vkCmdBindPipeline(cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->hndl);
 
-            auto ds = cur_frame->desc_pool.desc_sets[pl_iter->val->set_layouti].hndl;
-            vkCmdBindDescriptorSets(
-                cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, DESCRIPTOR_SET_LAYOUT_PIPELINE, 1, &ds, 0, nullptr);
+        //     auto ds = cur_frame->desc_pool.desc_sets[pl_iter->val->set_layouti].hndl;
+        //     vkCmdBindDescriptorSets(
+        //         cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, DESCRIPTOR_SET_LAYOUT_PIPELINE, 1, &ds, 0,
+        //         nullptr);
 
-            VkViewport viewport{};
-            viewport.x = 0.0f;
-            viewport.y = 0.0f;
-            viewport.width = (float)fb->size.w;
-            viewport.height = (float)fb->size.h;
-            viewport.minDepth = 0.0f;
-            viewport.maxDepth = 1.0f;
-            vkCmdSetViewport(cmd_buf->hndl, 0, 1, &viewport);
+        //     auto mat_iter = hmap_begin(&pl_iter->val->mats);
+        //     while (mat_iter) {
+        //         // Bind the material set
+        //         auto ds = cur_frame->desc_pool.desc_sets[mat_iter->val->set_layouti].hndl;
+        //         vkCmdBindDescriptorSets(
+        //             cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, DESCRIPTOR_SET_LAYOUT_MATERIAL, 1, &ds, 0,
+        //             nullptr);
 
-            VkRect2D scissor{};
-            scissor.offset = {0, 0};
-            scissor.extent = {fb->size.w, fb->size.h};
-            vkCmdSetScissor(cmd_buf->hndl, 0, 1, &scissor);
+        //         for (u32 dci = 0; dci < mat_iter->val->dcs.size; ++dci) {
+        //             const draw_call *cur_dc = &mat_iter->val->dcs[dci];
+        //             auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->val->obj_set_layouti].hndl;
+        //             sizet obj_ubo_item_size = vkr_uniform_buffer_offset_alignment(&rndr->vk, sizeof(obj_ubo_data));
+        //             // Our dynamic ubo_offset in to our singlestoring all of our transforms is computed by adding
+        //             // the material base draw call ubo_offset (computed each frame).
+        //             u32 dyn_offset = (u32)(obj_ubo_item_size * cur_dc->ubo_offset);
+        //             vkCmdBindDescriptorSets(cmd_buf->hndl,
+        //                                     VK_PIPELINE_BIND_POINT_GRAPHICS,
+        //                                     pipeline->layout_hndl,
+        //                                     DESCRIPTOR_SET_LAYOUT_OBJECT,
+        //                                     1,
+        //                                     &ds,
+        //                                     1,
+        //                                     &dyn_offset);
 
-            auto mat_iter = hmap_begin(&pl_iter->val->mats);
-            while (mat_iter) {
-                // Bind the material set
-                auto ds = cur_frame->desc_pool.desc_sets[mat_iter->val->set_layouti].hndl;
-                vkCmdBindDescriptorSets(
-                    cmd_buf->hndl, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout_hndl, DESCRIPTOR_SET_LAYOUT_MATERIAL, 1, &ds, 0, nullptr);
-
-                for (u32 dci = 0; dci < mat_iter->val->dcs.size; ++dci) {
-                    const draw_call *cur_dc = &mat_iter->val->dcs[dci];
-                    auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->val->obj_set_layouti].hndl;
-                    sizet obj_ubo_item_size = vkr_uniform_buffer_offset_alignment(&rndr->vk, sizeof(obj_ubo_data));
-                    // Our dynamic ubo_offset in to our singlestoring all of our transforms is computed by adding
-                    // the material base draw call ubo_offset (computed each frame).
-                    u32 dyn_offset = (u32)(obj_ubo_item_size * cur_dc->ubo_offset);
-                    vkCmdBindDescriptorSets(cmd_buf->hndl,
-                                            VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                            pipeline->layout_hndl,
-                                            DESCRIPTOR_SET_LAYOUT_OBJECT,
-                                            1,
-                                            &ds,
-                                            1,
-                                            &dyn_offset);
-
-                    push_constants pc{3};
-                    vkCmdPushConstants(cmd_buf->hndl, pipeline->layout_hndl, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push_constants), &pc);
-                    vkCmdDrawIndexed(cmd_buf->hndl,
-                                     cur_dc->index_count,
-                                     cur_dc->instance_count,
-                                     cur_dc->first_index,
-                                     cur_dc->vertex_offset,
-                                     cur_dc->first_instance);
-                }
-                mat_iter = hmap_next(&pl_iter->val->mats, mat_iter);
-            }
-            pl_iter = hmap_next(&rpass_iter->val->plines, pl_iter);
-        }
+        //             push_constants pc{3};
+        //             vkCmdPushConstants(cmd_buf->hndl, pipeline->layout_hndl, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push_constants), &pc);
+        //             vkCmdDrawIndexed(cmd_buf->hndl,
+        //                              cur_dc->index_count,
+        //                              cur_dc->instance_count,
+        //                              cur_dc->first_index,
+        //                              cur_dc->vertex_offset,
+        //                              cur_dc->first_instance);
+        //         }
+        //         mat_iter = hmap_next(&pl_iter->val->mats, mat_iter);
+        //     }
+        //     pl_iter = hmap_next(&rpass_iter->val->plines, pl_iter);
+        // }
 
         // If we are on the imgui rpass, render its stuff. It has it's own pipeling, vertex/index buffers, etc
-        if (rpass == rndr->imgui.rpass) {
+        if (rpass->vk_hndl == rndr->imgui.rpass) {
             auto img_data = ImGui::GetDrawData();
             ImGui_ImplVulkan_RenderDrawData(img_data, cmd_buf->hndl);
         }
 
         vkr_cmd_end_rpass(cmd_buf);
-        rpass_iter = hmap_next(&rndr->dcs.rpasses, rpass_iter);
     }
 
     return vkr_end_cmd_buf(cmd_buf);
 }
 
-int init_renderer(renderer *rndr, const handle<material> &default_mat, void *win_hndl, mem_arena *fl_arena)
+int init_renderer(renderer *rndr, void *win_hndl, mem_arena *fl_arena)
 {
     asrt(fl_arena->alloc_type == mem_alloc_type::FREE_LIST);
     rndr->upstream_fl_arena = fl_arena;
@@ -1122,22 +876,15 @@ int init_renderer(renderer *rndr, const handle<material> &default_mat, void *win
     mem_init_lin_arena(&rndr->frame_linear, 10 * KB_SIZE, fl_arena, "frame");
     mem_init_lin_arena(&rndr->vk_frame_linear, 10 * MB_SIZE, mem_global_stack_arena(), "vk-frame");
 
-    hmap_init(&rndr->rpasses, hash_type, fl_arena);
-    hmap_init(&rndr->pipelines, hash_type, fl_arena);
-    hmap_init(&rndr->materials, hash_type, fl_arena);
-    hmap_init(&rndr->textures, hash_type, fl_arena);
-
-    mem_init_lin_arena(&rndr->dcs.dc_linear, 100 * MB_SIZE, fl_arena, "dcs");
-    hmap_init(&rndr->dcs.rpasses);
-
-    rndr->default_mat = default_mat;
+    // Render pass names
+    hmap_init(&rndr->rpass_name_map, hash_type, fl_arena);
+    hmap_init(&rndr->pline_cache, hash_type, fl_arena);
 
     // Set up our draw call list render pass hashmap with frame linear memory
     vkr_descriptor_cfg desc_cfg{};
     // Frame + pl + mat + obj uob
-    desc_cfg.max_sets = (MAX_RENDERPASS_COUNT * 2 + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT);
-    desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER] = (MAX_RENDERPASS_COUNT + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT);
-    desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC] = MAX_RENDERPASS_COUNT;
+    desc_cfg.max_sets = (RPASS_TYPE_COUNT * 2 + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT);
+    desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER] = (RPASS_TYPE_COUNT + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT);
     desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = MAX_MATERIAL_COUNT * MAT_SAMPLER_SLOT_COUNT;
     vkr_cfg vkii{.app_name = "rdev",
                  .vi{1, 0, 0},
@@ -1157,12 +904,6 @@ int init_renderer(renderer *rndr, const handle<material> &default_mat, void *win
         return err_code::RENDER_INIT_FAIL;
     }
 
-    // Set up our per frame data
-    for (int fif_ind = 0; fif_ind < rndr->per_frame_data.size; ++fif_ind) {
-        arr_init(&rndr->per_frame_data[fif_ind].buffer_updates, fl_arena);
-        rndr->per_frame_data[fif_ind].vkf = &rndr->vk.inst.device.rframes[fif_ind];
-    }
-
     int err = setup_rendering(rndr);
     if (err != err_code::VKR_NO_ERROR) {
         elog("Failed to initialize renderer with code %d", err);
@@ -1178,8 +919,9 @@ int init_renderer(renderer *rndr, const handle<material> &default_mat, void *win
 intern void terminate_swapchain_images_and_framebuffer(renderer *rndr)
 {
     auto dev = &rndr->vk.inst.device;
-    vkr_terminate_image_view(&dev->image_views[rndr->swapchain_fb_depth_stencil_iview_ind]);
-    vkr_terminate_image(&dev->images[rndr->swapchain_fb_depth_stencil_im_ind]);
+    auto sl_item = get_slot_item(&rndr->textures, rndr->swapchain_fb_depth_stencil);
+    vkr_terminate_image_view(sl_item->im_view, &rndr->vk);
+    vkr_terminate_image(&sl_item->im);
     vkr_terminate_swapchain_framebuffers(dev, &rndr->vk);
 }
 
@@ -1224,10 +966,9 @@ int begin_render_frame(renderer *rndr, int finished_frames)
 
     // Clear all prev desc sets
     vkr_reset_descriptor_pool(&cur_frame->desc_pool, &rndr->vk);
-    
+
     return err_code::RENDER_NO_ERROR;
 }
-
 
 int end_render_frame(renderer *rndr, camera *cam, f64 dt)
 {
@@ -1265,8 +1006,7 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
         elog("Failed to acquire swapchain image");
         return err_code::RENDER_ACQUIRE_IMAGE_FAIL;
     }
-    
-    
+
     if (cam) {
         ivec2 sz = get_window_pixel_size(rndr->vk.cfg.window);
         if (cam->vp_size != sz) {
@@ -1274,16 +1014,7 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
             cam->vp_size = sz;
             cam->proj = (math::perspective(cam->fov, (f32)cam->vp_size.w / (f32)cam->vp_size.h, cam->near_far.x, cam->near_far.y));
         }
-
-        // Update our main pipeline view_proj with the cam transform update. This should be done every frame because the
-        // camera is dynamic
-        auto pl_iter = hmap_begin(&rndr->pipelines);
-        while (pl_iter) {
-            pl_iter->val.proj_view = cam->proj * cam->view;
-            pl_iter = hmap_next(&rndr->pipelines, pl_iter);
-        }
     }
-
 
     // The command buf index struct has an ind struct into the pool the cmd buf comes from, and then an ind into the buffer
     // The ind into the pool has an ind into the queue family (as that contains our array of command pools) and then and
@@ -1313,7 +1044,6 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
         elog("Failed to reset fence");
         return err_code::RENDER_RESET_FENCE_FAIL;
     }
-    
 
     //////////////////////////////////
     // Submit command buffer to GPU //
@@ -1330,7 +1060,7 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
     submit_info.pCommandBuffers = &cmd_buf->hndl;
     submit_info.signalSemaphoreCount = 1;
     submit_info.pSignalSemaphores = &rndr->vk.inst.device.swapchain.renders_finished[im_ind];
-    if (vkQueueSubmit(dev->qfams[VKR_QUEUE_FAM_TYPE_GFX].qs[VKR_RENDER_QUEUE].hndl, 1, &submit_info, cur_frame->in_flight) != VK_SUCCESS) {
+    if (vkQueueSubmit(dev->qfams[VKR_QUEUE_FAM_TYPE_GFX].qs[VKR_RENDER_QUEUE], 1, &submit_info, cur_frame->in_flight) != VK_SUCCESS) {
         return err_code::RENDER_SUBMIT_QUEUE_FAIL;
     }
 
@@ -1346,7 +1076,7 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
     present_info.pSwapchains = &dev->swapchain.swapchain;
     present_info.pImageIndices = &im_ind;
     present_info.pResults = nullptr; // Optional - check for individual swaps
-    vk_res = vkQueuePresentKHR(dev->qfams[VKR_QUEUE_FAM_TYPE_PRESENT].qs[VKR_RENDER_QUEUE].hndl, &present_info);
+    vk_res = vkQueuePresentKHR(dev->qfams[VKR_QUEUE_FAM_TYPE_PRESENT].qs[VKR_RENDER_QUEUE], &present_info);
 
     // This purely helps with smoothness - it works fine without recreating the swapchain here and instead doing it on
     // the next frame, but it seems to resize more smoothly doing it here
@@ -1359,42 +1089,63 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
         elog("Failed to presenet KHR");
         return err_code::RENDER_PRESENT_KHR_FAIL;
     }
-    
-    return err_code::RENDER_NO_ERROR;
-}
 
-int end_render_frame(renderer *rndr, camera *cam, f64 dt)
-{
+    return err_code::RENDER_NO_ERROR;
 }
 
 void terminate_renderer(renderer *rndr)
 {
-    rndr->default_mat = {};
-    for (int i = 0; i < rndr->per_frame_data.size; ++i) {
-        arr_terminate(&rndr->per_frame_data[i].buffer_updates);
-    }
-    hmap_terminate(&rndr->dcs.rpasses);
+    hmap_terminate(&rndr->rpass_name_map);
+
     mem_reset_arena(&rndr->vk_frame_linear);
     mem_reset_arena(&rndr->frame_linear);
-    mem_reset_arena(&rndr->dcs.dc_linear);
 
     // These are stack arenas so must go in this order
     hmap_terminate(&rndr->rmi.meshes);
     mem_terminate_arena(&rndr->rmi.inds.node_pool);
     mem_terminate_arena(&rndr->rmi.verts.node_pool);
 
+    // Device needs to be idle before finishing with everything
     vkr_device_wait_idle(&rndr->vk.inst.device);
+
+    // Terminate all images and image views
+    for (int i = 0; i < rndr->textures.slots.size; ++i) {
+        vkr_terminate_image(&rndr->textures.slots[i].item.im);
+        vkr_terminate_image_view(rndr->textures.slots[i].item.im_view, &rndr->vk);
+        clear_slot_pool(&rndr->textures);
+    }
+
+    // Terminate all texture samplers
+    for (int i = 0; i < rndr->samplers.size; ++i) {
+        vkr_terminate_sampler(rndr->samplers[i].vk_hndl, &rndr->vk);
+    }
+    arr_clear(&rndr->samplers);
+
+    // Terminate our default descriptor layout sets
+    dlog("Should be terminating %d layouts", rndr->set_layouts.size);
+    vkr_terminate_descriptor_set_layouts(rndr->set_layouts.data, rndr->set_layouts.size, &rndr->vk);
+    arr_clear(&rndr->set_layouts);
+
+    // Global pipeline layout
+    vkr_terminate_pipeline_layout(rndr->g_layout, &rndr->vk);
+
+    // Terminate all pipelines
+    for (auto iter = hmap_begin(&rndr->pline_cache); iter; iter = hmap_next(&rndr->pline_cache, iter)) {
+        vkr_terminate_pipeline(iter->val, &rndr->vk);
+    }
+    hmap_terminate(&rndr->pline_cache);
+
+    // Terminate all render passes
+    for (int i = 0; i < rndr->rpasses.size; ++i) {
+        vkr_terminate_render_pass(rndr->rpasses[i].vk_hndl, &rndr->vk);
+        rndr->rpasses.size = 0;
+    }
+
     terminate_imgui(rndr);
     vkr_terminate(&rndr->vk);
-    mem_terminate_arena(&rndr->dcs.dc_linear);
     mem_terminate_arena(&rndr->vk_free_list);
     mem_terminate_arena(&rndr->vk_frame_linear);
     mem_terminate_arena(&rndr->frame_linear);
-
-    hmap_terminate(&rndr->rpasses);
-    hmap_terminate(&rndr->pipelines);
-    hmap_terminate(&rndr->materials);
-    hmap_terminate(&rndr->textures);
 }
 
 } // namespace nslib

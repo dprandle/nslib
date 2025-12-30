@@ -116,54 +116,6 @@ int init(platform_ctxt *ctxt, void *user_data)
     make_rect(rect_msh.ptr, "rect", mem_global_arena());
     make_cube(cube_msh.ptr, "cube", mem_global_arena());
 
-    // Create 3 materials of different colors
-    auto mat_cache = get_cache<material>(&app->cg);
-    auto tex_cache = get_cache<texture>(&app->cg);
-
-    // Create a default material for submeshes without materials
-    auto def_mat = add_robj(mat_cache, terminate_material);
-    init_material(def_mat.ptr, "default", mem_global_arena());
-    def_mat->col = vec4{0.5f, 0.2f, 0.8f, 1.0f};
-    hset_insert(&def_mat->pipelines, PLINE_FWD_RPASS_S0_OPAQUE_COL);
-
-    auto mat1 = add_robj(mat_cache, terminate_material);
-    init_material(mat1.ptr, "mat1", mem_global_arena());
-    hset_insert(&mat1->pipelines, PLINE_FWD_RPASS_S0_OPAQUE_COL);
-    mat1->col = {1.0, 0.0, 1.0, 1.0};
-
-    auto mat_maria_face = add_robj(mat_cache, terminate_material);
-    init_material(mat_maria_face.ptr, "maria-face", mem_global_arena());
-    hset_insert(&mat_maria_face->pipelines, PLINE_FWD_RPASS_S0_OPAQUE_DIFFUSE);
-    mat_maria_face->col = {0.0, 1.0, 0.0, 1.0};
-
-    auto tex_maria = add_robj(tex_cache, terminate_texture);
-    init_texture(tex_maria.ptr, "maria", mem_global_arena());
-    cstr err;
-    const char* path = "import/maria.png";
-    if (load_texture(tex_maria.ptr, path, &err)) {
-        ilog("Loaded %s from %s", to_cstr(tex_maria->name), path);
-        arr_emplace_back(&mat_maria_face->textures, tex_maria->id);
-    }
-    else {
-        wlog("Failed to load texture %s from %s: %s", to_cstr(tex_maria->name), path, err);
-    }
-
-    auto mat_daniel_face = add_robj(mat_cache, terminate_material);
-    init_material(mat_daniel_face.ptr, "daniel-face", mem_global_arena());
-    hset_insert(&mat_daniel_face->pipelines, PLINE_FWD_RPASS_S0_OPAQUE_DIFFUSE);
-    mat_daniel_face->col = {0.0, 0.0, 1.0, 1.0};
-
-    auto tex_daniel = add_robj(tex_cache, terminate_texture);
-    init_texture(tex_daniel.ptr, "daniel", mem_global_arena());
-    path = "import/daniel.png";
-    if (load_texture(tex_daniel.ptr, path, &err)) {
-        ilog("Loaded %s from %s", to_cstr(tex_daniel->name), path);
-        arr_emplace_back(&mat_daniel_face->textures, tex_daniel->id);
-    }
-    else {
-        wlog("Failed to load texture %s from %s: %s", to_cstr(tex_daniel->name), path, err);
-    }    
-
     ilog("Rect mesh submesh count %d and vert count %d and ind count %d",
          rect_msh->submeshes.size,
          rect_msh->submeshes[0].verts.size,
@@ -172,16 +124,13 @@ int init(platform_ctxt *ctxt, void *user_data)
          cube_msh->submeshes.size,
          cube_msh->submeshes[0].verts.size,
          cube_msh->submeshes[0].inds.size);
-
+ 
     // Initialize our renderer - fail early if init fails
-    int ret = init_renderer(&app->rndr, def_mat, ctxt->win_hndl, &ctxt->arenas.free_list);
+    int ret = init_renderer(&app->rndr, ctxt->win_hndl, &ctxt->arenas.free_list);
     if (ret != err_code::RENDER_NO_ERROR) {
         return ret;
     }
 
-    // Upload our data to gpu
-    upload_to_gpu(tex_daniel.ptr, &app->rndr);
-    upload_to_gpu(tex_maria.ptr, &app->rndr);
     upload_to_gpu(cube_msh.ptr, &app->rndr);
     upload_to_gpu(rect_msh.ptr, &app->rndr);
 
@@ -221,17 +170,6 @@ int init(platform_ctxt *ctxt, void *user_data)
                 }
                 tfcomp->world_pos = vec3{xind * 2.0f, yind * 2.0f, zind * 2.0f};
                 tfcomp->cached = math::model_tform(tfcomp->world_pos, tfcomp->orientation, tfcomp->scale);
-
-                auto m = (zind * width * len + yind * width + xind);
-                if ((m % 2)) {
-                    sc->mat_ids[0] = mat1->id;
-                }
-                else if (m % 4) {
-                    sc->mat_ids[0] = mat_maria_face->id;
-                }
-                else {
-                    sc->mat_ids[0] = mat_daniel_face->id;
-                }
             }
         }
     }

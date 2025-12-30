@@ -45,7 +45,7 @@ pup_func(material)
 struct vertex
 {
     vec3 pos;
-    vec2 tc;
+    vec2 uv;
     u32 color;
 };
 

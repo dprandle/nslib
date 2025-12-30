@@ -32,11 +32,11 @@
     }
 
 #define op_eq_func_tt(type)                                                                                                                \
-    template<class T>                                                                                                                      \
+    template<typename T>                                                                                                                   \
     inline bool operator==(const type<T> &lhs, const type<T> &rhs)
 
 #define op_neq_func_tt(type)                                                                                                               \
-    template<class T>                                                                                                                      \
+    template<typename T>                                                                                                                   \
     inline bool operator!=(const type<T> &lhs, const type<T> &rhs)                                                                         \
     {                                                                                                                                      \
         return !(lhs == rhs);                                                                                                              \
