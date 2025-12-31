@@ -511,7 +511,6 @@ int vkr_init_device(vkr_device *dev,
                     const char *const *device_extensions,
                     u32 dev_ext_count)
 {
-    arr_init(&dev->framebuffers, vk->cfg.arenas.persistent_arena);
     arr_init(&dev->buffers, vk->cfg.arenas.persistent_arena);
 
     ilog("Creating vk device and queues");
@@ -595,27 +594,12 @@ int vkr_init_device(vkr_device *dev,
     // Create command pools for each family
     for (int i = 0; i < VKR_QUEUE_FAM_TYPE_COUNT; ++i) {
         arr_init(&dev->qfams[i].qs, vk->cfg.arenas.persistent_arena);
-        arr_init(&dev->qfams[i].cmd_pools, vk->cfg.arenas.persistent_arena);
-
         arr_resize(&dev->qfams[i].qs, qfams->qinfo[i].requested_count);
         dev->qfams[i].fam_ind = qfams->qinfo[i].index;
         for (u32 qind = 0; qind < qfams->qinfo[i].requested_count; ++qind) {
             u32 adjusted_ind = qind + offsets[i];
             vkGetDeviceQueue(dev->hndl, qfams->qinfo[i].index, adjusted_ind, &dev->qfams[i].qs[qind]);
             ilog("Getting queue %d from queue family %d: %p", adjusted_ind, qfams->qinfo[i].index, dev->qfams[i].qs[qind]);
-        }
-
-        vkr_command_pool qpool{};
-
-        if (vkr_init_cmd_pool(vk, dev->qfams[i].fam_ind, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, &qpool) == err_code::VKR_NO_ERROR) {
-            sizet dpool = vkr_add_cmd_pool(&dev->qfams[i], qpool);
-            dev->qfams[i].default_pool = dpool;
-        }
-
-        vkr_command_pool qpool_transient{};
-        if (vkr_init_cmd_pool(vk, dev->qfams[i].fam_ind, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, &qpool_transient) == err_code::VKR_NO_ERROR) {
-            sizet pool_transient_ind = vkr_add_cmd_pool(&dev->qfams[i], qpool_transient);
-            dev->qfams[i].transient_pool = pool_transient_ind;
         }
     }
 
@@ -624,13 +608,8 @@ int vkr_init_device(vkr_device *dev,
         return err;
     }
 
-    vkr_add_swapchain_framebuffers(dev);
-
-    err = vkr_init_render_frames(dev, vk);
-    if (err != err_code::VKR_NO_ERROR) {
-        return err;
-    }
-
+    // Set framebuffers
+    arr_resize(&dev->swapchain.fbs, dev->swapchain.image_views.size);
     return err_code::VKR_NO_ERROR;
 }
 
@@ -915,120 +894,63 @@ int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk)
     return err_code::VKR_NO_ERROR;
 }
 
-vkr_add_result vkr_add_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, sizet count)
+int vkr_alloc_cmd_bufs(VkCommandBuffer *bufs, const vkr_alloc_cmd_bufs_cfg &cfg, const vkr_context *vk)
 {
-    vkr_add_result ret{};
-    array<VkCommandBuffer> hndls;
-    arr_init(&hndls, vk->cfg.arenas.command_arena);
-    arr_resize(&hndls, count);
-
     VkCommandBufferAllocateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    info.commandPool = pool->hndl;
-    info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    info.commandBufferCount = (u32)count;
-    int err = vkAllocateCommandBuffers(vk->inst.device.hndl, &info, hndls.data);
-    if (err != VK_SUCCESS) {
-        elog("Failed to create command buffer/s with code %d", err);
-        arr_terminate(&hndls);
-        ret.err_code = err_code::VKR_CREATE_COMMAND_BUFFER_FAIL;
-        return ret;
+    info.commandPool = cfg.pool;
+    info.level = cfg.level;
+    info.commandBufferCount = (u32)cfg.count;
+    int ret = vkAllocateCommandBuffers(vk->inst.device.hndl, &info, bufs);
+    if (ret != VK_SUCCESS) {
+        elog("Failed to create command buffer/s with code %d", ret);
+        ret = err_code::VKR_CREATE_COMMAND_BUFFER_FAIL;
     }
-    ret.begin = pool->buffers.size;
-    ret.end = ret.begin + count;
-    arr_resize(&pool->buffers, ret.end);
-    for (sizet i = 0; i < count; ++i) {
-        pool->buffers[ret.begin + i].hndl = hndls[i];
-    }
-    arr_terminate(&hndls);
     return ret;
 }
 
-void vkr_remove_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, sizet ind, sizet count)
+void vkr_free_cmd_bufs(VkCommandBuffer *bufs, sizet count, VkCommandPool pool, const vkr_context *vk)
 {
-    array<VkCommandBuffer> hndls{};
-    arr_init(&hndls, vk->cfg.arenas.command_arena);
-    arr_resize(&hndls, count);
-    for (sizet i = 0; i < count; ++i) {
-        hndls[i] = pool->buffers[ind + i].hndl;
-    }
-    vkFreeCommandBuffers(vk->inst.device.hndl, pool->hndl, (u32)count, hndls.data);
-    arr_erase(&pool->buffers, &pool->buffers[ind], &pool->buffers[ind + count]);
-    arr_terminate(&hndls);
+    vkFreeCommandBuffers(vk->inst.device.hndl, pool, (u32)count, bufs);
 }
 
-vkr_add_result vkr_add_descriptor_sets(vkr_descriptor_pool *pool, const vkr_context *vk, const VkDescriptorSetLayout *layouts, sizet count)
+int vkr_allot_desc_sets(VkDescriptorSet *sets, const vkr_alloc_desc_sets_cfg &cfg, const vkr_context *vk)
 {
-    vkr_add_result result{};
-    array<VkDescriptorSet> hndls{};
-    arr_init(&hndls, vk->cfg.arenas.command_arena);
-    arr_resize(&hndls, count);
-
     VkDescriptorSetAllocateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    info.descriptorPool = pool->hndl;
-    info.descriptorSetCount = (u32)count;
-    info.pSetLayouts = layouts;
-    int err = vkAllocateDescriptorSets(vk->inst.device.hndl, &info, hndls.data);
-    if (err != VK_SUCCESS) {
-        elog("Failed to create descriptor set/s with code %d", err);
-        arr_terminate(&hndls);
-        result.err_code = err_code::VKR_CREATE_DESCRIPTOR_SETS_FAIL;
-        return result;
+    info.descriptorPool = cfg.pool;
+    info.descriptorSetCount = (u32)cfg.set_count;
+    info.pSetLayouts = cfg.set_layouts;
+    int ret = vkAllocateDescriptorSets(vk->inst.device.hndl, &info, sets);
+    if (ret != VK_SUCCESS) {
+        elog("Failed to create descriptor set/s with code %d", ret);
+        ret = err_code::VKR_CREATE_DESCRIPTOR_SETS_FAIL;
     }
-
-    result.begin = pool->desc_sets.size;
-    result.end = result.begin + count;
-    arr_resize(&pool->desc_sets, result.end);
-
-    for (sizet i = 0; i < count; ++i) {
-        pool->desc_sets[result.begin + i].hndl = hndls[i];
-        pool->desc_sets[result.begin + i].layout = layouts[i];
-    }
-    arr_terminate(&hndls);
-    return result;
+    return ret;
 }
 
-void vkr_remove_descriptor_sets(vkr_descriptor_pool *pool, const vkr_context *vk, u32 ind, u32 count)
+void vkr_free_desc_sets(const VkDescriptorSet *sets, sizet set_count, VkDescriptorPool pool, const vkr_context *vk)
 {
-    array<VkDescriptorSet> hndls{};
-    arr_init(&hndls, vk->cfg.arenas.command_arena);
-    arr_resize(&hndls, count);
-    for (u32 i = 0; i < count; ++i) {
-        hndls[i] = pool->desc_sets[ind + i].hndl;
-    }
-    vkFreeDescriptorSets(vk->inst.device.hndl, pool->hndl, count, hndls.data);
-    arr_erase(&pool->desc_sets, &pool->desc_sets[ind], &pool->desc_sets[ind + count]);
-    arr_terminate(&hndls);
+    vkFreeDescriptorSets(vk->inst.device.hndl, pool, (u32)set_count, sets);
 }
 
-int vkr_init_cmd_pool(const vkr_context *vk, u32 fam_ind, VkCommandPoolCreateFlags flags, vkr_command_pool *cpool)
+int vkr_init_cmd_pool(VkCommandPool *hndl, u32 queue_fam_ind, VkCommandPoolCreateFlags flags, const vkr_context *vk)
 {
-    arr_init(&cpool->buffers, vk->cfg.arenas.persistent_arena);
-
     VkCommandPoolCreateInfo pool_info{};
     pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     pool_info.flags = flags;
-    pool_info.queueFamilyIndex = fam_ind;
-    int err = vkCreateCommandPool(vk->inst.device.hndl, &pool_info, &vk->alloc_cbs, &cpool->hndl);
-    if (err != VK_SUCCESS) {
-        elog("Failed creating vulkan command pool with code %d", err);
-        return err_code::VKR_CREATE_COMMAND_POOL_FAIL;
+    pool_info.queueFamilyIndex = queue_fam_ind;
+    int ret = vkCreateCommandPool(vk->inst.device.hndl, &pool_info, &vk->alloc_cbs, hndl);
+    if (ret != VK_SUCCESS) {
+        elog("Failed creating vulkan command pool with code %d", ret);
+        ret = err_code::VKR_CREATE_COMMAND_POOL_FAIL;
     }
-    return err_code::VKR_NO_ERROR;
+    return ret;
 }
 
-sizet vkr_add_cmd_pool(vkr_device_queue_fam_info *qfam, const vkr_command_pool &cpool)
+void vkr_terminate_cmd_pool(VkCommandPool hndl, const vkr_context *vk)
 {
-    sizet ind = qfam->cmd_pools.size;
-    arr_push_back(&qfam->cmd_pools, cpool);
-    return ind;
-}
-
-void vkr_terminate_cmd_pool(const vkr_context *vk, u32 fam_ind, vkr_command_pool *cpool)
-{
-    vkDestroyCommandPool(vk->inst.device.hndl, cpool->hndl, &vk->alloc_cbs);
-    arr_terminate(&cpool->buffers);
+    vkDestroyCommandPool(vk->inst.device.hndl, hndl, &vk->alloc_cbs);
 }
 
 int vkr_init_shader_module(VkShaderModule *module, const byte_array *code, const vkr_context *vk)
@@ -1132,7 +1054,7 @@ const char *vkr_shader_stage_type_str(vkr_shader_stage_type st_type)
     }
 }
 
-int vkr_init_descriptor_set_layouts(VkDescriptorSetLayout *hndls, const vkr_descriptor_set_layout_cfg *cfg, const vkr_context *vk)
+int vkr_init_desc_set_layouts(VkDescriptorSetLayout *hndls, const vkr_descriptor_set_layout_cfg *cfg, const vkr_context *vk)
 {
     sizet created{0};
     for (int desc_i = 0; desc_i < cfg->set_layout_descs.size; ++desc_i) {
@@ -1155,7 +1077,7 @@ int vkr_init_descriptor_set_layouts(VkDescriptorSetLayout *hndls, const vkr_desc
     return err_code::VKR_NO_ERROR;
 }
 
-void vkr_terminate_descriptor_set_layouts(VkDescriptorSetLayout *layouts, sizet size, const vkr_context *vk)
+void vkr_terminate_desc_set_layouts(VkDescriptorSetLayout *layouts, sizet size, const vkr_context *vk)
 {
     for (int i = 0; i < size; ++i) {
         vkDestroyDescriptorSetLayout(vk->inst.device.hndl, layouts[i], &vk->alloc_cbs);
@@ -1358,13 +1280,6 @@ int vkr_init_framebuffer(vkr_framebuffer *fb, const vkr_framebuffer_cfg *cfg, co
     return err_code::VKR_NO_ERROR;
 }
 
-sizet vkr_add_framebuffer(vkr_device *device, const vkr_framebuffer &copy)
-{
-    sizet ind = device->framebuffers.size;
-    arr_push_back(&device->framebuffers, copy);
-    return ind;
-}
-
 void vkr_terminate_framebuffer(vkr_framebuffer *fb, const vkr_context *vk)
 {
     vkDestroyFramebuffer(vk->inst.device.hndl, fb->hndl, &vk->alloc_cbs);
@@ -1381,10 +1296,8 @@ u32 vkr_find_mem_type(u32 type_flags, VkMemoryPropertyFlags property_flags, cons
     return -1;
 }
 
-int vkr_init_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk, const vkr_descriptor_cfg *cfg)
+int vkr_init_desc_pool(VkDescriptorPool *hndl, const vkr_desc_cfg *cfg, const vkr_context *vk)
 {
-    arr_init(&desc_pool->desc_sets, vk->cfg.arenas.persistent_arena);
-
     // Get a count of the number of descriptors we are making avaialable for each desc type
     u32 total_desc_cnt{};
     VkDescriptorPoolSize psize[VKR_DESCRIPTOR_TYPE_COUNT] = {};
@@ -1407,27 +1320,20 @@ int vkr_init_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *
     pool_info.poolSizeCount = desc_size_count;
     pool_info.flags = cfg->flags;
     pool_info.pPoolSizes = psize;
-    pool_info.maxSets = (cfg->max_sets != VKR_INVALID) ? cfg->max_sets : total_desc_cnt;
+    pool_info.maxSets = cfg->max_sets;
     ilog("Setting max sets to %u (for %u total descriptors)", pool_info.maxSets, total_desc_cnt);
 
-    int err = vkCreateDescriptorPool(vk->inst.device.hndl, &pool_info, &vk->alloc_cbs, &desc_pool->hndl);
-    if (err != VK_SUCCESS) {
-        elog("Failed to create descriptor pool with vk err code %d", err);
-        return err_code::VKR_CREATE_DESCRIPTOR_POOL_FAIL;
+    int ret = vkCreateDescriptorPool(vk->inst.device.hndl, &pool_info, &vk->alloc_cbs, hndl);
+    if (ret != VK_SUCCESS) {
+        elog("Failed to create descriptor pool with vk err code %d", ret);
+        ret = err_code::VKR_CREATE_DESCRIPTOR_POOL_FAIL;
     }
-    return err_code::VKR_NO_ERROR;
+    return ret;
 }
 
-void vkr_reset_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk)
+void vkr_terminate_desc_pool(VkDescriptorPool hndl, const vkr_context *vk)
 {
-    vkResetDescriptorPool(vk->inst.device.hndl, desc_pool->hndl, {});
-    arr_clear(&desc_pool->desc_sets);
-}
-
-void vkr_terminate_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk)
-{
-    vkDestroyDescriptorPool(vk->inst.device.hndl, desc_pool->hndl, &vk->alloc_cbs);
-    arr_terminate(&desc_pool->desc_sets);
+    vkDestroyDescriptorPool(vk->inst.device.hndl, hndl, &vk->alloc_cbs);
 }
 
 void *vkr_map_buffer(vkr_buffer *buf, const vkr_gpu_allocator *vma)
@@ -1446,8 +1352,8 @@ int vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
                                      const void *src_data,
                                      sizet src_data_size,
                                      const VkBufferCopy *region,
-                                     vkr_device_queue_fam_info *cmd_q,
-                                     sizet qind,
+                                     VkCommandBuffer cmd_buf,
+                                     VkQueue queue,
                                      const vkr_context *vk)
 {
     vkr_buffer staging_buf{};
@@ -1467,7 +1373,7 @@ int vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
     memcpy(mem, src_data, src_data_size);
     vkr_unmap_buffer(&staging_buf, &vk->inst.device.vma_alloc);
 
-    err = vkr_copy_buffer(dest_buffer, &staging_buf, region, cmd_q, qind, vk);
+    err = vkr_copy_buffer(dest_buffer, &staging_buf, region, cmd_buf, queue, vk);
     vkr_terminate_buffer(&staging_buf, vk);
     return err;
 }
@@ -1475,20 +1381,13 @@ int vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
 int vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
                                      const void *src_data,
                                      sizet src_data_size,
-                                     vkr_device_queue_fam_info *cmd_q,
-                                     sizet qind,
+                                     VkCommandBuffer cmd_buf,
+                                     VkQueue queue,
                                      const vkr_context *vk)
 {
     VkBufferCopy region{};
     region.size = src_data_size;
-    return vkr_stage_and_upload_buffer_data(dest_buffer, src_data, src_data_size, &region, cmd_q, qind, vk);
-}
-
-sizet vkr_add_buffer(vkr_device *device, const vkr_buffer &copy)
-{
-    sizet ind = device->buffers.size;
-    arr_push_back(&device->buffers, copy);
-    return ind;
+    return vkr_stage_and_upload_buffer_data(dest_buffer, src_data, src_data_size, &region, cmd_buf, queue, vk);
 }
 
 int vkr_init_buffer(vkr_buffer *buffer, const vkr_buffer_cfg *cfg)
@@ -1570,7 +1469,6 @@ int vkr_init_image(vkr_image *image, const vkr_image_cfg *cfg)
 
     image->format = cinfo.format;
     image->dims = cfg->dims;
-    image->vma_alloc = cfg->vma_alloc;
 
     int err = vmaCreateImage(cfg->vma_alloc->hndl, &cinfo, &alloc_info, &image->hndl, &image->mem_hndl, &image->mem_info);
     if (err != VK_SUCCESS) {
@@ -1580,9 +1478,9 @@ int vkr_init_image(vkr_image *image, const vkr_image_cfg *cfg)
     return err_code::VKR_NO_ERROR;
 }
 
-void vkr_terminate_image(vkr_image *image)
+void vkr_terminate_image(vkr_image *image, const vkr_context *vk)
 {
-    vmaDestroyImage(image->vma_alloc->hndl, image->hndl, image->mem_hndl);
+    vmaDestroyImage(vk->inst.device.vma_alloc.hndl, image->hndl, image->mem_hndl);
 }
 
 int vkr_init_image_view(VkImageView *hndl, const vkr_image_view_cfg *cfg, const vkr_context *vk)
@@ -1650,23 +1548,23 @@ void vkr_terminate_sampler(VkSampler hndl, const vkr_context *vk)
 int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
                                     const void *src_data,
                                     sizet src_data_size,
-                                    vkr_device_queue_fam_info *cmd_q,
-                                    sizet qind,
+                                    VkCommandBuffer cmd_buf,
+                                    VkQueue queue,
                                     const vkr_context *vk)
 {
     VkBufferImageCopy region{};
     region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     region.imageSubresource.layerCount = 1;
     region.imageExtent = {dest_buffer->dims.x, dest_buffer->dims.y, dest_buffer->dims.z};
-    return vkr_stage_and_upload_image_data(dest_buffer, src_data, src_data_size, &region, cmd_q, qind, vk);
+    return vkr_stage_and_upload_image_data(dest_buffer, src_data, src_data_size, &region, cmd_buf, queue, vk);
 }
 
 int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
                                     const void *src_data,
                                     sizet src_data_size,
                                     const VkBufferImageCopy *region,
-                                    vkr_device_queue_fam_info *cmd_q,
-                                    sizet qind,
+                                    VkCommandBuffer cmd_buf,
+                                    VkQueue queue,
                                     const vkr_context *vk)
 {
     vkr_buffer staging_buf{};
@@ -1694,13 +1592,13 @@ int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
     trans_cfg.srange.layerCount = 1;
     trans_cfg.srange.levelCount = 1;
 
-    err = vkr_transition_image_layout(dest_buffer, &trans_cfg, cmd_q, qind, vk);
+    err = vkr_transition_image_layout(dest_buffer, &trans_cfg, cmd_buf, queue, vk);
     if (err != err_code::VKR_NO_ERROR) {
         vkr_terminate_buffer(&staging_buf, vk);
         return err;
     }
 
-    err = vkr_copy_buffer_to_image(dest_buffer, &staging_buf, region, cmd_q, qind, vk);
+    err = vkr_copy_buffer_to_image(dest_buffer, &staging_buf, region, cmd_buf, queue, vk);
     if (err != err_code::VKR_NO_ERROR) {
         vkr_terminate_buffer(&staging_buf, vk);
         return err;
@@ -1708,25 +1606,17 @@ int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
 
     trans_cfg.old_layout = trans_cfg.new_layout;
     trans_cfg.new_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    err = vkr_transition_image_layout(dest_buffer, &trans_cfg, cmd_q, qind, vk);
+    err = vkr_transition_image_layout(dest_buffer, &trans_cfg, cmd_buf, queue, vk);
     vkr_terminate_buffer(&staging_buf, vk);
     return err;
-}
-
-sizet vkr_add_swapchain_framebuffers(vkr_device *device)
-{
-    sizet cur_ind = device->framebuffers.size;
-    arr_resize(&device->framebuffers, cur_ind + device->swapchain.image_views.size);
-    return cur_ind;
 }
 
 void vkr_init_swapchain_framebuffers(vkr_device *device,
                                      const vkr_context *vk,
                                      VkRenderPass rpass,
-                                     const array<array<vkr_framebuffer_attachment>> *other_attachments,
-                                     sizet fb_offset)
+                                     const array<array<vkr_framebuffer_attachment>> *other_attachments)
 {
-    for (int i = 0; i < vk->inst.device.swapchain.image_views.size; ++i) {
+    for (int i = 0; i < vk->inst.device.swapchain.fbs.size; ++i) {
         vkr_framebuffer_cfg cfg{};
         cfg.size = {vk->inst.device.swapchain.extent.width, vk->inst.device.swapchain.extent.height};
         cfg.rpass = rpass;
@@ -1741,7 +1631,7 @@ void vkr_init_swapchain_framebuffers(vkr_device *device,
         }
         cfg.attachment_count = (u32)atts.size;
         cfg.attachments = atts.data;
-        vkr_init_framebuffer(&device->framebuffers[fb_offset + i], &cfg, vk);
+        vkr_init_framebuffer(&device->swapchain.fbs[i], &cfg, vk);
         arr_terminate(&atts);
     }
 }
@@ -1749,8 +1639,7 @@ void vkr_init_swapchain_framebuffers(vkr_device *device,
 void vkr_init_swapchain_framebuffers(vkr_device *device,
                                      const vkr_context *vk,
                                      VkRenderPass rpass,
-                                     const vkr_framebuffer_attachment &other_attachment,
-                                     sizet fb_offset)
+                                     const vkr_framebuffer_attachment &other_attachment)
 {
     array<array<vkr_framebuffer_attachment>> other_atts;
     arr_init(&other_atts, vk->cfg.arenas.command_arena);
@@ -1759,7 +1648,7 @@ void vkr_init_swapchain_framebuffers(vkr_device *device,
         arr_init(&other_atts[i], vk->cfg.arenas.command_arena);
         arr_emplace_back(&other_atts[i], other_attachment);
     }
-    vkr_init_swapchain_framebuffers(device, vk, rpass, &other_atts, fb_offset);
+    vkr_init_swapchain_framebuffers(device, vk, rpass, &other_atts);
     for (int i = 0; i < other_atts.size; ++i) {
         arr_terminate(&other_atts[i]);
     }
@@ -1769,8 +1658,7 @@ void vkr_init_swapchain_framebuffers(vkr_device *device,
 void vkr_init_swapchain_framebuffers(vkr_device *device,
                                      const vkr_context *vk,
                                      VkRenderPass rpass,
-                                     const array<vkr_framebuffer_attachment> &other_attachments,
-                                     sizet fb_offset)
+                                     const array<vkr_framebuffer_attachment> &other_attachments)
 {
     array<array<vkr_framebuffer_attachment>> other_atts;
     arr_init(&other_atts, vk->cfg.arenas.command_arena);
@@ -1779,18 +1667,18 @@ void vkr_init_swapchain_framebuffers(vkr_device *device,
         arr_init(&other_atts[i], vk->cfg.arenas.command_arena);
         arr_append(&other_atts[i], other_attachments.data, other_attachments.size);
     }
-    vkr_init_swapchain_framebuffers(device, vk, rpass, &other_atts, fb_offset);
+    vkr_init_swapchain_framebuffers(device, vk, rpass, &other_atts);
     for (int i = 0; i < other_atts.size; ++i) {
         arr_terminate(&other_atts[i]);
     }
     arr_terminate(&other_atts);
 }
 
-void vkr_terminate_swapchain_framebuffers(vkr_device *device, const vkr_context *vk, sizet fb_offset)
+void vkr_terminate_swapchain_framebuffers(vkr_device *device, const vkr_context *vk)
 {
-    for (int i = 0; i < vk->inst.device.swapchain.image_views.size; ++i) {
-        vkr_terminate_framebuffer(&device->framebuffers[i + fb_offset], vk);
-        device->framebuffers[i + fb_offset] = {};
+    for (int i = 0; i < vk->inst.device.swapchain.fbs.size; ++i) {
+        vkr_terminate_framebuffer(&device->swapchain.fbs[i], vk);
+        device->swapchain.fbs[i] = {};
     }
 }
 
@@ -1802,72 +1690,14 @@ int vkr_init_surface(const vkr_context *vk, VkSurfaceKHR *surface)
     bool ret = SDL_Vulkan_CreateSurface((SDL_Window *)vk->cfg.window, vk->inst.hndl, &vk->alloc_cbs, surface);
     if (!ret) {
         log_any_sdl_error("Failed to create surface");
-        return err_code::VKR_CREATE_SURFACE_FAIL;
+        ret = err_code::VKR_CREATE_SURFACE_FAIL;
     }
-    return err_code::VKR_NO_ERROR;
+    return ret;
 }
 
 void vkr_terminate_surface(const vkr_context *vk, VkSurfaceKHR surface)
 {
     vkDestroySurfaceKHR(vk->inst.hndl, surface, &vk->alloc_cbs);
-}
-
-void vkr_terminate_render_frames(vkr_device *dev, const vkr_context *vk)
-{
-    for (int framei = 0; framei < dev->rframes.size; ++framei) {
-        vkr_terminate_descriptor_pool(&dev->rframes[framei].desc_pool, vk);
-        vkDestroySemaphore(dev->hndl, dev->rframes[framei].image_avail, &vk->alloc_cbs);
-        vkDestroyFence(dev->hndl, dev->rframes[framei].in_flight, &vk->alloc_cbs);
-    }
-}
-
-int vkr_init_render_frames(vkr_device *dev, const vkr_context *vk)
-{
-    dev->rframes.size = dev->rframes.capacity;
-
-    // Create our rframes command buffers
-    auto gfx_fam = &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX];
-
-    // Add a command buffer for each frame - assign to the actual frames in the loop below
-    auto buf_res = vkr_add_cmd_bufs(&gfx_fam->cmd_pools[gfx_fam->default_pool], vk, dev->rframes.size);
-    asrt(buf_res.err_code == err_code::VKR_NO_ERROR);
-    asrt((buf_res.end - buf_res.begin) == dev->rframes.size);
-
-    // Create frame synchronization objects - start all fences as signalled already
-    for (u32 framei = 0; framei < dev->rframes.size; ++framei) {
-        VkFenceCreateInfo fence_info{};
-        fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-        int err = vkCreateFence(dev->hndl, &fence_info, &vk->alloc_cbs, &dev->rframes[framei].in_flight);
-        if (err != VK_SUCCESS) {
-            elog("Failed to create flight fence for frame %d with vk err code %d", framei, err);
-            vkr_terminate_device(dev, vk);
-            return err_code::VKR_CREATE_FENCE_FAIL;
-        }
-
-        VkSemaphoreCreateInfo sem_info{};
-        sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-        err = vkCreateSemaphore(vk->inst.device.hndl, &sem_info, &vk->alloc_cbs, &dev->rframes[framei].image_avail);
-        if (err != VK_SUCCESS) {
-            elog("Failed to create image available semaphore for FIF %d with vk err code %d", framei, err);
-            vkr_terminate_device(dev, vk);
-            return err_code::VKR_CREATE_SEMAPHORE_FAIL;
-        }
-
-        // Assign the command buffer created earlier to this frame
-        dev->rframes[framei].cmd_buf_ind = {VKR_QUEUE_FAM_TYPE_GFX, gfx_fam->default_pool, buf_res.begin + framei};
-
-        // Get a count of the number of descriptors we are making avaialable for each desc type
-        err = vkr_init_descriptor_pool(&dev->rframes[framei].desc_pool, vk, &vk->cfg.desc_cfg);
-        if (err != VK_SUCCESS) {
-            elog("Failed to create descriptor pool for frame %d - aborting init", framei);
-            vkr_terminate_device(dev, vk);
-            return err;
-        }
-    }
-    ilog("Successfully initialized %lu render frames in flight", dev->rframes.size);
-    return err_code::VKR_NO_ERROR;
 }
 
 int vkr_init(const vkr_cfg *cfg, vkr_context *vk)
@@ -1960,27 +1790,17 @@ void vkr_device_wait_idle(vkr_device *dev)
 void vkr_terminate_device(vkr_device *dev, const vkr_context *vk)
 {
     ilog("Terminating vkr device");
-    vkr_terminate_render_frames(dev, vk);
     vkr_terminate_swapchain(&dev->swapchain, vk);
 
-    for (int i = 0; i < dev->framebuffers.size; ++i) {
-        vkr_terminate_framebuffer(&dev->framebuffers[i], vk);
-    }
     for (int i = 0; i < dev->buffers.size; ++i) {
         vkr_terminate_buffer(&dev->buffers[i], vk);
     }
 
-    arr_terminate(&dev->framebuffers);
     arr_terminate(&dev->buffers);
 
     for (sizet qfam_i = 0; qfam_i < VKR_QUEUE_FAM_TYPE_COUNT; ++qfam_i) {
         auto cur_fam = &dev->qfams[qfam_i];
         arr_terminate(&cur_fam->qs);
-        for (sizet pool_i = 0; pool_i < cur_fam->cmd_pools.size; ++pool_i) {
-            auto cur_pool = &cur_fam->cmd_pools[pool_i];
-            vkr_terminate_cmd_pool(vk, cur_fam->fam_ind, cur_pool);
-        }
-        arr_terminate(&cur_fam->cmd_pools);
     }
 
     vmaDestroyAllocator(dev->vma_alloc.hndl);
@@ -2024,14 +1844,15 @@ void vkr_terminate(vkr_context *vk)
          vk->cfg.arenas.command_arena->peak);
 }
 
-int vkr_begin_cmd_buf(const vkr_command_buffer *buf)
+
+int vkr_begin_cmd_buf(VkCommandBuffer hndl, VkCommandBufferUsageFlags flags)
 {
     VkCommandBufferBeginInfo info{};
     info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    info.flags = 0;                  // Optional
+    info.flags = flags;                  // Optional
     info.pInheritanceInfo = nullptr; // Optional
 
-    int err = vkBeginCommandBuffer(buf->hndl, &info);
+    int err = vkBeginCommandBuffer(hndl, &info);
     if (err != VK_SUCCESS) {
         elog("Failed to begin command buffer with Vk code %d", err);
         return err_code::VKR_BEGIN_COMMAND_BUFFER_FAIL;
@@ -2039,9 +1860,9 @@ int vkr_begin_cmd_buf(const vkr_command_buffer *buf)
     return err_code::VKR_NO_ERROR;
 }
 
-int vkr_end_cmd_buf(const vkr_command_buffer *buf)
+int vkr_end_cmd_buf(VkCommandBuffer hndl)
 {
-    int err = vkEndCommandBuffer(buf->hndl);
+    int err = vkEndCommandBuffer(hndl);
     if (err != VK_SUCCESS) {
         elog("Failed to end command buffer with vk code %d", err);
         return err_code::VKR_END_COMMAND_BUFFER_FAIL;
@@ -2065,9 +1886,9 @@ sizet vkr_uniform_buffer_offset_alignment(vkr_context *vk, sizet uniform_block_s
     }
 }
 
-void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf,
-                         const vkr_framebuffer *fb,
+void vkr_cmd_begin_rpass(VkCommandBuffer cmd_buf,
                          VkRenderPass rpass,
+                         const vkr_framebuffer *fb,
                          const VkClearValue *att_clear_vals,
                          sizet clear_val_size)
 {
@@ -2085,132 +1906,120 @@ void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf,
     info.clearValueCount = (u32)clear_val_size;
     info.pClearValues = att_clear_vals;
 
-    vkCmdBeginRenderPass(cmd_buf->hndl, &info, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBeginRenderPass(cmd_buf, &info, VK_SUBPASS_CONTENTS_INLINE);
 }
 
-void vkr_cmd_end_rpass(const vkr_command_buffer *cmd_buf)
+void vkr_cmd_end_rpass(VkCommandBuffer cmd_buf)
 {
-    vkCmdEndRenderPass(cmd_buf->hndl);
+    vkCmdEndRenderPass(cmd_buf);
 }
 
-intern vkr_add_result cmd_buf_begin(vkr_command_pool *pool, const vkr_context *vk)
+intern int blocking_submit_cmd_buf(VkCommandBuffer cmd_buf, VkQueue queue, const vkr_context *vk)
 {
-    vkr_add_result tmp_buf = vkr_add_cmd_bufs(pool, vk);
-    if (tmp_buf.err_code != err_code::VKR_NO_ERROR) {
-        return tmp_buf;
-    }
-    VkCommandBufferBeginInfo beg_info{};
-    beg_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beg_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    tmp_buf.err_code = vkBeginCommandBuffer(pool->buffers[tmp_buf.begin].hndl, &beg_info);
-    if (tmp_buf.err_code != VK_SUCCESS) {
-        tmp_buf.err_code = err_code::VKR_COPY_BUFFER_BEGIN_FAIL;
-    }
-    return tmp_buf;
-}
-
-intern int cmd_buf_end(vkr_add_result tmp_buf, vkr_command_pool *pool, vkr_device_queue_fam_info *cmd_q, sizet qind, const vkr_context *vk)
-{
-    vkEndCommandBuffer(pool->buffers[tmp_buf.begin].hndl);
-
     VkSubmitInfo submit_info{};
     submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &pool->buffers[tmp_buf.begin].hndl;
-
-    int err = vkQueueSubmit(cmd_q->qs[qind], 1, &submit_info, VK_NULL_HANDLE);
+    submit_info.pCommandBuffers = &cmd_buf;
+    int err = vkQueueSubmit(queue, 1, &submit_info, VK_NULL_HANDLE);
     if (err != VK_SUCCESS) {
         wlog("Failed to submit queue with vulkan error %d", err);
-        vkr_remove_cmd_bufs(pool, vk, tmp_buf.begin);
         return err_code::VKR_COPY_BUFFER_SUBMIT_FAIL;
     }
-
-    err = vkQueueWaitIdle(cmd_q->qs[qind]);
+    err = vkQueueWaitIdle(queue);
     if (err != VK_SUCCESS) {
         wlog("Failed to wait idle with vulkan error %d", err);
-        vkr_remove_cmd_bufs(pool, vk, tmp_buf.begin);
         return err_code::VKR_COPY_BUFFER_WAIT_IDLE_FAIL;
     }
-    vkr_remove_cmd_bufs(pool, vk, tmp_buf.begin);
     return err_code::VKR_NO_ERROR;
 }
 
 int vkr_copy_buffer(vkr_buffer *dest,
                     const vkr_buffer *src,
                     const VkBufferCopy *region,
-                    vkr_device_queue_fam_info *cmd_q,
-                    sizet qind,
+                    VkCommandBuffer cmd_buffer,
+                    VkQueue queue,
                     const vkr_context *vk)
 {
-    auto pool = &cmd_q->cmd_pools[cmd_q->transient_pool];
-    auto tmp_buf = cmd_buf_begin(pool, vk);
-    if (tmp_buf.err_code == err_code::VKR_NO_ERROR) {
-        vkCmdCopyBuffer(pool->buffers[tmp_buf.begin].hndl, src->hndl, dest->hndl, 1, region);
-        return cmd_buf_end(tmp_buf, pool, cmd_q, qind, vk);
+    int ret = vkr_begin_cmd_buf(cmd_buffer, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+    if (ret != err_code::VKR_NO_ERROR) {
+        return ret;
     }
-    return tmp_buf.err_code;
+    vkCmdCopyBuffer(cmd_buffer, src->hndl, dest->hndl,1, region);
+    ret = vkr_end_cmd_buf(cmd_buffer);
+    if (ret != err_code::VKR_NO_ERROR) {
+        return ret;
+    }
+    return blocking_submit_cmd_buf(cmd_buffer, queue, vk);
 }
 
 int vkr_copy_buffer_to_image(vkr_image *dest,
                              const vkr_buffer *src,
                              const VkBufferImageCopy *region,
-                             vkr_device_queue_fam_info *cmd_q,
-                             sizet qind,
+                             VkCommandBuffer cmd_buf,
+                             VkQueue queue,
                              const vkr_context *vk)
 {
-    auto pool = &cmd_q->cmd_pools[cmd_q->transient_pool];
-    auto tmp_buf = cmd_buf_begin(pool, vk);
-    if (tmp_buf.err_code == err_code::VKR_NO_ERROR) {
-        vkCmdCopyBufferToImage(pool->buffers[tmp_buf.begin].hndl, src->hndl, dest->hndl, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, region);
-        return cmd_buf_end(tmp_buf, pool, cmd_q, qind, vk);
+    int ret = vkr_begin_cmd_buf(cmd_buf, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+    if (ret != err_code::VKR_NO_ERROR) {
+        return ret;
     }
-    return tmp_buf.err_code;
+    vkCmdCopyBufferToImage(cmd_buf, src->hndl, dest->hndl, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, region);
+    ret = vkr_end_cmd_buf(cmd_buf);
+    if (ret != err_code::VKR_NO_ERROR) {
+        return ret;
+    }
+    return blocking_submit_cmd_buf(cmd_buf, queue, vk);
 }
 
 int vkr_transition_image_layout(const vkr_image *image,
                                 const vkr_image_transition_cfg *cfg,
-                                vkr_device_queue_fam_info *cmd_q,
-                                sizet qind,
+                                VkCommandBuffer cmd_buf,
+                                VkQueue queue,
                                 const vkr_context *vk)
 {
-    auto pool = &cmd_q->cmd_pools[cmd_q->transient_pool];
-    auto tmp_buf = cmd_buf_begin(pool, vk);
-    if (tmp_buf.err_code == err_code::VKR_NO_ERROR) {
-        VkImageMemoryBarrier barrier{};
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.oldLayout = cfg->old_layout;
-        barrier.newLayout = cfg->new_layout;
-        barrier.srcQueueFamilyIndex = cfg->src_fam_index;
-        barrier.dstQueueFamilyIndex = cfg->dest_fam_index;
-        barrier.image = image->hndl;
-        barrier.subresourceRange = cfg->srange;
-
-        VkPipelineStageFlags source_stage;
-        VkPipelineStageFlags dest_stage;
-        if (cfg->old_layout == VK_IMAGE_LAYOUT_UNDEFINED && cfg->new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-            barrier.srcAccessMask = 0;
-            barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            source_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            dest_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        }
-        else if (cfg->old_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && cfg->new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-            source_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            dest_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        }
-        else if (cfg->old_layout == VK_IMAGE_LAYOUT_UNDEFINED &&
-                 cfg->new_layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL) {
-            barrier.srcAccessMask = 0;
-            barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-        }
-        else {
-            return err_code::VKR_TRANSITION_IMAGE_UNSUPPORTED_LAYOUT;
-        }
-        vkCmdPipelineBarrier(pool->buffers[tmp_buf.begin].hndl, source_stage, dest_stage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
-        return cmd_buf_end(tmp_buf, pool, cmd_q, qind, vk);
+    int ret = vkr_begin_cmd_buf(cmd_buf, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+    if (ret != err_code::VKR_NO_ERROR) {
+        return ret;
     }
-    return tmp_buf.err_code;
+
+    VkImageMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.oldLayout = cfg->old_layout;
+    barrier.newLayout = cfg->new_layout;
+    barrier.srcQueueFamilyIndex = cfg->src_fam_index;
+    barrier.dstQueueFamilyIndex = cfg->dest_fam_index;
+    barrier.image = image->hndl;
+    barrier.subresourceRange = cfg->srange;
+
+    VkPipelineStageFlags source_stage;
+    VkPipelineStageFlags dest_stage;
+    if (cfg->old_layout == VK_IMAGE_LAYOUT_UNDEFINED && cfg->new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        source_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        dest_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    }
+    else if (cfg->old_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && cfg->new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        source_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        dest_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    }
+    else if (cfg->old_layout == VK_IMAGE_LAYOUT_UNDEFINED &&
+             cfg->new_layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL) {
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    }
+    else {
+        return err_code::VKR_TRANSITION_IMAGE_UNSUPPORTED_LAYOUT;
+    }
+    
+    vkCmdPipelineBarrier(cmd_buf, source_stage, dest_stage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+    ret = vkr_end_cmd_buf(cmd_buf);
+    if (ret != err_code::VKR_NO_ERROR) {
+        return ret;
+    }
+    return blocking_submit_cmd_buf(cmd_buf, queue, vk);
 }
 
 } // namespace nslib

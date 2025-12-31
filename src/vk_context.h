@@ -154,7 +154,6 @@ struct vkr_image
     uvec3 dims;
     VmaAllocation mem_hndl;
     VmaAllocationInfo mem_info;
-    const vkr_gpu_allocator *vma_alloc;
 };
 
 struct vkr_image_view_cfg
@@ -169,7 +168,6 @@ struct vkr_image_view_cfg
 struct vkr_framebuffer_attachment
 {
     VkImageView im_view;
-    VkClearValue cv;
 };
 
 struct vkr_sampler_cfg
@@ -210,17 +208,6 @@ struct vkr_debug_extension_funcs
     PFN_vkDestroyDebugUtilsMessengerEXT destroy_debug_utils_messenger{};
 };
 
-struct vkr_command_buffer
-{
-    VkCommandBuffer hndl{VK_NULL_HANDLE};
-};
-
-struct vkr_command_pool
-{
-    VkCommandPool hndl{VK_NULL_HANDLE};
-    array<vkr_command_buffer> buffers{};
-};
-
 struct vkr_queue_family_info
 {
     u32 index{VKR_INVALID};
@@ -254,51 +241,46 @@ struct vkr_phys_device
     VkPhysicalDeviceMemoryProperties mem_properties{};
 };
 
-struct vkr_cmd_pool_ind
+struct vkr_framebuffer_cfg
 {
-    sizet qfam_ind;
-    sizet pool_ind;
+    uvec2 size;
+    u32 layers{1};
+    VkRenderPass rpass;
+    const vkr_framebuffer_attachment *attachments;
+    u32 attachment_count;
 };
 
-struct vkr_cmd_buf_ind
+struct vkr_framebuffer
 {
-    vkr_cmd_pool_ind pool_ind;
-    sizet buffer_ind;
-};
-
-struct vkr_descriptor_set
-{
-    VkDescriptorSet hndl{VK_NULL_HANDLE};
-    VkDescriptorSetLayout layout;
-};
-
-struct vkr_descriptor_pool
-{
-    VkDescriptorPool hndl{VK_NULL_HANDLE};
-    array<vkr_descriptor_set> desc_sets;
-};
-
-struct vkr_frame
-{
-    vkr_cmd_buf_ind cmd_buf_ind;
-    sizet frame_ubo_ind;
-    sizet pl_ubo_ind;
-    sizet mat_ubo_ind;
-    sizet obj_ubo_ind;
-    vkr_descriptor_pool desc_pool;
-    VkFence in_flight;
-    VkSemaphore image_avail;
+    uvec2 size;
+    u32 layers;
+    VkRenderPass rpass;
+    array<vkr_framebuffer_attachment> attachments;
+    VkFramebuffer hndl{VK_NULL_HANDLE};
 };
 
 struct vkr_swapchain
 {
     array<vkr_image> images;
     array<VkImageView> image_views;
+    array<vkr_framebuffer> fbs;
     array<array<vkr_framebuffer_attachment>> other_attachments;
     array<VkSemaphore> renders_finished;
     VkFormat format;
     VkExtent2D extent;
     VkSwapchainKHR swapchain;
+};
+
+struct vkr_alloc_cmd_bufs_cfg {
+    VkCommandPool pool{VK_NULL_HANDLE};
+    sizet count{1};
+    VkCommandBufferLevel level{VK_COMMAND_BUFFER_LEVEL_PRIMARY};
+};
+
+struct vkr_alloc_desc_sets_cfg {
+    VkDescriptorPool pool{VK_NULL_HANDLE};
+    const VkDescriptorSetLayout *set_layouts{nullptr};
+    sizet set_count{1};
 };
 
 struct vkr_rpass_cfg_subpass
@@ -386,7 +368,8 @@ struct vkr_pipeline_cfg_depth_stencil
     f32 max_depth_bounds;
 };
 
-struct vkr_vertex_layout {
+struct vkr_vertex_layout
+{
     static_array<VkVertexInputBindingDescription, MAX_VERT_BINDINGS> bindings{};
     static_array<VkVertexInputAttributeDescription, MAX_VERT_ATTRIBS> attribs{};
 };
@@ -441,42 +424,27 @@ struct vkr_pipeline_layout_cfg
     static_array<VkPushConstantRange, MAX_PUSH_CONSTANT_RANGES> push_constant_ranges;
 };
 
-struct vkr_framebuffer_cfg
-{
-    uvec2 size;
-    u32 layers{1};
-    VkRenderPass rpass;
-    const vkr_framebuffer_attachment *attachments;
-    u32 attachment_count;
-};
-
-struct vkr_framebuffer
-{
-    uvec2 size;
-    u32 layers;
-    VkRenderPass rpass;
-    array<vkr_framebuffer_attachment> attachments;
-    VkFramebuffer hndl{VK_NULL_HANDLE};
-};
-
 struct vkr_device_queue_fam_info
 {
     u32 fam_ind;
-    sizet default_pool;
-    sizet transient_pool;
     array<VkQueue> qs;
-    array<vkr_command_pool> cmd_pools;
+};
+
+struct vkr_image_transition_cfg
+{
+    VkImageLayout old_layout;
+    VkImageLayout new_layout;
+    u32 src_fam_index{VK_QUEUE_FAMILY_IGNORED};
+    u32 dest_fam_index{VK_QUEUE_FAMILY_IGNORED};
+    VkImageSubresourceRange srange;
 };
 
 struct vkr_device
 {
     VkDevice hndl{VK_NULL_HANDLE};
     vkr_device_queue_fam_info qfams[VKR_QUEUE_FAM_TYPE_COUNT];
-    array<vkr_framebuffer> framebuffers;
     array<vkr_buffer> buffers;
-
     vkr_swapchain swapchain;
-    static_array<vkr_frame, MAX_FRAMES_IN_FLIGHT> rframes;
     vkr_gpu_allocator vma_alloc;
 };
 
@@ -491,11 +459,10 @@ struct vkr_instance
     vkr_device device;
 };
 
-struct vkr_descriptor_cfg
+struct vkr_desc_cfg
 {
     u32 max_desc_per_type[VKR_DESCRIPTOR_TYPE_COUNT] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    // If this is left as invalid, then it will be set to the sum of all descriptors in max_desc_per_type
-    u32 max_sets{INVALID_ID};
+    u32 max_sets{0};
     u32 flags{0};
 };
 
@@ -507,8 +474,7 @@ struct vkr_cfg
     int log_verbosity;
     void *window;
     VkInstanceCreateFlags inst_create_flags;
-    vkr_descriptor_cfg desc_cfg{};
-
+    
     // Array of additional instance extension names - besides defaults determined by window
     const char *const *extra_instance_extension_names;
     u32 extra_instance_extension_count;
@@ -560,27 +526,32 @@ void vkr_enumerate_device_extensions(const vkr_phys_device *pdevice,
 // indicated as such
 void vkr_enumerate_validation_layers(const char *const *enabled_layers, u32 enabled_layer_count, const vk_arenas *arenas);
 
-// Descriptors
-int vkr_init_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk, const vkr_descriptor_cfg *cfg);
-void vkr_reset_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk);
-void vkr_terminate_descriptor_pool(vkr_descriptor_pool *desc_pool, const vkr_context *vk);
-vkr_add_result vkr_add_descriptor_sets(vkr_descriptor_pool *pool, const vkr_context *vk, const VkDescriptorSetLayout *layouts, sizet count = 1);
-void vkr_remove_descriptor_sets(vkr_descriptor_pool *pool, const vkr_context *vk, u32 ind, u32 count = 1);
+// Descriptor Pools
+int vkr_init_desc_pool(VkDescriptorPool *hndl, const vkr_desc_cfg *cfg, const vkr_context *vk);
+void vkr_terminate_desc_pool(VkDescriptorPool hndl, const vkr_context *vk);
+
+// Descriptor sets
+
+//int vkr_alloc_descriptor
+int vkr_allot_desc_sets(VkDescriptorSet *sets, const vkr_alloc_desc_sets_cfg &cfg, const vkr_context *vk);
+void vkr_free_desc_sets(const VkDescriptorSet *sets, sizet set_count, VkDescriptorPool pool, const vkr_context *vk);
+
+// Command Pools
+int vkr_init_cmd_pool(VkCommandPool *hndl, u32 queue_fam_ind, VkCommandPoolCreateFlags flags, const vkr_context *vk);
+void vkr_terminate_cmd_pool(VkCommandPool hndl, const vkr_context *vk);
 
 // Command Buffers
-sizet vkr_add_cmd_pool(vkr_device_queue_fam_info *qfam, const vkr_command_pool &cpool = {});
-int vkr_init_cmd_pool(const vkr_context *vk, u32 fam_ind, VkCommandPoolCreateFlags flags, vkr_command_pool *cpool);
-void vkr_terminate_cmd_pool(const vkr_context *vk, u32 fam_ind, vkr_command_pool *cpool);
-vkr_add_result vkr_add_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, sizet count = 1);
-void vkr_remove_cmd_bufs(vkr_command_pool *pool, const vkr_context *vk, sizet ind, sizet count = 1);
+int vkr_alloc_cmd_bufs(VkCommandBuffer *bufs, const vkr_alloc_cmd_bufs_cfg &cfg, const vkr_context *vk);
+// You should probably just free the pool and not the buffers individually
+void vkr_free_cmd_bufs(VkCommandBuffer *bufs, sizet count, VkCommandPool pool, const vkr_context *vk);
 
 // Render passes
 int vkr_init_render_pass(VkRenderPass *hndl, const vkr_rpass_cfg *cfg, const vkr_context *vk);
 void vkr_terminate_render_pass(VkRenderPass hndl, const vkr_context *vk);
 
 // Descriptor set layouts
-int vkr_init_descriptor_set_layouts(VkDescriptorSetLayout *hndls, const vkr_descriptor_set_layout_cfg *cfg, const vkr_context *vk);
-void vkr_terminate_descriptor_set_layouts(VkDescriptorSetLayout *layouts, sizet size, const vkr_context *vk);
+int vkr_init_desc_set_layouts(VkDescriptorSetLayout *hndls, const vkr_descriptor_set_layout_cfg *cfg, const vkr_context *vk);
+void vkr_terminate_desc_set_layouts(VkDescriptorSetLayout *layouts, sizet size, const vkr_context *vk);
 
 // Pipeline layouts
 int vkr_init_pipeline_layout(VkPipelineLayout *hndl, const vkr_pipeline_layout_cfg *cfg, const vkr_context *vk);
@@ -595,12 +566,10 @@ int vkr_init_shader_module(VkShaderModule *module, const byte_array *code, const
 void vkr_terminate_shader_module(VkShaderModule module, const vkr_context *vk);
 
 // Framebuffers
-sizet vkr_add_framebuffer(vkr_device *device, const vkr_framebuffer &copy = {});
 int vkr_init_framebuffer(vkr_framebuffer *framebuffer, const vkr_framebuffer_cfg *cfg, const vkr_context *vk);
 void vkr_terminate_framebuffer(vkr_framebuffer *fb, const vkr_context *vk);
 
 // Buffers
-sizet vkr_add_buffer(vkr_device *device, const vkr_buffer &copy = {});
 int vkr_init_buffer(vkr_buffer *buffer, const vkr_buffer_cfg *cfg);
 void vkr_terminate_buffer(vkr_buffer *buffer, const vkr_context *vk);
 void *vkr_map_buffer(vkr_buffer *buf, const vkr_gpu_allocator *vma);
@@ -609,31 +578,31 @@ int vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
                                      const void *src_data,
                                      sizet src_data_size,
                                      const VkBufferCopy *region,
-                                     vkr_device_queue_fam_info *cmd_q,
-                                     sizet qind,
+                                     VkCommandBuffer cmd_buf,
+                                     VkQueue queue,
                                      const vkr_context *vk);
 int vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
                                      const void *src_data,
                                      sizet src_data_size,
-                                     vkr_device_queue_fam_info *cmd_q,
-                                     sizet qind,
+                                     VkCommandBuffer cmd_buf,
+                                     VkQueue queue,
                                      const vkr_context *vk);
 
 // Images
 int vkr_init_image(vkr_image *image, const vkr_image_cfg *cfg);
-void vkr_terminate_image(vkr_image *image);
+void vkr_terminate_image(vkr_image *image, const vkr_context *vk);
 int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
                                     const void *src_data,
                                     sizet src_data_size,
-                                    vkr_device_queue_fam_info *cmd_q,
-                                    sizet qind,
+                                    VkCommandBuffer cmd_buf,
+                                    VkQueue queue,
                                     const vkr_context *vk);
 int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
                                     const void *src_data,
                                     sizet src_data_size,
                                     const VkBufferImageCopy *region,
-                                    vkr_device_queue_fam_info *cmd_q,
-                                    sizet qind,
+                                    VkCommandBuffer cmd_buf,
+                                    VkQueue queue,
                                     const vkr_context *vk);
 
 // Image views
@@ -644,24 +613,19 @@ void vkr_terminate_image_view(VkImageView hndl, const vkr_context *vk);
 int vkr_init_sampler(VkSampler *hndl, const vkr_sampler_cfg *cfg, const vkr_context *vk);
 void vkr_terminate_sampler(VkSampler sampler, const vkr_context *vk);
 
-// Returns the index if the first swapchain framebuffer added
-sizet vkr_add_swapchain_framebuffers(vkr_device *device);
-
 // Initialize the swapchain framebuffers (there is one for each color image in the swapchain)
 // The other_attachment image view will be added to each framebuffer (so make sure that is okay)
 void vkr_init_swapchain_framebuffers(vkr_device *device,
                                      const vkr_context *vk,
                                      VkRenderPass rpass,
-                                     const vkr_framebuffer_attachment &other_attachment,
-                                     sizet fb_offset = 0);
+                                     const vkr_framebuffer_attachment &other_attachment);
 
 // Initialize the swapchain framebuffers (there is one for each color image in the swapchain)
 // The other_attachments image views will be added to each framebuffer (so make sure that is okay)
 void vkr_init_swapchain_framebuffers(vkr_device *device,
                                      const vkr_context *vk,
                                      VkRenderPass rpass,
-                                     const array<vkr_framebuffer_attachment> &other_attachments,
-                                     sizet fb_offset = 0);
+                                     const array<vkr_framebuffer_attachment> &other_attachments);
 
 // Initialize the swapchain framebuffers (there is one for each color image in the swapchain)
 // The other_attachments should be an array of image view arrays, where each of the image view arrays contain
@@ -670,17 +634,13 @@ void vkr_init_swapchain_framebuffers(vkr_device *device,
 void vkr_init_swapchain_framebuffers(vkr_device *device,
                                      const vkr_context *vk,
                                      VkRenderPass rpass,
-                                     const array<array<vkr_framebuffer_attachment>> *other_attachments,
-                                     sizet fb_offset = 0);
+                                     const array<array<vkr_framebuffer_attachment>> *other_attachments);
 
-void vkr_terminate_swapchain_framebuffers(vkr_device *device, const vkr_context *vk, sizet fb_offset = 0);
+void vkr_terminate_swapchain_framebuffers(vkr_device *device, const vkr_context *vk);
 
 // The device should be created before calling this
 int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk);
 void vkr_terminate_swapchain(vkr_swapchain *sw_info, const vkr_context *vk);
-
-int vkr_init_render_frames(vkr_device *dev, const vkr_context *vk);
-void vkr_terminate_render_frames(vkr_device *dev, const vkr_context *vk);
 
 void vkr_init_pdevice_swapchain_support(vkr_pdevice_swapchain_support *ssup, mem_arena *arena);
 void vkr_fill_pdevice_swapchain_support(VkPhysicalDevice pdevice, VkSurfaceKHR surface, vkr_pdevice_swapchain_support *ssup);
@@ -704,47 +664,39 @@ void vkr_terminate_instance(const vkr_context *vk, vkr_instance *inst);
 int vkr_init(const vkr_cfg *cfg, vkr_context *vk);
 void vkr_terminate(vkr_context *vk);
 
-int vkr_begin_cmd_buf(const vkr_command_buffer *buf);
-int vkr_end_cmd_buf(const vkr_command_buffer *buf);
+int vkr_begin_cmd_buf(VkCommandBuffer hndl, VkCommandBufferUsageFlags flags);
+int vkr_end_cmd_buf(VkCommandBuffer hndl);
 
-void vkr_cmd_begin_rpass(const vkr_command_buffer *cmd_buf,
-                         const vkr_framebuffer *fb,
+void vkr_cmd_begin_rpass(VkCommandBuffer cmd_buf,
                          VkRenderPass rpass,
+                         const vkr_framebuffer *fb,
                          const VkClearValue *att_clear_vals,
                          sizet clear_val_size);
-void vkr_cmd_end_rpass(const vkr_command_buffer *cmd_buf);
+void vkr_cmd_end_rpass(VkCommandBuffer cmd_buf);
 
 sizet vkr_min_uniform_buffer_offset_alignment(vkr_context *vk);
 sizet vkr_uniform_buffer_offset_alignment(vkr_context *vk, sizet uniform_block_size);
 
 void vkr_device_wait_idle(vkr_device *dev);
 
-struct vkr_image_transition_cfg
-{
-    VkImageLayout old_layout;
-    VkImageLayout new_layout;
-    u32 src_fam_index{VK_QUEUE_FAMILY_IGNORED};
-    u32 dest_fam_index{VK_QUEUE_FAMILY_IGNORED};
-    VkImageSubresourceRange srange;
-};
-
 int vkr_copy_buffer(vkr_buffer *dest,
                     const vkr_buffer *src,
                     const VkBufferCopy *region,
-                    vkr_device_queue_fam_info *cmd_q,
-                    sizet qind,
+                    VkCommandBuffer cmd_buffer,
+                    VkQueue queue,
                     const vkr_context *vk);
+
 int vkr_copy_buffer_to_image(vkr_image *dest,
                              const vkr_buffer *src,
                              const VkBufferImageCopy *region,
-                             vkr_device_queue_fam_info *cmd_q,
-                             sizet qind,
+                             VkCommandBuffer cmd_buf,
+                             VkQueue queue,
                              const vkr_context *vk);
 
 int vkr_transition_image_layout(const vkr_image *image,
                                 const vkr_image_transition_cfg *cfg,
-                                vkr_device_queue_fam_info *cmd_q,
-                                sizet qind,
+                                VkCommandBuffer cmd_buf,
+                                VkQueue queue,
                                 const vkr_context *vk);
 
 } // namespace nslib

@@ -135,7 +135,7 @@ using sbuffer_entry_slnode = slnode<sbuffer_entry>;
 struct sbuffer_info
 {
     // Index of vk buffer this shared buffer refers to
-    sizet buf_ind;
+    vkr_buffer buf;
     // The smallest allowable block size of free space... ie when searching through the free store we find a block that
     // will fit the request, the remaining size of that block must be bigger than this to be broken off to its own entry
     // in the free list
@@ -203,9 +203,22 @@ struct rpass_info
 struct imgui_ctxt
 {
     ImGuiContext *ctxt;
-    vkr_descriptor_pool pool;
+    VkDescriptorPool pool;
     VkRenderPass rpass;
     mem_arena fl;
+};
+
+struct frame_context {
+    VkCommandPool cmd_pool;
+    VkCommandBuffer cmd_buffer;
+
+    // Reset every frame
+    VkDescriptorPool desc_pool;    
+
+    // Synchronization
+    VkFence in_flight;
+    VkSemaphore image_avail;
+    VkSemaphore render_finished;
 };
 
 struct renderer
@@ -225,19 +238,26 @@ struct renderer
     static_array<rpass_info, RPASS_TYPE_COUNT> rpasses{};
 
     // Created pipelines cached on pipeline state
+
+    // Renderer resources
     // TODO: Implement this for smarter pipeline creation
     hmap<u64, VkPipeline> pline_cache;
-
     slot_pool<rtechnique_info, MAX_TECHNIQUE_COUNT> techniques{};
     slot_pool<rmaterial_info, MAX_MATERIAL_COUNT> materials{};
     slot_pool<rtexture_info, MAX_TEXTURE_COUNT> textures{};
     slot_pool<rmesh_entry, MAX_MESH_COUNT> meshes{};
+
+    // Frames in flight
+    static_array<frame_context, MAX_FRAMES_IN_FLIGHT> fifs{};
 
     // Global descriptor set layouts (used for creating descriptor sets and pipelines)
     static_array<VkDescriptorSetLayout, RDESC_SET_LAYOUT_COUNT> set_layouts{};
 
     // Global pipeline layout
     VkPipelineLayout g_layout{VK_NULL_HANDLE};
+
+    // Transient pool for image transfers and such
+    VkCommandPool transient_pool;
 
     // Global texture samplers
     static_array<rsampler_info, RSAMPLER_TYPE_COUNT> samplers{};
@@ -256,7 +276,6 @@ struct renderer
 
     // This is incremented every frame there are no resize events
     f64 no_resize_frames;
-
 
     // TEMP
     rtechnique_handle default_technique{};

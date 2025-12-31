@@ -95,10 +95,10 @@ intern void init_imgui(renderer *rndr, void *win_hndl)
     auto &io = ImGui::GetIO();
     io.FontGlobalScale = get_window_display_scale(win_hndl);
 
-    vkr_descriptor_cfg cfg{};
+    vkr_desc_cfg cfg{};
     cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE;
     cfg.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-    if (vkr_init_descriptor_pool(&rndr->imgui.pool, &rndr->vk, &cfg) != err_code::VKR_NO_ERROR) {
+    if (vkr_init_desc_pool(&rndr->imgui.pool, &cfg, &rndr->vk) != err_code::VKR_NO_ERROR) {
         wlog("Could not create imgui descriptor pool");
     }
 
@@ -112,7 +112,7 @@ intern void init_imgui(renderer *rndr, void *win_hndl)
     init_info.QueueFamily = rndr->vk.inst.device.qfams[VKR_QUEUE_FAM_TYPE_GFX].fam_ind;
     init_info.Queue = rndr->vk.inst.device.qfams[VKR_QUEUE_FAM_TYPE_GFX].qs[VKR_RENDER_QUEUE];
     init_info.PipelineCache = VK_NULL_HANDLE;
-    init_info.DescriptorPool = rndr->imgui.pool.hndl;
+    init_info.DescriptorPool = rndr->imgui.pool;
     init_info.Allocator = &rndr->vk.alloc_cbs;
     init_info.MinImageCount = MAX_FRAMES_IN_FLIGHT;
     init_info.ImageCount = rndr->vk.inst.device.swapchain.images.size;
@@ -132,7 +132,7 @@ intern void init_imgui(renderer *rndr, void *win_hndl)
 intern void terminate_imgui(renderer *rndr)
 {
     ImGui_ImplVulkan_Shutdown();
-    vkr_terminate_descriptor_pool(&rndr->imgui.pool, &rndr->vk);
+    vkr_terminate_desc_pool(rndr->imgui.pool, &rndr->vk);
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext(rndr->imgui.ctxt);
     mem_terminate_arena(&rndr->imgui.fl);
@@ -288,10 +288,7 @@ intern int setup_rmesh_info(renderer *rndr)
 
     // Create vertex buffer on GPU
     vkr_buffer_cfg b_cfg{};
-    rndr->rmi.verts.buf_ind = vkr_add_buffer(dev, {});
     rndr->rmi.verts.min_free_block_size = MIN_VERT_FREE_BLOCK_SIZE;
-
-    rndr->rmi.inds.buf_ind = vkr_add_buffer(dev, {});
     rndr->rmi.inds.min_free_block_size = MIN_IND_FREE_BLOCK_SIZE;
 
     // Common to all buffer options
@@ -302,7 +299,7 @@ intern int setup_rmesh_info(renderer *rndr)
     // Vert buffer
     b_cfg.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     b_cfg.buffer_size = DEFAULT_VERT_BUFFER_SIZE * sizeof(vertex);
-    int err = vkr_init_buffer(&dev->buffers[rndr->rmi.verts.buf_ind], &b_cfg);
+    int err = vkr_init_buffer(&rndr->rmi.verts.buf, &b_cfg);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
@@ -310,7 +307,7 @@ intern int setup_rmesh_info(renderer *rndr)
     // Ind buffer
     b_cfg.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     b_cfg.buffer_size = DEFAULT_IND_BUFFER_SIZE * sizeof(ind_t);
-    err = vkr_init_buffer(&dev->buffers[rndr->rmi.inds.buf_ind], &b_cfg);
+    err = vkr_init_buffer(&rndr->rmi.inds.buf, &b_cfg);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
@@ -419,16 +416,23 @@ rtexture_handle register_texture(const texture *tex, renderer *rndr)
     // Create image
     int vk_ret = vkr_init_image(&tex_info.im, &cfg);
     if (vk_ret != err_code::VKR_NO_ERROR) {
-        wlog("Failed to initialize vk image for texture %s - err code: %d", str_cstr(tex->id.str), vk_ret);
         return ret;
     }
 
-    // Upload texture data to created image using staging buffer
-    vk_ret = vkr_stage_and_upload_image_data(
-        &tex_info.im, tex->pixels.data, get_texture_memsize(tex), &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX], VKR_RENDER_QUEUE, &rndr->vk);
+    VkCommandBuffer tmp_cmd_buf;
+    vk_ret = vkr_alloc_cmd_bufs(&tmp_cmd_buf, {.pool = rndr->transient_pool}, &rndr->vk);
     if (vk_ret != err_code::VKR_NO_ERROR) {
-        wlog("Failed to upload texture data for %s with err code %d", to_cstr(tex->name), vk_ret);
-        vkr_terminate_image(&tex_info.im);
+        vkr_terminate_image(&tex_info.im, &rndr->vk);
+        return ret;
+    }
+    VkQueue q = dev->qfams[VKR_QUEUE_FAM_TYPE_GFX].qs[VKR_RENDER_QUEUE];
+
+    // Upload texture data to created image using staging buffer
+    vk_ret = vkr_stage_and_upload_image_data(&tex_info.im, tex->pixels.data, get_texture_memsize(tex), tmp_cmd_buf, q, &rndr->vk);
+    vkr_free_cmd_bufs(&tmp_cmd_buf, 1, rndr->transient_pool, &rndr->vk);
+
+    if (vk_ret != err_code::VKR_NO_ERROR) {
+        vkr_terminate_image(&tex_info.im, &rndr->vk);
         return ret;
     }
 
@@ -437,8 +441,7 @@ rtexture_handle register_texture(const texture *tex, renderer *rndr)
 
     vk_ret = vkr_init_image_view(&tex_info.im_view, &iview_cfg, &rndr->vk);
     if (vk_ret != err_code::VKR_NO_ERROR) {
-        wlog("Failed to initialize image view for texture %s - err code: %d", to_cstr(tex->name), vk_ret);
-        vkr_terminate_image(&tex_info.im);
+        vkr_terminate_image(&tex_info.im, &rndr->vk);
         return ret;
     }
 
@@ -456,6 +459,14 @@ int upload_to_gpu(const mesh *msh, renderer *rndr)
         return false;
     }
     auto dev = &rndr->vk.inst.device;
+
+    VkCommandBuffer tmp_cmd_buf;
+    int vk_ret = vkr_alloc_cmd_bufs(&tmp_cmd_buf, {.pool = rndr->transient_pool}, &rndr->vk);
+    if (vk_ret != err_code::VKR_NO_ERROR) {
+        return false;
+    }
+    VkQueue q = dev->qfams[VKR_QUEUE_FAM_TYPE_GFX].qs[VKR_RENDER_QUEUE];
+
     // Find the first available sbuffer entry in the free list
     rmesh_entry new_mentry{};
     // arr_init(&new_mentry.submesh_entrees, rndr->upstream_fl_arena);
@@ -484,26 +495,16 @@ int upload_to_gpu(const mesh *msh, renderer *rndr)
         ind_region.dstOffset = new_smentry.inds.offset * sizeof(ind_t);
 
         // Upload our vert data to the GPU
-        int ret = vkr_stage_and_upload_buffer_data(&dev->buffers[rndr->rmi.verts.buf_ind],
-                                                   msh->submeshes[subi].verts.data,
-                                                   req_vert_byte_size,
-                                                   &vert_region,
-                                                   &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX],
-                                                   VKR_RENDER_QUEUE,
-                                                   &rndr->vk);
+        int ret = vkr_stage_and_upload_buffer_data(
+            &rndr->rmi.verts.buf, msh->submeshes[subi].verts.data, req_vert_byte_size, &vert_region, tmp_cmd_buf, q, &rndr->vk);
 
         // TODO: Handle error conditions here - there are several reasons why a buffer upload might fail - for now we
         // just asrt it worked
         asrt(ret == err_code::VKR_NO_ERROR);
 
         // Upload our ind data to the GPU
-        ret = vkr_stage_and_upload_buffer_data(&dev->buffers[rndr->rmi.inds.buf_ind],
-                                               msh->submeshes[subi].inds.data,
-                                               req_inds_byte_size,
-                                               &ind_region,
-                                               &dev->qfams[VKR_QUEUE_FAM_TYPE_GFX],
-                                               VKR_RENDER_QUEUE,
-                                               &rndr->vk);
+        ret = vkr_stage_and_upload_buffer_data(
+            &rndr->rmi.inds.buf, msh->submeshes[subi].inds.data, req_inds_byte_size, &ind_region, tmp_cmd_buf, q, &rndr->vk);
         asrt(ret == err_code::VKR_NO_ERROR);
     }
     ilog("Adding mesh id %s %d submeshes", str_cstr(msh->id.str), new_mentry.submesh_entrees.size);
@@ -518,6 +519,7 @@ int upload_to_gpu(const mesh *msh, renderer *rndr)
     }
     // Add the smesh entry we just built to the renderer mesh entry map (stored by id)
     hmap_set(&rndr->rmi.meshes, msh->id, new_mentry);
+    vkr_free_cmd_bufs(&tmp_cmd_buf, 1, rndr->transient_pool, &rndr->vk);
     return true;
 }
 
@@ -583,9 +585,8 @@ intern int init_swapchain_images_and_framebuffer(renderer *rndr)
     }
 
     // We need the render pass associated with our main framebuffer
-    vkr_init_swapchain_framebuffers(
-        dev, vk, rndr->rpasses[RPASS_TYPE_OPAQUE].vk_hndl, vkr_framebuffer_attachment{.im_view = sl_item->im_view});
-
+    vkr_framebuffer_attachment fb_att{.im_view = sl_item->im_view};
+    vkr_init_swapchain_framebuffers(dev, vk, rndr->rpasses[RPASS_TYPE_OPAQUE].vk_hndl, fb_att);
     return err;
 }
 
@@ -621,7 +622,7 @@ intern int setup_global_descriptor_set_layouts(renderer *rndr)
 
     // Set the size to the same as config
     rndr->set_layouts.size = cfg.set_layout_descs.size;
-    return vkr_init_descriptor_set_layouts(rndr->set_layouts.data, &cfg, &rndr->vk);
+    return vkr_init_desc_set_layouts(rndr->set_layouts.data, &cfg, &rndr->vk);
 }
 
 intern int setup_global_pipeline_layout(renderer *rndr)
@@ -713,62 +714,62 @@ intern int setup_rendering(renderer *rndr)
     ////////////////////////////////////////////////////////////////////////////////
     // Create uniform buffers and descriptor sets pointing to them for each frame //
     ////////////////////////////////////////////////////////////////////////////////
-    for (int i = 0; i < dev->rframes.size; ++i) {
-        // Create a uniform buffers for each frame
+    // for (int i = 0; i < dev->rframes.size; ++i) {
+    //     // Create a uniform buffers for each frame
 
-        // Frame uniform buffer - per frame data
-        vkr_buffer_cfg buf_cfg{};
-        buf_cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
-        buf_cfg.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
-        buf_cfg.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-        buf_cfg.buffer_size = vkr_uniform_buffer_offset_alignment(vk, sizeof(frame_ubo_data));
-        buf_cfg.alloc_flags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-        buf_cfg.vma_alloc = &dev->vma_alloc;
+    //     // Frame uniform buffer - per frame data
+    //     vkr_buffer_cfg buf_cfg{};
+    //     buf_cfg.mem_usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+    //     buf_cfg.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
+    //     buf_cfg.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    //     buf_cfg.buffer_size = vkr_uniform_buffer_offset_alignment(vk, sizeof(frame_ubo_data));
+    //     buf_cfg.alloc_flags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+    //     buf_cfg.vma_alloc = &dev->vma_alloc;
 
-        vkr_buffer frame_uniform_buf{};
-        int err = vkr_init_buffer(&frame_uniform_buf, &buf_cfg);
-        if (err != err_code::VKR_NO_ERROR) {
-            return err;
-        }
-        dev->rframes[i].frame_ubo_ind = vkr_add_buffer(dev, frame_uniform_buf);
+    //     vkr_buffer frame_uniform_buf{};
+    //     int err = vkr_init_buffer(&frame_uniform_buf, &buf_cfg);
+    //     if (err != err_code::VKR_NO_ERROR) {
+    //         return err;
+    //     }
+    //     dev->rframes[i].frame_ubo_ind = vkr_add_buffer(dev, frame_uniform_buf);
 
-        // Pipeline uniform buffer - per pipeline data
-        buf_cfg.buffer_size = MAX_PIPELINE_COUNT * vkr_uniform_buffer_offset_alignment(vk, sizeof(pipeline_ubo_data));
-        vkr_buffer pl_uniform_buf{};
-        err = vkr_init_buffer(&pl_uniform_buf, &buf_cfg);
-        if (err != err_code::VKR_NO_ERROR) {
-            return err;
-        }
-        dev->rframes[i].pl_ubo_ind = vkr_add_buffer(dev, pl_uniform_buf);
+    //     // Pipeline uniform buffer - per pipeline data
+    //     buf_cfg.buffer_size = MAX_PIPELINE_COUNT * vkr_uniform_buffer_offset_alignment(vk, sizeof(pipeline_ubo_data));
+    //     vkr_buffer pl_uniform_buf{};
+    //     err = vkr_init_buffer(&pl_uniform_buf, &buf_cfg);
+    //     if (err != err_code::VKR_NO_ERROR) {
+    //         return err;
+    //     }
+    //     dev->rframes[i].pl_ubo_ind = vkr_add_buffer(dev, pl_uniform_buf);
 
-        // Material uniform buffer - per material data
-        buf_cfg.buffer_size = MAX_MATERIAL_COUNT * vkr_uniform_buffer_offset_alignment(vk, sizeof(material_ubo_data));
-        vkr_buffer mat_uniform_buf{};
-        err = vkr_init_buffer(&mat_uniform_buf, &buf_cfg);
-        if (err != err_code::VKR_NO_ERROR) {
-            return err;
-        }
-        dev->rframes[i].mat_ubo_ind = vkr_add_buffer(dev, mat_uniform_buf);
+    //     // Material uniform buffer - per material data
+    //     buf_cfg.buffer_size = MAX_MATERIAL_COUNT * vkr_uniform_buffer_offset_alignment(vk, sizeof(material_ubo_data));
+    //     vkr_buffer mat_uniform_buf{};
+    //     err = vkr_init_buffer(&mat_uniform_buf, &buf_cfg);
+    //     if (err != err_code::VKR_NO_ERROR) {
+    //         return err;
+    //     }
+    //     dev->rframes[i].mat_ubo_ind = vkr_add_buffer(dev, mat_uniform_buf);
 
-        // Object uniform buffer - per material data
-        buf_cfg.buffer_size = MAX_OBJECT_COUNT * vkr_uniform_buffer_offset_alignment(vk, sizeof(obj_ubo_data));
-        vkr_buffer obj_uniform_buf{};
-        err = vkr_init_buffer(&obj_uniform_buf, &buf_cfg);
-        if (err != err_code::VKR_NO_ERROR) {
-            return err;
-        }
-        dev->rframes[i].obj_ubo_ind = vkr_add_buffer(dev, obj_uniform_buf);
-    }
+    //     // Object uniform buffer - per material data
+    //     buf_cfg.buffer_size = MAX_OBJECT_COUNT * vkr_uniform_buffer_offset_alignment(vk, sizeof(obj_ubo_data));
+    //     vkr_buffer obj_uniform_buf{};
+    //     err = vkr_init_buffer(&obj_uniform_buf, &buf_cfg);
+    //     if (err != err_code::VKR_NO_ERROR) {
+    //         return err;
+    //     }
+    //     dev->rframes[i].obj_ubo_ind = vkr_add_buffer(dev, obj_uniform_buf);
+    // }
     return err_code::VKR_NO_ERROR;
 }
 
-intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame *cur_frame, vkr_command_buffer *cmd_buf)
+intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, frame_context *cur_frame)
 {
     auto dev = &rndr->vk.inst.device;
-    auto vert_buf = &dev->buffers[rndr->rmi.verts.buf_ind];
-    auto ind_buf = &dev->buffers[rndr->rmi.inds.buf_ind];
+    auto vert_buf = &rndr->rmi.verts.buf;
+    auto ind_buf = &rndr->rmi.inds.buf;
 
-    int err = vkr_begin_cmd_buf(cmd_buf);
+    int err = vkr_begin_cmd_buf(cur_frame->cmd_buffer, {});
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
@@ -778,14 +779,14 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
     // Bind the global vertex/index buffer/s
     VkBuffer vert_bufs[] = {vert_buf->hndl};
     VkDeviceSize offsets[] = {0};
-    vkCmdBindVertexBuffers(cmd_buf->hndl, 0, 1, vert_bufs, offsets);
-    vkCmdBindIndexBuffer(cmd_buf->hndl, ind_buf->hndl, 0, VK_INDEX_TYPE_UINT16);
+    vkCmdBindVertexBuffers(cur_frame->cmd_buffer, 0, 1, vert_bufs, offsets);
+    vkCmdBindIndexBuffer(cur_frame->cmd_buffer, ind_buf->hndl, 0, VK_INDEX_TYPE_UINT16);
 
     // TODO: This really can't go in any order we want for render passes.. We might have dependency ordered between
     // them.. for now we just have the one.. I'm not sure if we need to do a
     for (int rpind = 0; rpind < rndr->rpasses.size; ++rpind) {
         auto rpass = &rndr->rpasses[rpind];
-        vkr_cmd_begin_rpass(cmd_buf, fb, rpass->vk_hndl, att_clear_vals, 2);
+        vkr_cmd_begin_rpass(cur_frame->cmd_buffer, rpass->vk_hndl, fb, att_clear_vals, 2);
 
         VkViewport viewport{};
         viewport.x = 0.0f;
@@ -794,12 +795,12 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
         viewport.height = (float)fb->size.h;
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(cmd_buf->hndl, 0, 1, &viewport);
+        vkCmdSetViewport(cur_frame->cmd_buffer, 0, 1, &viewport);
 
         VkRect2D scissor{};
         scissor.offset = {0, 0};
         scissor.extent = {fb->size.w, fb->size.h};
-        vkCmdSetScissor(cmd_buf->hndl, 0, 1, &scissor);
+        vkCmdSetScissor(cur_frame->cmd_buffer, 0, 1, &scissor);
 
         // Bind frame rpass descriptor set
         // auto ds = cur_frame->desc_pool.desc_sets[rpass_iter->val->frame_set_layouti].hndl;
@@ -859,13 +860,82 @@ intern int record_command_buffer(renderer *rndr, vkr_framebuffer *fb, vkr_frame 
         // If we are on the imgui rpass, render its stuff. It has it's own pipeling, vertex/index buffers, etc
         if (rpass->vk_hndl == rndr->imgui.rpass) {
             auto img_data = ImGui::GetDrawData();
-            ImGui_ImplVulkan_RenderDrawData(img_data, cmd_buf->hndl);
+            ImGui_ImplVulkan_RenderDrawData(img_data, cur_frame->cmd_buffer);
         }
 
-        vkr_cmd_end_rpass(cmd_buf);
+        vkr_cmd_end_rpass(cur_frame->cmd_buffer);
     }
 
-    return vkr_end_cmd_buf(cmd_buf);
+    return vkr_end_cmd_buf(cur_frame->cmd_buffer);
+}
+
+intern int init_frame_contexts(renderer *rndr)
+{
+    auto dev = &rndr->vk.inst.device;
+    rndr->fifs.size = rndr->fifs.capacity;
+
+    // Create frame synchronization objects - start all fences as signalled already
+    for (u32 framei = 0; framei < rndr->fifs.size; ++framei) {
+        auto cur_fif = &rndr->fifs[framei];
+
+        VkFenceCreateInfo fence_info{};
+        fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+        int err = vkCreateFence(dev->hndl, &fence_info, &rndr->vk.alloc_cbs, &cur_fif->in_flight);
+        if (err != VK_SUCCESS) {
+            elog("Failed to create flight fence for frame %d with vk err code %d", framei, err);
+            return err;
+        }
+
+        VkSemaphoreCreateInfo sem_info{};
+        sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        err = vkCreateSemaphore(dev->hndl, &sem_info, &rndr->vk.alloc_cbs, &cur_fif->image_avail);
+        if (err != VK_SUCCESS) {
+            elog("Failed to create image available semaphore for FIF %d with vk err code %d", framei, err);
+            return err;
+        }
+
+        err = vkCreateSemaphore(dev->hndl, &sem_info, &rndr->vk.alloc_cbs, &cur_fif->render_finished);
+        if (err != VK_SUCCESS) {
+            elog("Failed to create render finished semaphore for FIF %d with vk err code %d", framei, err);
+            return err;
+        }
+
+        vkr_desc_cfg desc_cfg{};
+        desc_cfg.max_sets = MAX_MATERIAL_COUNT;
+        desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER] = MAX_MATERIAL_COUNT;
+        desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = MAX_MATERIAL_COUNT;
+        // Get a count of the number of descriptors we are making avaialable for each desc type
+        err = vkr_init_desc_pool(&cur_fif->desc_pool, &desc_cfg, &rndr->vk);
+        if (err != VK_SUCCESS) {
+            elog("Failed to create descriptor pool for frame %d - aborting init", framei);
+            return err;
+        }
+
+        // Create frame command pool
+        vkr_init_cmd_pool(
+            &cur_fif->cmd_pool, dev->qfams[VKR_QUEUE_FAM_TYPE_GFX].fam_ind, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, &rndr->vk);
+
+        // Create frame command buffer
+        vkr_alloc_cmd_bufs(&cur_fif->cmd_buffer, {.pool = cur_fif->cmd_pool}, &rndr->vk);
+    }
+    ilog("Successfully initialized %lu render frames in flight", rndr->fifs.size);
+    return err_code::VKR_NO_ERROR;
+}
+
+intern void terminate_frame_contexts(renderer *rndr)
+{
+    auto dev = &rndr->vk.inst.device;
+    for (u32 framei = 0; framei < rndr->fifs.size; ++framei) {
+        auto cur_fif = &rndr->fifs[framei];
+        vkDestroyFence(dev->hndl, cur_fif->in_flight, &rndr->vk.alloc_cbs);
+        vkDestroySemaphore(dev->hndl, cur_fif->image_avail, &rndr->vk.alloc_cbs);
+        vkDestroySemaphore(dev->hndl, cur_fif->render_finished, &rndr->vk.alloc_cbs);
+        vkr_terminate_desc_pool(cur_fif->desc_pool, &rndr->vk);
+        vkr_terminate_cmd_pool(cur_fif->cmd_pool, &rndr->vk);
+    }
+    arr_clear(&rndr->fifs);
 }
 
 int init_renderer(renderer *rndr, void *win_hndl, mem_arena *fl_arena)
@@ -880,19 +950,12 @@ int init_renderer(renderer *rndr, void *win_hndl, mem_arena *fl_arena)
     hmap_init(&rndr->rpass_name_map, hash_type, fl_arena);
     hmap_init(&rndr->pline_cache, hash_type, fl_arena);
 
-    // Set up our draw call list render pass hashmap with frame linear memory
-    vkr_descriptor_cfg desc_cfg{};
-    // Frame + pl + mat + obj uob
-    desc_cfg.max_sets = (RPASS_TYPE_COUNT * 2 + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT);
-    desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER] = (RPASS_TYPE_COUNT + MAX_PIPELINE_COUNT + MAX_MATERIAL_COUNT);
-    desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = MAX_MATERIAL_COUNT * MAT_SAMPLER_SLOT_COUNT;
     vkr_cfg vkii{.app_name = "rdev",
                  .vi{1, 0, 0},
                  .arenas{.persistent_arena = &rndr->vk_free_list, .command_arena = &rndr->vk_frame_linear},
                  .log_verbosity = LOG_DEBUG,
                  .window = win_hndl,
                  .inst_create_flags = INST_CREATE_FLAGS,
-                 .desc_cfg{desc_cfg},
                  .extra_instance_extension_names = ADDITIONAL_INST_EXTENSIONS,
                  .extra_instance_extension_count = ADDITIONAL_INST_EXTENSION_COUNT,
                  .device_extension_names = DEVICE_EXTENSIONS,
@@ -903,6 +966,13 @@ int init_renderer(renderer *rndr, void *win_hndl, mem_arena *fl_arena)
     if (vkr_init(&vkii, &rndr->vk) != err_code::VKR_NO_ERROR) {
         return err_code::RENDER_INIT_FAIL;
     }
+
+    // Create transient command pool
+    vkr_init_cmd_pool(
+        &rndr->transient_pool, rndr->vk.inst.device.qfams[VKR_QUEUE_FAM_TYPE_GFX].fam_ind, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, &rndr->vk);
+
+    // Setup frames in flight
+    init_frame_contexts(rndr);
 
     int err = setup_rendering(rndr);
     if (err != err_code::VKR_NO_ERROR) {
@@ -921,7 +991,7 @@ intern void terminate_swapchain_images_and_framebuffer(renderer *rndr)
     auto dev = &rndr->vk.inst.device;
     auto sl_item = get_slot_item(&rndr->textures, rndr->swapchain_fb_depth_stencil);
     vkr_terminate_image_view(sl_item->im_view, &rndr->vk);
-    vkr_terminate_image(&sl_item->im);
+    vkr_terminate_image(&sl_item->im, &rndr->vk);
     vkr_terminate_swapchain_framebuffers(dev, &rndr->vk);
 }
 
@@ -952,7 +1022,7 @@ int begin_render_frame(renderer *rndr, int finished_frames)
     // Update finished frames which is used to get the current frame
     rndr->finished_frames = finished_frames;
     int current_frame_ind = rndr->finished_frames % MAX_FRAMES_IN_FLIGHT;
-    vkr_frame *cur_frame = &dev->rframes[current_frame_ind];
+    auto *cur_frame = &rndr->fifs[current_frame_ind];
 
     // We wait until this FIF's fence has been triggered before rendering the frame. FIF fences are created in a
     // triggered state so there will be no waiting on the first time. We then reset the fence (aka set it to
@@ -965,7 +1035,7 @@ int begin_render_frame(renderer *rndr, int finished_frames)
     }
 
     // Clear all prev desc sets
-    vkr_reset_descriptor_pool(&cur_frame->desc_pool, &rndr->vk);
+    // vkr_reset_descriptor_pool(&cur_frame->desc_pool, &rndr->vk);
 
     return err_code::RENDER_NO_ERROR;
 }
@@ -974,7 +1044,7 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
 {
     auto dev = &rndr->vk.inst.device;
     int current_frame_ind = rndr->finished_frames % MAX_FRAMES_IN_FLIGHT;
-    vkr_frame *cur_frame = &dev->rframes[current_frame_ind];
+    auto *cur_frame = &rndr->fifs[current_frame_ind];
 
     if (window_resized_this_frame(rndr->vk.cfg.window)) {
         rndr->no_resize_frames = 0.0;
@@ -1019,9 +1089,7 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
     // The command buf index struct has an ind struct into the pool the cmd buf comes from, and then an ind into the buffer
     // The ind into the pool has an ind into the queue family (as that contains our array of command pools) and then and
     // ind to the command pool
-    auto buf_ind = cur_frame->cmd_buf_ind;
-    auto cmd_buf = &dev->qfams[buf_ind.pool_ind.qfam_ind].cmd_pools[buf_ind.pool_ind.pool_ind].buffers[buf_ind.buffer_ind];
-    auto fb = &dev->framebuffers[im_ind];
+    auto fb = &dev->swapchain.fbs[im_ind];
 
     ///////////////////////////
     // Record Command Buffer //
@@ -1029,7 +1097,7 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
     // We have the acquired image index, though we don't know when it will be ready to have ops submitted, we can record
     // the ops in the command buffer and submit once it is ready
     // This takes about %80 of the run frame
-    vk_res = record_command_buffer(rndr, fb, cur_frame, cmd_buf);
+    vk_res = record_command_buffer(rndr, fb, cur_frame);
     if (vk_res != err_code::RENDER_NO_ERROR) {
         return vk_res;
     }
@@ -1057,7 +1125,7 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
     submit_info.pWaitSemaphores = &cur_frame->image_avail;
     submit_info.pWaitDstStageMask = wait_stages;
     submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &cmd_buf->hndl;
+    submit_info.pCommandBuffers = &cur_frame->cmd_buffer;
     submit_info.signalSemaphoreCount = 1;
     submit_info.pSignalSemaphores = &rndr->vk.inst.device.swapchain.renders_finished[im_ind];
     if (vkQueueSubmit(dev->qfams[VKR_QUEUE_FAM_TYPE_GFX].qs[VKR_RENDER_QUEUE], 1, &submit_info, cur_frame->in_flight) != VK_SUCCESS) {
@@ -1108,9 +1176,12 @@ void terminate_renderer(renderer *rndr)
     // Device needs to be idle before finishing with everything
     vkr_device_wait_idle(&rndr->vk.inst.device);
 
+    // IMGUI
+    terminate_imgui(rndr);
+
     // Terminate all images and image views
     for (int i = 0; i < rndr->textures.slots.size; ++i) {
-        vkr_terminate_image(&rndr->textures.slots[i].item.im);
+        vkr_terminate_image(&rndr->textures.slots[i].item.im, &rndr->vk);
         vkr_terminate_image_view(rndr->textures.slots[i].item.im_view, &rndr->vk);
         clear_slot_pool(&rndr->textures);
     }
@@ -1123,7 +1194,7 @@ void terminate_renderer(renderer *rndr)
 
     // Terminate our default descriptor layout sets
     dlog("Should be terminating %d layouts", rndr->set_layouts.size);
-    vkr_terminate_descriptor_set_layouts(rndr->set_layouts.data, rndr->set_layouts.size, &rndr->vk);
+    vkr_terminate_desc_set_layouts(rndr->set_layouts.data, rndr->set_layouts.size, &rndr->vk);
     arr_clear(&rndr->set_layouts);
 
     // Global pipeline layout
@@ -1141,7 +1212,13 @@ void terminate_renderer(renderer *rndr)
         rndr->rpasses.size = 0;
     }
 
-    terminate_imgui(rndr);
+    // Transient pool
+    vkr_terminate_cmd_pool(rndr->transient_pool, &rndr->vk);
+
+    // Don't free the depth image view/image (or other swapchain atts) as they will just have been freed
+    vkr_terminate_swapchain_framebuffers(&rndr->vk.inst.device, &rndr->vk);
+
+    terminate_frame_contexts(rndr);
     vkr_terminate(&rndr->vk);
     mem_terminate_arena(&rndr->vk_free_list);
     mem_terminate_arena(&rndr->vk_frame_linear);
