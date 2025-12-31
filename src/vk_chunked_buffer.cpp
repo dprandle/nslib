@@ -43,7 +43,7 @@ int vkr_init_chunked_buffer(vkr_chunked_buffer *chunk_buf, const vkr_chunked_buf
     // We need this memory to be host visible and mapped no matter what - thats the whole point of this thing
     buf_cfg.alloc_flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 
-    int err = vkr_init_buffer(&chunk_buf->buffer, &buf_cfg);
+    int err = vkr_init_buffer(&chunk_buf->buffer, buf_cfg);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }

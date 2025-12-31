@@ -527,7 +527,7 @@ void vkr_enumerate_device_extensions(const vkr_phys_device *pdevice,
 void vkr_enumerate_validation_layers(const char *const *enabled_layers, u32 enabled_layer_count, const vk_arenas *arenas);
 
 // Descriptor Pools
-int vkr_init_desc_pool(VkDescriptorPool *hndl, const vkr_desc_cfg *cfg, const vkr_context *vk);
+int vkr_init_desc_pool(VkDescriptorPool *hndl, const vkr_desc_cfg &cfg, const vkr_context *vk);
 void vkr_terminate_desc_pool(VkDescriptorPool hndl, const vkr_context *vk);
 
 // Descriptor sets
@@ -546,19 +546,19 @@ int vkr_alloc_cmd_bufs(VkCommandBuffer *bufs, const vkr_alloc_cmd_bufs_cfg &cfg,
 void vkr_free_cmd_bufs(VkCommandBuffer *bufs, sizet count, VkCommandPool pool, const vkr_context *vk);
 
 // Render passes
-int vkr_init_render_pass(VkRenderPass *hndl, const vkr_rpass_cfg *cfg, const vkr_context *vk);
+int vkr_init_render_pass(VkRenderPass *hndl, const vkr_rpass_cfg &cfg, const vkr_context *vk);
 void vkr_terminate_render_pass(VkRenderPass hndl, const vkr_context *vk);
 
 // Descriptor set layouts
-int vkr_init_desc_set_layouts(VkDescriptorSetLayout *hndls, const vkr_descriptor_set_layout_cfg *cfg, const vkr_context *vk);
+int vkr_init_desc_set_layouts(VkDescriptorSetLayout *hndls, const vkr_descriptor_set_layout_cfg &cfg, const vkr_context *vk);
 void vkr_terminate_desc_set_layouts(VkDescriptorSetLayout *layouts, sizet size, const vkr_context *vk);
 
 // Pipeline layouts
-int vkr_init_pipeline_layout(VkPipelineLayout *hndl, const vkr_pipeline_layout_cfg *cfg, const vkr_context *vk);
+int vkr_init_pipeline_layout(VkPipelineLayout *hndl, const vkr_pipeline_layout_cfg &cfg, const vkr_context *vk);
 void vkr_terminate_pipeline_layout(VkPipelineLayout hndl, const vkr_context *vk);
 
 // Pipelines
-int vkr_init_pipeline(VkPipeline *hndl, const vkr_pipeline_cfg *cfg, const vkr_context *vk);
+int vkr_init_pipeline(VkPipeline *hndl, const vkr_pipeline_cfg &cfg, const vkr_context *vk);
 void vkr_terminate_pipeline(VkPipeline hndl, const vkr_context *vk_ctxt);
 
 // Shader module
@@ -566,11 +566,11 @@ int vkr_init_shader_module(VkShaderModule *module, const byte_array *code, const
 void vkr_terminate_shader_module(VkShaderModule module, const vkr_context *vk);
 
 // Framebuffers
-int vkr_init_framebuffer(vkr_framebuffer *framebuffer, const vkr_framebuffer_cfg *cfg, const vkr_context *vk);
+int vkr_init_framebuffer(vkr_framebuffer *framebuffer, const vkr_framebuffer_cfg &cfg, const vkr_context *vk);
 void vkr_terminate_framebuffer(vkr_framebuffer *fb, const vkr_context *vk);
 
 // Buffers
-int vkr_init_buffer(vkr_buffer *buffer, const vkr_buffer_cfg *cfg);
+int vkr_init_buffer(vkr_buffer *buffer, const vkr_buffer_cfg &cfg);
 void vkr_terminate_buffer(vkr_buffer *buffer, const vkr_context *vk);
 void *vkr_map_buffer(vkr_buffer *buf, const vkr_gpu_allocator *vma);
 void vkr_unmap_buffer(vkr_buffer *buf, const vkr_gpu_allocator *vma);
@@ -589,7 +589,7 @@ int vkr_stage_and_upload_buffer_data(vkr_buffer *dest_buffer,
                                      const vkr_context *vk);
 
 // Images
-int vkr_init_image(vkr_image *image, const vkr_image_cfg *cfg);
+int vkr_init_image(vkr_image *image, const vkr_image_cfg &cfg);
 void vkr_terminate_image(vkr_image *image, const vkr_context *vk);
 int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
                                     const void *src_data,
@@ -606,12 +606,18 @@ int vkr_stage_and_upload_image_data(vkr_image *dest_buffer,
                                     const vkr_context *vk);
 
 // Image views
-int vkr_init_image_view(VkImageView *hndl, const vkr_image_view_cfg *cfg, const vkr_context *vk);
+int vkr_init_image_view(VkImageView *hndl, const vkr_image_view_cfg &cfg, const vkr_context *vk);
 void vkr_terminate_image_view(VkImageView hndl, const vkr_context *vk);
 
 // Samplers
-int vkr_init_sampler(VkSampler *hndl, const vkr_sampler_cfg *cfg, const vkr_context *vk);
+int vkr_init_sampler(VkSampler *hndl, const vkr_sampler_cfg &cfg, const vkr_context *vk);
 void vkr_terminate_sampler(VkSampler sampler, const vkr_context *vk);
+
+int vkr_init_fence(VkFence *hndl, VkFenceCreateFlags flags, const vkr_context *vk);
+void vkr_terminate_fence(VkFence hndl, const vkr_context *vk);
+
+int vkr_init_semaphore(VkSemaphore *hndl, VkSemaphoreCreateFlags flags, const vkr_context *vk);
+void vkr_terminate_semaphore(VkSemaphore hndl, const vkr_context *vk);
 
 // Initialize the swapchain framebuffers (there is one for each color image in the swapchain)
 // The other_attachment image view will be added to each framebuffer (so make sure that is okay)
@@ -619,6 +625,7 @@ void vkr_init_swapchain_framebuffers(vkr_device *device,
                                      const vkr_context *vk,
                                      VkRenderPass rpass,
                                      const vkr_framebuffer_attachment &other_attachment);
+
 
 // Initialize the swapchain framebuffers (there is one for each color image in the swapchain)
 // The other_attachments image views will be added to each framebuffer (so make sure that is okay)
@@ -637,6 +644,7 @@ void vkr_init_swapchain_framebuffers(vkr_device *device,
                                      const array<array<vkr_framebuffer_attachment>> *other_attachments);
 
 void vkr_terminate_swapchain_framebuffers(vkr_device *device, const vkr_context *vk);
+
 
 // The device should be created before calling this
 int vkr_init_swapchain(vkr_swapchain *sw_info, const vkr_context *vk);
@@ -694,7 +702,7 @@ int vkr_copy_buffer_to_image(vkr_image *dest,
                              const vkr_context *vk);
 
 int vkr_transition_image_layout(const vkr_image *image,
-                                const vkr_image_transition_cfg *cfg,
+                                const vkr_image_transition_cfg &cfg,
                                 VkCommandBuffer cmd_buf,
                                 VkQueue queue,
                                 const vkr_context *vk);

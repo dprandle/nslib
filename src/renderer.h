@@ -218,7 +218,6 @@ struct frame_context {
     // Synchronization
     VkFence in_flight;
     VkSemaphore image_avail;
-    VkSemaphore render_finished;
 };
 
 struct renderer

@@ -648,7 +648,6 @@ void start_platform_frame(platform_ctxt *ctxt)
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
-    
 }
 
 void end_platform_frame(platform_ctxt *ctxt)

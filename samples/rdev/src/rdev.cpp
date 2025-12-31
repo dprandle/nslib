@@ -124,7 +124,7 @@ int init(platform_ctxt *ctxt, void *user_data)
          cube_msh->submeshes.size,
          cube_msh->submeshes[0].verts.size,
          cube_msh->submeshes[0].inds.size);
- 
+
     // Initialize our renderer - fail early if init fails
     int ret = init_renderer(&app->rndr, ctxt->win_hndl, &ctxt->arenas.free_list);
     if (ret != err_code::RENDER_NO_ERROR) {
@@ -176,9 +176,8 @@ int init(platform_ctxt *ctxt, void *user_data)
     return ret;
 }
 
-void simulate(platform_ctxt *ctxt, app_data *app, f64 dt) {
-    map_input_frame(&app->stack, &ctxt->feventq);
-
+void simulate(platform_ctxt *ctxt, app_data *app, f64 dt)
+{
     // Move the cam if needed
     auto cam = get_comp<camera>(app->cam_id, &app->rgn.cdb);
     if (app->movement != ivec2{}) {
@@ -210,7 +209,6 @@ void simulate(platform_ctxt *ctxt, app_data *app, f64 dt) {
             curtf->cached = math::model_tform(curtf->world_pos, curtf->orientation, curtf->scale);
         }
     }
-    ImGui::ShowDebugLogWindow();
 }
 
 int run_frame(platform_ctxt *ctxt, void *user_data)
@@ -218,31 +216,36 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
     auto app = (app_data *)user_data;
     auto cam = get_comp<camera>(app->cam_id, &app->rgn.cdb);
     profile_timepoints pt;
-    
+
+    static int ticks = 0;
 
     // Spin some entities
     ptimer_restart(&pt);
     static double update_tm{};
     static double render_tm{};
-
+    
     app->accumulater += ctxt->time_pts.dt;
 
-    while (app->accumulater >= 0.010) {
-        simulate(ctxt, app, 0.010);
-        app->accumulater -= 0.010;
+    map_input_frame(&app->stack, &ctxt->feventq);        
+    
+    while (app->accumulater >= 0.01666) {
+        ++ticks;
+        simulate(ctxt, app, 0.01666);
+        app->accumulater -= 0.01666;
     }
 
     f64 alpha = app->accumulater / 0.010;
-    
+
     ptimer_split(&pt);
     update_tm += pt.dt;
 
+    // Gather visible items and do stuff
+    ImGui::ShowDebugLogWindow();
+
     int res = begin_render_frame(&app->rndr, ctxt->finished_frames);
 
-    // Gather visible items and do stuff
-    
     res = end_render_frame(&app->rndr, cam, ctxt->time_pts.dt);
-    
+
     ptimer_split(&pt);
     render_tm += pt.dt;
 
@@ -251,11 +254,12 @@ int run_frame(platform_ctxt *ctxt, void *user_data)
     if (elapsed > counter) {
         double tot_factor = 100 / (update_tm + render_tm);
         double render_factor = 100 / render_tm;
-
+        double ticks_fps = (double)ticks / elapsed;
         ilog("Average FPS: %.02f  Update:%.02f%%  Render:%.02f%%",
              ctxt->finished_frames / elapsed,
              update_tm * tot_factor,
              render_tm * tot_factor);
+        ilog("Simulation FPS: %.02f  Ticks: %d", ticks_fps, ticks);
         counter += 2.0;
         update_tm = 0.0;
         render_tm = 0.0;

@@ -96,9 +96,10 @@ intern void init_imgui(renderer *rndr, void *win_hndl)
     io.FontGlobalScale = get_window_display_scale(win_hndl);
 
     vkr_desc_cfg cfg{};
+    cfg.max_sets = 1;
     cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE;
     cfg.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-    if (vkr_init_desc_pool(&rndr->imgui.pool, &cfg, &rndr->vk) != err_code::VKR_NO_ERROR) {
+    if (vkr_init_desc_pool(&rndr->imgui.pool, cfg, &rndr->vk) != err_code::VKR_NO_ERROR) {
         wlog("Could not create imgui descriptor pool");
     }
 
@@ -184,7 +185,7 @@ intern int setup_render_passes(renderer *rndr)
     arr_push_back(&rp_cfg.subpass_dependencies, sp_dep);
 
     rpass_info rpi{};
-    int ret = vkr_init_render_pass(&rpi.vk_hndl, &rp_cfg, vk);
+    int ret = vkr_init_render_pass(&rpi.vk_hndl, rp_cfg, vk);
     if (ret == err_code::VKR_NO_ERROR) {
         hmap_set(&rndr->rpass_name_map, FWD_RPASS, rndr->rpasses.size);
         arr_push_back(&rndr->rpasses, rpi);
@@ -261,7 +262,7 @@ intern int setup_diffuse_technique(renderer *rndr)
     }
 
     VkPipeline pl{};
-    int code = vkr_init_pipeline(&pl, &info, vk);
+    int code = vkr_init_pipeline(&pl, info, vk);
     if (code != err_code::VKR_NO_ERROR) {
         wlog("Failed to initialize pipeline with code %d", code);
         return code;
@@ -299,7 +300,7 @@ intern int setup_rmesh_info(renderer *rndr)
     // Vert buffer
     b_cfg.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     b_cfg.buffer_size = DEFAULT_VERT_BUFFER_SIZE * sizeof(vertex);
-    int err = vkr_init_buffer(&rndr->rmi.verts.buf, &b_cfg);
+    int err = vkr_init_buffer(&rndr->rmi.verts.buf, b_cfg);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
@@ -307,7 +308,7 @@ intern int setup_rmesh_info(renderer *rndr)
     // Ind buffer
     b_cfg.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     b_cfg.buffer_size = DEFAULT_IND_BUFFER_SIZE * sizeof(ind_t);
-    err = vkr_init_buffer(&rndr->rmi.inds.buf, &b_cfg);
+    err = vkr_init_buffer(&rndr->rmi.inds.buf, b_cfg);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
@@ -390,7 +391,7 @@ int init_global_samplers(renderer *rndr)
     samp_cfg.mipmap_mode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
     rsampler_info sdata{};
-    int err = vkr_init_sampler(&sdata.vk_hndl, &samp_cfg, &rndr->vk);
+    int err = vkr_init_sampler(&sdata.vk_hndl, samp_cfg, &rndr->vk);
     if (err != err_code::VKR_NO_ERROR) {
         wlog("Failed to initialize sampler - vk err code: %d", err);
         return err_code::RENDER_INIT_SAMPLER_FAIL;
@@ -414,7 +415,7 @@ rtexture_handle register_texture(const texture *tex, renderer *rndr)
     cfg.vma_alloc = &rndr->vk.inst.device.vma_alloc;
 
     // Create image
-    int vk_ret = vkr_init_image(&tex_info.im, &cfg);
+    int vk_ret = vkr_init_image(&tex_info.im, cfg);
     if (vk_ret != err_code::VKR_NO_ERROR) {
         return ret;
     }
@@ -439,7 +440,7 @@ rtexture_handle register_texture(const texture *tex, renderer *rndr)
     vkr_image_view_cfg iview_cfg{};
     iview_cfg.image = &tex_info.im;
 
-    vk_ret = vkr_init_image_view(&tex_info.im_view, &iview_cfg, &rndr->vk);
+    vk_ret = vkr_init_image_view(&tex_info.im_view, iview_cfg, &rndr->vk);
     if (vk_ret != err_code::VKR_NO_ERROR) {
         vkr_terminate_image(&tex_info.im, &rndr->vk);
         return ret;
@@ -570,7 +571,7 @@ intern int init_swapchain_images_and_framebuffer(renderer *rndr)
         rndr->swapchain_fb_depth_stencil = acquire_slot(&rndr->textures);
     }
     auto sl_item = get_slot_item(&rndr->textures, rndr->swapchain_fb_depth_stencil);
-    int err = vkr_init_image(&sl_item->im, &im_cfg);
+    int err = vkr_init_image(&sl_item->im, im_cfg);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
@@ -579,7 +580,7 @@ intern int init_swapchain_images_and_framebuffer(renderer *rndr)
     imv_cfg.srange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
     imv_cfg.image = &sl_item->im;
 
-    err = vkr_init_image_view(&sl_item->im_view, &imv_cfg, vk);
+    err = vkr_init_image_view(&sl_item->im_view, imv_cfg, vk);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
     }
@@ -622,7 +623,7 @@ intern int setup_global_descriptor_set_layouts(renderer *rndr)
 
     // Set the size to the same as config
     rndr->set_layouts.size = cfg.set_layout_descs.size;
-    return vkr_init_desc_set_layouts(rndr->set_layouts.data, &cfg, &rndr->vk);
+    return vkr_init_desc_set_layouts(rndr->set_layouts.data, cfg, &rndr->vk);
 }
 
 intern int setup_global_pipeline_layout(renderer *rndr)
@@ -637,7 +638,7 @@ intern int setup_global_pipeline_layout(renderer *rndr)
     cfg.push_constant_ranges[0].size = sizeof(push_constants);
     cfg.push_constant_ranges[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-    return vkr_init_pipeline_layout(&rndr->g_layout, &cfg, &rndr->vk);
+    return vkr_init_pipeline_layout(&rndr->g_layout, cfg, &rndr->vk);
 }
 
 void setup_vertex_layout_presets(renderer *rndr)
@@ -727,7 +728,7 @@ intern int setup_rendering(renderer *rndr)
     //     buf_cfg.vma_alloc = &dev->vma_alloc;
 
     //     vkr_buffer frame_uniform_buf{};
-    //     int err = vkr_init_buffer(&frame_uniform_buf, &buf_cfg);
+    //     int err = vkr_init_buffer(&frame_uniform_buf, buf_cfg);
     //     if (err != err_code::VKR_NO_ERROR) {
     //         return err;
     //     }
@@ -736,7 +737,7 @@ intern int setup_rendering(renderer *rndr)
     //     // Pipeline uniform buffer - per pipeline data
     //     buf_cfg.buffer_size = MAX_PIPELINE_COUNT * vkr_uniform_buffer_offset_alignment(vk, sizeof(pipeline_ubo_data));
     //     vkr_buffer pl_uniform_buf{};
-    //     err = vkr_init_buffer(&pl_uniform_buf, &buf_cfg);
+    //     err = vkr_init_buffer(&pl_uniform_buf, buf_cfg);
     //     if (err != err_code::VKR_NO_ERROR) {
     //         return err;
     //     }
@@ -745,7 +746,7 @@ intern int setup_rendering(renderer *rndr)
     //     // Material uniform buffer - per material data
     //     buf_cfg.buffer_size = MAX_MATERIAL_COUNT * vkr_uniform_buffer_offset_alignment(vk, sizeof(material_ubo_data));
     //     vkr_buffer mat_uniform_buf{};
-    //     err = vkr_init_buffer(&mat_uniform_buf, &buf_cfg);
+    //     err = vkr_init_buffer(&mat_uniform_buf, buf_cfg);
     //     if (err != err_code::VKR_NO_ERROR) {
     //         return err;
     //     }
@@ -754,7 +755,7 @@ intern int setup_rendering(renderer *rndr)
     //     // Object uniform buffer - per material data
     //     buf_cfg.buffer_size = MAX_OBJECT_COUNT * vkr_uniform_buffer_offset_alignment(vk, sizeof(obj_ubo_data));
     //     vkr_buffer obj_uniform_buf{};
-    //     err = vkr_init_buffer(&obj_uniform_buf, &buf_cfg);
+    //     err = vkr_init_buffer(&obj_uniform_buf, buf_cfg);
     //     if (err != err_code::VKR_NO_ERROR) {
     //         return err;
     //     }
@@ -878,39 +879,25 @@ intern int init_frame_contexts(renderer *rndr)
     for (u32 framei = 0; framei < rndr->fifs.size; ++framei) {
         auto cur_fif = &rndr->fifs[framei];
 
-        VkFenceCreateInfo fence_info{};
-        fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-        int err = vkCreateFence(dev->hndl, &fence_info, &rndr->vk.alloc_cbs, &cur_fif->in_flight);
-        if (err != VK_SUCCESS) {
-            elog("Failed to create flight fence for frame %d with vk err code %d", framei, err);
-            return err;
+        int result = vkr_init_fence(&cur_fif->in_flight, VK_FENCE_CREATE_SIGNALED_BIT, &rndr->vk);
+        if (result != VK_SUCCESS) {
+            return result;
         }
 
-        VkSemaphoreCreateInfo sem_info{};
-        sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-        err = vkCreateSemaphore(dev->hndl, &sem_info, &rndr->vk.alloc_cbs, &cur_fif->image_avail);
-        if (err != VK_SUCCESS) {
-            elog("Failed to create image available semaphore for FIF %d with vk err code %d", framei, err);
-            return err;
+        result = vkr_init_semaphore(&cur_fif->image_avail, {}, &rndr->vk);
+        if (result != VK_SUCCESS) {
+            return result;
         }
 
-        err = vkCreateSemaphore(dev->hndl, &sem_info, &rndr->vk.alloc_cbs, &cur_fif->render_finished);
-        if (err != VK_SUCCESS) {
-            elog("Failed to create render finished semaphore for FIF %d with vk err code %d", framei, err);
-            return err;
-        }
-
+        // Get a count of the number of descriptors we are making avaialable for each desc type
         vkr_desc_cfg desc_cfg{};
         desc_cfg.max_sets = MAX_MATERIAL_COUNT;
         desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER] = MAX_MATERIAL_COUNT;
         desc_cfg.max_desc_per_type[VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = MAX_MATERIAL_COUNT;
-        // Get a count of the number of descriptors we are making avaialable for each desc type
-        err = vkr_init_desc_pool(&cur_fif->desc_pool, &desc_cfg, &rndr->vk);
-        if (err != VK_SUCCESS) {
+        result = vkr_init_desc_pool(&cur_fif->desc_pool, desc_cfg, &rndr->vk);
+        if (result != VK_SUCCESS) {
             elog("Failed to create descriptor pool for frame %d - aborting init", framei);
-            return err;
+            return result;
         }
 
         // Create frame command pool
@@ -929,9 +916,8 @@ intern void terminate_frame_contexts(renderer *rndr)
     auto dev = &rndr->vk.inst.device;
     for (u32 framei = 0; framei < rndr->fifs.size; ++framei) {
         auto cur_fif = &rndr->fifs[framei];
-        vkDestroyFence(dev->hndl, cur_fif->in_flight, &rndr->vk.alloc_cbs);
-        vkDestroySemaphore(dev->hndl, cur_fif->image_avail, &rndr->vk.alloc_cbs);
-        vkDestroySemaphore(dev->hndl, cur_fif->render_finished, &rndr->vk.alloc_cbs);
+        vkr_terminate_fence(cur_fif->in_flight, &rndr->vk);
+        vkr_terminate_semaphore(cur_fif->image_avail, &rndr->vk);
         vkr_terminate_desc_pool(cur_fif->desc_pool, &rndr->vk);
         vkr_terminate_cmd_pool(cur_fif->cmd_pool, &rndr->vk);
     }
@@ -969,7 +955,7 @@ int init_renderer(renderer *rndr, void *win_hndl, mem_arena *fl_arena)
 
     // Create transient command pool
     vkr_init_cmd_pool(
-        &rndr->transient_pool, rndr->vk.inst.device.qfams[VKR_QUEUE_FAM_TYPE_GFX].fam_ind, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, &rndr->vk);
+        &rndr->transient_pool, rndr->vk.inst.device.qfams[VKR_QUEUE_FAM_TYPE_GFX].fam_ind, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, &rndr->vk);
 
     // Setup frames in flight
     init_frame_contexts(rndr);
@@ -1070,6 +1056,7 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
         if (rndr->no_resize_frames > RESIZE_DEBOUNCE_FRAME_COUNT) {
             recreate_swapchain(rndr);
         }
+        ImGui::EndFrame();
         return vk_res;
     }
     else if (vk_res != VK_SUCCESS && vk_res != VK_SUBOPTIMAL_KHR) {
@@ -1090,6 +1077,7 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
     // The ind into the pool has an ind into the queue family (as that contains our array of command pools) and then and
     // ind to the command pool
     auto fb = &dev->swapchain.fbs[im_ind];
+    
 
     ///////////////////////////
     // Record Command Buffer //
@@ -1111,7 +1099,7 @@ int end_render_frame(renderer *rndr, camera *cam, f64 dt)
     if (vk_res != VK_SUCCESS) {
         elog("Failed to reset fence");
         return err_code::RENDER_RESET_FENCE_FAIL;
-    }
+    }    
 
     //////////////////////////////////
     // Submit command buffer to GPU //
@@ -1217,6 +1205,10 @@ void terminate_renderer(renderer *rndr)
 
     // Don't free the depth image view/image (or other swapchain atts) as they will just have been freed
     vkr_terminate_swapchain_framebuffers(&rndr->vk.inst.device, &rndr->vk);
+
+    // Vert and ind buf
+    vkr_terminate_buffer(&rndr->rmi.inds.buf, &rndr->vk);
+    vkr_terminate_buffer(&rndr->rmi.verts.buf, &rndr->vk);
 
     terminate_frame_contexts(rndr);
     vkr_terminate(&rndr->vk);
