@@ -51,13 +51,15 @@ const sizet MAX_TEXTURE_COUNT = 4096;
 const sizet MAX_OBJECT_COUNT = 1000000;
 
 struct rstatic_mesh_vert_b0 {
-    vec3 pos;
+    f32 pos[3];
+    u32 col;
 };
 
 struct rstatic_mesh_vert_b1 {
     vec3 norm;
-    
-}
+    vec3 tangent;
+    vec2 uv;
+};
 
 enum rvert_layout : u32 {
     RVERT_LAYOUT_STATIC_MESH,
@@ -110,22 +112,19 @@ enum render
 
 struct push_constants
 {
-    uvec4 test;
+    mat4 transform;
+    uvec4 indices;
 };
 
 struct frame_ubo_data
 {
-    ivec4 frame_count;
-};
-
-struct pipeline_ubo_data
-{
-    mat4 proj_view;
+    mat4 proj_view;    
 };
 
 struct material_ubo_data
 {
     vec4 color;
+    vec4 misc;
 };
 
 struct obj_ubo_data
@@ -296,7 +295,7 @@ struct renderer
 rtexture_handle register_texture(const texture *tex, renderer *rndr);
 
 
-int register_mesh()
+int register_mesh();
 // NOTE: All of these mesh operations kind of need to wait on all rendering operations to complete as they modify the
 // vertex and index buffers - not sure yet if this is better done within the functions or in the caller. Also these should be done at the
 // start of a frame because any indices submitted in command buffers will be invalid after these operations. It almost seems like we should

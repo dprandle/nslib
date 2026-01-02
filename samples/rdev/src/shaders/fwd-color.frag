@@ -1,8 +1,8 @@
 #version 450
-layout(location = 0) in vec4 fragColor;
-layout(location = 1) in vec2 frag_tex_coord;
-layout(location = 0) out vec4 outColor;
+layout(location = 0) in vec4 frag_color;
+layout(location = 1) in vec2 frag_uv;
+layout(location = 0) out vec4 out_color;
 
 void main() {
-    outColor = fragColor;
+    out_color = frag_color;
 }

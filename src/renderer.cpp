@@ -646,9 +646,9 @@ void setup_vertex_layout_presets(renderer *rndr)
     // TODO: separate positions for this buffer
     rndr->vertex_layouts.size = RVERT_LAYOUT_COUNT;
     auto sm_layout = &rndr->vertex_layouts[RVERT_LAYOUT_STATIC_MESH];
-    sm_layout->bindings.size = 1;
+    sm_layout->bindings.size = 2;
     sm_layout->bindings[0].binding = 0;
-    sm_layout->bindings[0].stride = sizeof(vertex);
+    sm_layout->bindings[0].stride = sizeof(rstatic_mesh_vert_b0);
     sm_layout->bindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
     sm_layout->attribs.size = 3;
