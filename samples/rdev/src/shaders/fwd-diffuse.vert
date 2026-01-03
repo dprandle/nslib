@@ -1,9 +1,9 @@
 #version 450
-layout(set = 0, binding = 0) uniform Frame_UBO {
+layout(set = 0, binding = 0) uniform frame_ubo_data {
     mat4 proj_view;  
 } frame_ubo;
 
-layout(set = 1, binding = 0) uniform Material_UBO {
+layout(set = 1, binding = 0) uniform material_ubo_data {
     vec4 color;
     vec4 misc; // use x component for now as a vertex material multiplier
 } mat_ubo;
@@ -12,7 +12,6 @@ layout(set = 1, binding = 0) uniform Material_UBO {
 layout( push_constant ) uniform PC
 {
   mat4 transform;
-  uvec4 indices;
 } pc;
 
 layout(location = 0) in vec3 in_pos;

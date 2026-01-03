@@ -51,7 +51,7 @@ const sizet MAX_TEXTURE_COUNT = 4096;
 const sizet MAX_OBJECT_COUNT = 1000000;
 
 struct rstatic_mesh_vert_b0 {
-    f32 pos[3];
+    vec3 pos;
     u32 col;
 };
 
@@ -59,6 +59,11 @@ struct rstatic_mesh_vert_b1 {
     vec3 norm;
     vec3 tangent;
     vec2 uv;
+};
+
+struct rstatic_mesh_vert_b2 {
+    vec4 bone_weights;
+    ivec4 bone_ids;
 };
 
 enum rvert_layout : u32 {
@@ -80,12 +85,8 @@ enum rpass_type {
 enum rdesc_set_layout : u32 {
     // Bound once per frame.
     RDESC_SET_LAYOUT_FRAME,
-    // Bound once per pass.
-    RDESC_SET_LAYOUT_INSTANCE,
     // Bound per material change.
     RDESC_SET_LAYOUT_MATERIAL,
-    // The wildcard.
-    RDESC_SET_LAYOUT_SPECIAL,
     // Count
     RDESC_SET_LAYOUT_COUNT,
 };
@@ -113,7 +114,6 @@ enum render
 struct push_constants
 {
     mat4 transform;
-    uvec4 indices;
 };
 
 struct frame_ubo_data
@@ -127,10 +127,6 @@ struct material_ubo_data
     vec4 misc;
 };
 
-struct obj_ubo_data
-{
-    mat4 transform;
-};
 
 struct sbuffer_entry
 {

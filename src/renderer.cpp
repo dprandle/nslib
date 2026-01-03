@@ -40,12 +40,6 @@ intern constexpr const char *DEVICE_EXTENSIONS[DEVICE_EXTENSION_COUNT] = {VK_KHR
 intern constexpr f64 RESIZE_DEBOUNCE_FRAME_COUNT = 0.15; // 100 ms
 intern VkPipelineLayout G_FRAME_PL_LAYOUT{};
 
-enum descriptor_set_binding
-{
-    DESCRIPTOR_SET_BINDING_UNIFORM_BUFFER,
-    DESCRIPTOR_SET_BINDING_IMAGE_SAMPLER,
-};
-
 intern void imgui_mem_free(void *ptr, void *usr)
 {
     mem_free(ptr, (mem_arena *)usr);
@@ -602,21 +596,23 @@ intern int setup_global_descriptor_set_layouts(renderer *rndr)
     // Descriptor layouts
     // Single Uniform buffer
     VkDescriptorSetLayoutBinding b{};
-    b.binding = DESCRIPTOR_SET_BINDING_UNIFORM_BUFFER;
+    b.binding = 0;
     b.descriptorCount = 1;
     b.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     b.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 
     // Add uniform buffer binding to each set, and image sampler to material set as well
     arr_push_back(&cfg.set_layout_descs[RDESC_SET_LAYOUT_FRAME].bindings, b);
-    arr_push_back(&cfg.set_layout_descs[RDESC_SET_LAYOUT_INSTANCE].bindings, b);
-    arr_push_back(&cfg.set_layout_descs[RDESC_SET_LAYOUT_MATERIAL].bindings, b);
-
-    b.descriptorCount = 0;
-    arr_push_back(&cfg.set_layout_descs[RDESC_SET_LAYOUT_SPECIAL].bindings, b);
 
     // Add image sampler to material
-    b.binding = DESCRIPTOR_SET_BINDING_IMAGE_SAMPLER;
+    b.binding = 0;
+    b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    arr_push_back(&cfg.set_layout_descs[RDESC_SET_LAYOUT_MATERIAL].bindings, b);
+    
+
+    // Add image sampler to material
+    b.binding = 1
     b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     arr_push_back(&cfg.set_layout_descs[RDESC_SET_LAYOUT_MATERIAL].bindings, b);
@@ -651,21 +647,35 @@ void setup_vertex_layout_presets(renderer *rndr)
     sm_layout->bindings[0].stride = sizeof(rstatic_mesh_vert_b0);
     sm_layout->bindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-    sm_layout->attribs.size = 3;
+    sm_layout->bindings[1].binding = 1;
+    sm_layout->bindings[1].stride = sizeof(rstatic_mesh_vert_b1);
+    sm_layout->bindings[1].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    sm_layout->attribs.size = 5;
     sm_layout->attribs[0].binding = 0;
     sm_layout->attribs[0].location = 0;
     sm_layout->attribs[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-    sm_layout->attribs[0].offset = offsetof(vertex, pos);
+    sm_layout->attribs[0].offset = offsetof(rstatic_mesh_vert_b0, pos);    
 
     sm_layout->attribs[1].binding = 0;
     sm_layout->attribs[1].location = 1;
-    sm_layout->attribs[1].format = VK_FORMAT_R32G32_SFLOAT;
-    sm_layout->attribs[1].offset = offsetof(vertex, uv);
+    sm_layout->attribs[1].format = VK_FORMAT_R8G8B8A8_UNORM;
+    sm_layout->attribs[1].offset = offsetof(rstatic_mesh_vert_b0, col);
 
-    sm_layout->attribs[2].binding = 0;
+    sm_layout->attribs[2].binding = 1;
     sm_layout->attribs[2].location = 2;
-    sm_layout->attribs[2].format = VK_FORMAT_R8G8B8A8_UINT;
-    sm_layout->attribs[2].offset = offsetof(vertex, color);
+    sm_layout->attribs[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+    sm_layout->attribs[2].offset = offsetof(rstatic_mesh_vert_b1, norm);
+
+    sm_layout->attribs[3].binding = 1;
+    sm_layout->attribs[3].location = 3;
+    sm_layout->attribs[3].format = VK_FORMAT_R32G32B32_SFLOAT;
+    sm_layout->attribs[3].offset = offsetof(rstatic_mesh_vert_b1, tangent);
+
+    sm_layout->attribs[4].binding = 1;
+    sm_layout->attribs[4].location = 4;
+    sm_layout->attribs[4].format = VK_FORMAT_R32G32_SFLOAT;
+    sm_layout->attribs[4].offset = offsetof(rstatic_mesh_vert_b1, uv);
 }
 
 intern int setup_rendering(renderer *rndr)
