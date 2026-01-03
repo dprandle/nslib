@@ -27,7 +27,8 @@ const sizet ROBJ_TYPE_DEFAULT_BUDGET[ROBJ_TYPE_USER] = {256, 256, 256};
     static constexpr const u32 type_id = ROBJ_TYPE_##type;                                                                                 \
     rid id;                                                                                                                                \
     string name;                                                                                                                           \
-    u64 flags;
+    u64 flags; \
+    mem_arena *arena;
 
 #define PUP_ROBJ                                                                                                                           \
     pup_member(id);                                                                                                                        \

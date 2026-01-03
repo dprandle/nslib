@@ -6,6 +6,7 @@
 #include "containers/hmap.h"
 #include "sim_region.h"
 #include "vk_context.h"
+#include "render_handles.h"
 
 struct ImGuiContext;
 
@@ -28,7 +29,9 @@ const sizet MAX_TRIANGLE_COUNT = 20000000;
 const sizet DEFAULT_IND_BUFFER_SIZE = MAX_TRIANGLE_COUNT * 3;
 // Default vert buffer size (holding all of our verts) in vert count (not byte size)
 // Consider there is on average 6 shared triangles per vert - i think dividing the above by 3 is plenty
-const sizet DEFAULT_VERT_BUFFER_SIZE = MAX_TRIANGLE_COUNT;
+const sizet DEFAULT_STATIC_MESH_VERT_BUFFER_SIZE = 1000000;
+// Consider there is on average 6 shared triangles per vert - i think dividing the above by 3 is plenty
+const sizet DEFAULT_SKINNED_MESH_VERT_BUFFER_SIZE = 100000;
 // Initial mem pool size (in element count) for our sbuffer mem pools
 const sizet MAX_FREE_SBUFFER_NODE_COUNT = 1024;
 // Minimum allowed sbuffer_entry block size in the free list for verts
@@ -36,7 +39,7 @@ const sizet MIN_VERT_FREE_BLOCK_SIZE = 4;
 // Minimum allowed sbuffer_entry block size in the free list for indices
 const sizet MIN_IND_FREE_BLOCK_SIZE = 6;
 // Maximum number of render passes supported
-//const sizet MAX_RENDERPASS_COUNT = 32;
+// const sizet MAX_RENDERPASS_COUNT = 32;
 // Maximum number of techniques the renderer supports
 const sizet MAX_TECHNIQUE_COUNT = 1024;
 // Maximum number of materials the renderer supports
@@ -50,23 +53,43 @@ const sizet MAX_TEXTURE_COUNT = 4096;
 // Maximum number of objects
 const sizet MAX_OBJECT_COUNT = 1000000;
 
-struct rstatic_mesh_vert_b0 {
+struct rstatic_mesh_vert_pos_col
+{
     vec3 pos;
     u32 col;
 };
 
-struct rstatic_mesh_vert_b1 {
+struct rstatic_mesh_vert_norm_tan_uv
+{
     vec3 norm;
     vec3 tangent;
     vec2 uv;
 };
 
-struct rstatic_mesh_vert_b2 {
+struct rstatic_mesh_vert_bone_weights_ids
+{
     vec4 bone_weights;
     ivec4 bone_ids;
 };
 
-enum rvert_layout : u32 {
+struct rstatic_mesh
+{
+    const rstatic_mesh_vert_pos_col *pos;
+    const rstatic_mesh_vert_norm_tan_uv *norm_tan_uv;
+    const rstatic_mesh_vert_bone_weights_ids *weights_ids;
+    u32 submesh_size;
+};
+
+enum rstatic_mesh_vert_stream {
+    RSTATIC_MESH_STREAM_VERT_POS_COL,
+    RSTATIC_MESH_STREAM_VERT_NORM_TAN_UV,
+    RSTATIC_MESH_STREAM_VERT_BONES_WEIGHT_ID,
+    RSTATIC_MESH_STREAM_IND,
+    RSTATIC_MESH_STREAM_COUNT,
+};
+
+enum rvert_layout : u32
+{
     RVERT_LAYOUT_STATIC_MESH,
     RVERT_LAYOUT_COUNT
 };
@@ -77,12 +100,14 @@ enum rsampler_type : u32
     RSAMPLER_TYPE_COUNT
 };
 
-enum rpass_type {
+enum rpass_type
+{
     RPASS_TYPE_OPAQUE,
     RPASS_TYPE_COUNT
 };
 
-enum rdesc_set_layout : u32 {
+enum rdesc_set_layout : u32
+{
     // Bound once per frame.
     RDESC_SET_LAYOUT_FRAME,
     // Bound per material change.
@@ -118,7 +143,7 @@ struct push_constants
 
 struct frame_ubo_data
 {
-    mat4 proj_view;    
+    mat4 proj_view;
 };
 
 struct material_ubo_data
@@ -127,58 +152,39 @@ struct material_ubo_data
     vec4 misc;
 };
 
-
-struct sbuffer_entry
+struct rmesh_block_virtual_alloc
 {
-    sizet offset;
-    sizet size;
+    VmaVirtualAllocation mem{VK_NULL_HANDLE};
+    // This is the byte offset / sizeof(element) amount
+    u32 offset;
 };
 
-using sbuffer_entry_slnode = slnode<sbuffer_entry>;
-
-struct sbuffer_info
+struct rsubmesh_counts
 {
-    // Index of vk buffer this shared buffer refers to
-    vkr_buffer buf;
-    // The smallest allowable block size of free space... ie when searching through the free store we find a block that
-    // will fit the request, the remaining size of that block must be bigger than this to be broken off to its own entry
-    // in the free list
-    sizet min_free_block_size;
-    // The free list linked list - each node is allocated using the node pool arena
-    slist<sbuffer_entry> fl;
-    // The arena used to allocate each item in the free list
-    mem_arena node_pool;
+    u32 verts;
+    u32 inds;
 };
-
-struct rsubmesh_entry
-{
-    sbuffer_entry verts;
-    sbuffer_entry inds;
-};
-
-struct rmesh_entry
-{
-    static_array<rsubmesh_entry, MAX_SUBMESH_COUNT> submesh_entrees;
-};
-using rmesh_handle = slot_handle<rmesh_entry>;
 
 // We use a single vertex and indice buffer for all meshes
 struct rmesh_info
 {
-    hmap<rid, rmesh_entry> meshes;
-    sbuffer_info verts;
-    sbuffer_info inds;
+    // Number of verts and inds for each submesh
+    static_array<rsubmesh_counts, MAX_SUBMESH_COUNT> submesh_vert_ind_counts;
+
+    // Vert buffers - sub0 verts, sub1 verts, sub2 verts, etc
+    // All vert attribs have the same count for each submesh
+    // To get the final submesh vert offset: att_streams[*_VERT_*].offset + submesh_vert_ind_counts[SUBMESH_IND].verts
+    // To get the final submesh ind offset: att_streams[*_IND].offset + submesh_vert_ind_counts[SUBMESH_IND].inds
+    rmesh_block_virtual_alloc att_streams[RSTATIC_MESH_STREAM_COUNT]{};
 };
-struct render_pass_draw_bucket;
+
 struct imgui_ctxt;
-struct profile_timepoints;
 
 struct rtexture_info
 {
     vkr_image im;
     VkImageView im_view;
 };
-using rtexture_handle = slot_handle<rtexture_info>;
 
 struct rsampler_info
 {
@@ -186,18 +192,12 @@ struct rsampler_info
 };
 
 struct rmaterial_info
-{
-    sizet descriptor_set_ind{};
-    sizet ubo_offset{};
-};
-using rmaterial_handle = slot_handle<rmaterial_info>;
-
+{};
 
 struct rtechnique_info
 {
     static_array<VkPipeline, RPASS_TYPE_COUNT> rpass_plines;
 };
-using rtechnique_handle = slot_handle<rtechnique_info>;
 
 struct rpass_info
 {
@@ -212,12 +212,13 @@ struct imgui_ctxt
     mem_arena fl;
 };
 
-struct frame_context {
+struct frame_context
+{
     VkCommandPool cmd_pool;
     VkCommandBuffer cmd_buffer;
 
     // Reset every frame
-    VkDescriptorPool desc_pool;    
+    VkDescriptorPool desc_pool;
 
     // Synchronization
     VkFence in_flight;
@@ -248,13 +249,16 @@ struct renderer
     slot_pool<rtechnique_info, MAX_TECHNIQUE_COUNT> techniques{};
     slot_pool<rmaterial_info, MAX_MATERIAL_COUNT> materials{};
     slot_pool<rtexture_info, MAX_TEXTURE_COUNT> textures{};
-    slot_pool<rmesh_entry, MAX_MESH_COUNT> meshes{};
+    slot_pool<rmesh_info, MAX_MESH_COUNT> meshes{};
 
     // Frames in flight
     static_array<frame_context, MAX_FRAMES_IN_FLIGHT> fifs{};
 
     // Global descriptor set layouts (used for creating descriptor sets and pipelines)
     static_array<VkDescriptorSetLayout, RDESC_SET_LAYOUT_COUNT> set_layouts{};
+
+    // Globabl geometry attribute buffers
+    vkr_buffer geometry_buffers[RSTATIC_MESH_STREAM_COUNT];
 
     // Global pipeline layout
     VkPipelineLayout g_layout{VK_NULL_HANDLE};
@@ -271,9 +275,6 @@ struct renderer
     // ImGUI context
     imgui_ctxt imgui{};
 
-    // Contains all info about meshes and where they are in the vert/ind buffers
-    rmesh_info rmi;
-
     // Stored on reset render frame - used in subsequent frame calls to get the current frame
     s32 finished_frames;
 
@@ -287,11 +288,11 @@ struct renderer
     rtexture_handle swapchain_fb_depth_stencil{};
 };
 
+// rmaterial_handle register_material(rtechnique_handle technique, static_array<rtexture_handle, )
+// rtexture_handle register_texture(const texture *tex, renderer *rndr);
 
-rtexture_handle register_texture(const texture *tex, renderer *rndr);
+rmesh_handle register_mesh(const rstatic_mesh &mdata, renderer *rndr);
 
-
-int register_mesh();
 // NOTE: All of these mesh operations kind of need to wait on all rendering operations to complete as they modify the
 // vertex and index buffers - not sure yet if this is better done within the functions or in the caller. Also these should be done at the
 // start of a frame because any indices submitted in command buffers will be invalid after these operations. It almost seems like we should

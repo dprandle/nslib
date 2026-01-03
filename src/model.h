@@ -3,6 +3,7 @@
 #include "math/vector4.h"
 #include "containers/array.h"
 #include "containers/hset.h"
+#include "render_handles.h"
 
 namespace nslib
 {
@@ -31,14 +32,15 @@ struct material
 {
     ROBJ(MATERIAL);
     vec4 col;
-    hset<rid> pipelines;
+    rid technique;
     static_array<rid, MAT_SAMPLER_SLOT_COUNT> textures{.size=MAT_SAMPLER_SLOT_COUNT};
+    rmaterial_handle rndr_hndl;
 };
 
 pup_func(material)
 {
     pup_member(col);
-    pup_member(pipelines);
+    pup_member(technique);
     pup_member(textures);
 }
 
@@ -66,8 +68,7 @@ struct submesh
 struct mesh
 {
     ROBJ(MESH);
-    static_array<submesh, MAX_SUBMESH_COUNT> submeshes;
-    mem_arena *arena;
+    
 };
 
 pup_func(mesh)

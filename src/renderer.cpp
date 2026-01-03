@@ -271,10 +271,63 @@ intern int setup_diffuse_technique(renderer *rndr)
     item->rpass_plines[RPASS_TYPE_OPAQUE] = pl;
 
     rndr->default_mat = acquire_slot(&rndr->materials);
+
+    
     auto mat_item = get_slot_item(&rndr->materials, rndr->default_mat);
 
     return err_code::RENDER_NO_ERROR;
 }
+
+intern int setup_geometry_buffers(renderer *rndr) {
+    asrt(rndr);
+    auto vk = &rndr->vk;
+    auto dev = &vk->inst.device;
+    auto hndl = acquire_slot(&rndr->meshes);
+
+    vkr_buffer_cfg alloc_cfg{};
+    alloc_cfg.alloc_flags = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    alloc_cfg.sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
+    alloc_cfg.vma_alloc = &dev->vma_alloc;
+    alloc_cfg.usage = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    alloc_cfg.buffer_size = DEFAULT_STATIC_MESH_VERT_BUFFER_SIZE * sizeof(rstatic_mesh_vert_pos_col);
+
+    int result = vkr_init_buffer(&rndr->geometry_buffers[RSTATIC_MESH_STREAM_VERT_POS_COL], alloc_cfg);
+    if (result != err_code::VKR_NO_ERROR) {
+        return result;
+    }
+
+    alloc_cfg.buffer_size = DEFAULT_STATIC_MESH_VERT_BUFFER_SIZE * sizeof(rstatic_mesh_vert_norm_tan_uv);
+    result = vkr_init_buffer(&rndr->geometry_buffers[RSTATIC_MESH_STREAM_VERT_NORM_TAN_UV], alloc_cfg);
+    if (result != err_code::VKR_NO_ERROR) {
+        vkr_terminate_buffer(&rndr->geometry_buffers[RSTATIC_MESH_STREAM_VERT_POS_COL], vk);
+        return result;
+    }
+
+    alloc_cfg.buffer_size = DEFAULT_SKINNED_MESH_VERT_BUFFER_SIZE * sizeof(rstatic_mesh_vert_bone_weights_ids);
+    result = vkr_init_buffer(&rndr->geometry_buffers[RSTATIC_MESH_STREAM_VERT_BONES_WEIGHT_ID], alloc_cfg);
+    if (result != err_code::VKR_NO_ERROR) {
+        vkr_terminate_buffer(&rndr->geometry_buffers[RSTATIC_MESH_STREAM_VERT_POS_COL], vk);
+        vkr_terminate_buffer(&rndr->geometry_buffers[RSTATIC_MESH_STREAM_VERT_NORM_TAN_UV], vk);
+        
+        return result;
+    }
+
+    alloc_cfg.buffer_size = DEFAULT_IND_BUFFER_SIZE * sizeof(ind_t);
+    result = vkr_init_buffer(&rndr->geometry_buffers[RSTATIC_MESH_STREAM_IND], alloc_cfg);
+    if (result != err_code::VKR_NO_ERROR) {
+        vkr_terminate_buffer(&rndr->geometry_buffers[RSTATIC_MESH_STREAM_VERT_POS_COL], vk);
+        vkr_terminate_buffer(&rndr->geometry_buffers[RSTATIC_MESH_STREAM_VERT_NORM_TAN_UV], vk);
+        vkr_terminate_buffer(&rndr->geometry_buffers[RSTATIC_MESH_STREAM_VERT_BONES_WEIGHT_ID], vk);
+        return result;
+    }
+    
+}
+
+rmesh_handle register_mesh(const rstatic_mesh &mdata, renderer *rndr)
+{
+    
+}
+
 
 intern int setup_rmesh_info(renderer *rndr)
 {
@@ -293,7 +346,7 @@ intern int setup_rmesh_info(renderer *rndr)
 
     // Vert buffer
     b_cfg.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    b_cfg.buffer_size = DEFAULT_VERT_BUFFER_SIZE * sizeof(vertex);
+    b_cfg.buffer_size = DEFAULT_STATIC_MESH_VERT_BUFFER_SIZE * sizeof(vertex);
     int err = vkr_init_buffer(&rndr->rmi.verts.buf, b_cfg);
     if (err != err_code::VKR_NO_ERROR) {
         return err;
@@ -314,7 +367,7 @@ intern int setup_rmesh_info(renderer *rndr)
     // Create the head nodes of our vert and index buffer free list - indice 0 and full buffer size
     auto vert_head = mem_alloc<sbuffer_entry_slnode>(&rndr->rmi.verts.node_pool);
     vert_head->next = nullptr;
-    vert_head->data.size = DEFAULT_VERT_BUFFER_SIZE;
+    vert_head->data.size = DEFAULT_STATIC_MESH_VERT_BUFFER_SIZE;
     vert_head->data.offset = 0;
     ll_push_back(&rndr->rmi.verts.fl, vert_head);
 
@@ -612,7 +665,7 @@ intern int setup_global_descriptor_set_layouts(renderer *rndr)
     
 
     // Add image sampler to material
-    b.binding = 1
+    b.binding = 1;
     b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     b.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     arr_push_back(&cfg.set_layout_descs[RDESC_SET_LAYOUT_MATERIAL].bindings, b);
@@ -644,38 +697,38 @@ void setup_vertex_layout_presets(renderer *rndr)
     auto sm_layout = &rndr->vertex_layouts[RVERT_LAYOUT_STATIC_MESH];
     sm_layout->bindings.size = 2;
     sm_layout->bindings[0].binding = 0;
-    sm_layout->bindings[0].stride = sizeof(rstatic_mesh_vert_b0);
+    sm_layout->bindings[0].stride = sizeof(rstatic_mesh_vert_pos_col);
     sm_layout->bindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
     sm_layout->bindings[1].binding = 1;
-    sm_layout->bindings[1].stride = sizeof(rstatic_mesh_vert_b1);
+    sm_layout->bindings[1].stride = sizeof(rstatic_mesh_vert_norm_tan_uv);
     sm_layout->bindings[1].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
     sm_layout->attribs.size = 5;
     sm_layout->attribs[0].binding = 0;
     sm_layout->attribs[0].location = 0;
     sm_layout->attribs[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-    sm_layout->attribs[0].offset = offsetof(rstatic_mesh_vert_b0, pos);    
+    sm_layout->attribs[0].offset = offsetof(rstatic_mesh_vert_pos_col, pos);    
 
     sm_layout->attribs[1].binding = 0;
     sm_layout->attribs[1].location = 1;
     sm_layout->attribs[1].format = VK_FORMAT_R8G8B8A8_UNORM;
-    sm_layout->attribs[1].offset = offsetof(rstatic_mesh_vert_b0, col);
+    sm_layout->attribs[1].offset = offsetof(rstatic_mesh_vert_pos_col, col);
 
     sm_layout->attribs[2].binding = 1;
     sm_layout->attribs[2].location = 2;
     sm_layout->attribs[2].format = VK_FORMAT_R32G32B32_SFLOAT;
-    sm_layout->attribs[2].offset = offsetof(rstatic_mesh_vert_b1, norm);
+    sm_layout->attribs[2].offset = offsetof(rstatic_mesh_vert_norm_tan_uv, norm);
 
     sm_layout->attribs[3].binding = 1;
     sm_layout->attribs[3].location = 3;
     sm_layout->attribs[3].format = VK_FORMAT_R32G32B32_SFLOAT;
-    sm_layout->attribs[3].offset = offsetof(rstatic_mesh_vert_b1, tangent);
+    sm_layout->attribs[3].offset = offsetof(rstatic_mesh_vert_norm_tan_uv, tangent);
 
     sm_layout->attribs[4].binding = 1;
     sm_layout->attribs[4].location = 4;
     sm_layout->attribs[4].format = VK_FORMAT_R32G32_SFLOAT;
-    sm_layout->attribs[4].offset = offsetof(rstatic_mesh_vert_b1, uv);
+    sm_layout->attribs[4].offset = offsetof(rstatic_mesh_vert_norm_tan_uv, uv);
 }
 
 intern int setup_rendering(renderer *rndr)

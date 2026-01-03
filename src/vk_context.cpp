@@ -1414,6 +1414,7 @@ int vkr_init_buffer(vkr_buffer *buffer, const vkr_buffer_cfg &cfg)
 void vkr_terminate_buffer(vkr_buffer *buffer, const vkr_context *vk)
 {
     vmaDestroyBuffer(vk->inst.device.vma_alloc.hndl, buffer->hndl, buffer->mem_hndl);
+    (*buffer) = {};
 }
 
 VkFormat vkr_find_best_depth_format(const vkr_phys_device *phs, bool need_stencil)
